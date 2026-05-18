@@ -69,6 +69,7 @@ export const RemotePlayerInstance = ({
   const activeAction = useRef<THREE.AnimationAction | null>(null);
   
   const currentAnimState = useRef("Idle");
+  const stateBufferRef = useRef<{ x: number, y: number, z: number, rotation: number, timestamp: number }[]>([]);
 
   useFrame((_, delta) => {
     if (!groupRef.current) return;
@@ -82,17 +83,74 @@ export const RemotePlayerInstance = ({
     }
     
     groupRef.current.visible = true;
+
+    // Push new network state to buffer if it differs from the last pushed state
+    const buf = stateBufferRef.current;
+    if (buf.length === 0 || 
+        buf[buf.length - 1].x !== data.x || 
+        buf[buf.length - 1].y !== data.y || 
+        buf[buf.length - 1].z !== data.z || 
+        buf[buf.length - 1].rotation !== data.rotation) {
+      buf.push({
+        x: data.x,
+        y: data.y,
+        z: data.z,
+        rotation: data.rotation,
+        timestamp: performance.now()
+      });
+      if (buf.length > 30) buf.shift(); // Limit queue length to 30 frames
+    }
+
+    // Perform Entity Interpolation with a 100ms visual buffer delay
+    const renderTime = performance.now() - 100;
+    let targetX = data.x;
+    let targetY = data.y;
+    let targetZ = data.z;
+    let targetRot = data.rotation;
+
+    if (buf.length >= 2) {
+      let i = 0;
+      for (; i < buf.length - 1; i++) {
+        if (buf[i].timestamp <= renderTime && buf[i+1].timestamp > renderTime) {
+          break;
+        }
+      }
+
+      if (i < buf.length - 1) {
+        const start = buf[i];
+        const end = buf[i+1];
+        const elapsed = renderTime - start.timestamp;
+        const duration = end.timestamp - start.timestamp;
+        const alpha = Math.min(1, Math.max(0, elapsed / (duration || 1)));
+
+        targetX = start.x + (end.x - start.x) * alpha;
+        targetY = start.y + (end.y - start.y) * alpha;
+        targetZ = start.z + (end.z - start.z) * alpha;
+
+        // Correctly handle angle wrapping (Slerp)
+        let diffRot = end.rotation - start.rotation;
+        while (diffRot < -Math.PI) diffRot += Math.PI * 2;
+        while (diffRot > Math.PI) diffRot -= Math.PI * 2;
+        targetRot = start.rotation + diffRot * alpha;
+      } else {
+        // Fallback: If network lag causes buffer starvation, fallback to the latest known state
+        targetX = buf[buf.length - 1].x;
+        targetY = buf[buf.length - 1].y;
+        targetZ = buf[buf.length - 1].z;
+        targetRot = buf[buf.length - 1].rotation;
+      }
+    }
     
-    // Smooth position lerping with HIGHER speed & accuracy (18.0 * delta)
-    groupRef.current.position.x += (data.x - groupRef.current.position.x) * Math.min(1, 18.0 * delta);
-    groupRef.current.position.y += (data.y - groupRef.current.position.y) * Math.min(1, 18.0 * delta);
-    groupRef.current.position.z += (data.z - groupRef.current.position.z) * Math.min(1, 18.0 * delta);
+    // Smooth position lerping with high responsiveness (24.0 * delta)
+    groupRef.current.position.x += (targetX - groupRef.current.position.x) * Math.min(1, 24.0 * delta);
+    groupRef.current.position.y += (targetY - groupRef.current.position.y) * Math.min(1, 24.0 * delta);
+    groupRef.current.position.z += (targetZ - groupRef.current.position.z) * Math.min(1, 24.0 * delta);
     
-    // Smooth rotation slerp with HIGHER speed & accuracy (18.0 * delta)
-    let diff = data.rotation - groupRef.current.rotation.y;
+    // Smooth rotation slerp with high responsiveness (24.0 * delta)
+    let diff = targetRot - groupRef.current.rotation.y;
     while (diff < -Math.PI) diff += Math.PI * 2;
     while (diff > Math.PI) diff -= Math.PI * 2;
-    groupRef.current.rotation.y += diff * Math.min(1, 18.0 * delta);
+    groupRef.current.rotation.y += diff * Math.min(1, 24.0 * delta);
 
     // Update text
     if (textRef.current) {
