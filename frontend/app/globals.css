@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  --background: #000000;
+  --foreground: #ffffff;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+ overflow-x: hidden;
+    overflow-y: auto; /* Pastikan ini auto atau dibiarkan default */
+}
+
+/* Glassmorphism Effect for HUD */
+.hud-glass {
+  background: rgba(10, 12, 18, 0.85); /* Slightly darker for better contrast with less blur */
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Animations */
+@keyframes fade-in-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in-scale {
+  animation: fade-in-scale 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Leva Settings Panel - Stay BEHIND the main HUD */
+/* =========================================
+   CUSTOM SCROLLBAR GLOWING EFFECT
+   ========================================= */
+
+/* 1. Scrollbar Firefox (Fallback standar) */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #0066FF #1a1b26; /* warna-thumb warna-track */
+}
+
+/* 2. Scrollbar WebKit (Chrome, Edge, Safari, Opera) */
+
+/* Mengatur lebar/tinggi area scrollbar */
+::-webkit-scrollbar {
+    width: 14px;  /* Lebar scrollbar vertikal */
+    height: 14px; /* Tinggi scrollbar horizontal */
+}
+
+/* Mengatur jalur scrollbar (Track) */
+::-webkit-scrollbar-track {
+    background: #12141d; /* Warna gelap transparan/solid menyesuaikan background UI */
+    border-radius: 10px;
+}
+
+/* Mengatur pegangan scrollbar (Thumb) */
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #0066FF, #00d4ff); /* Gradien biru agar lebih hidup */
+    border-radius: 10px;
+    /* Border transparan untuk memberikan jarak (padding) antara thumb dan tepi track */
+    border: 4px solid #12141d; 
+    background-clip: padding-box;
+    /* Efek cahaya dari dalam (inset shadow) */
+    box-shadow: inset 0 0 8px rgba(255, 255, 255, 0.4);
+}
+
+/* Efek saat pegangan scrollbar di-hover/disentuh kursor */
+::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #3385ff, #33e0ff); /* Warna menjadi lebih terang */
+    box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.8);
+}
+
+/* Menyembunyikan tombol panah atas/bawah bawaan agar terlihat lebih bersih */
+::-webkit-scrollbar-button {
+    display: none;
+}
+
+/* Mengatur sudut pertemuan antara scrollbar vertikal dan horizontal */
+::-webkit-scrollbar-corner {
+    background: transparent;
+}

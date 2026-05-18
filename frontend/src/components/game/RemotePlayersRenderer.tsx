@@ -1,0 +1,512 @@
+'use client';
+
+import { useMemo, useRef } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import { useGLTF, useAnimations, Text } from "@react-three/drei";
+import * as THREE from 'three';
+import { SkeletonUtils } from 'three-stdlib';
+import { PlayerNetworkState } from "@/src/hooks/useWebSocketGame";
+import { UnitRuntimeData } from "@/src/core/domain/unit.types";
+
+export interface RemotePlayerInstanceProps {
+  id: string;
+  username: string;
+  cls: string;
+  gender: string;
+  connectedPlayersRef: React.RefObject<PlayerNetworkState[]>;
+  camera: THREE.Camera;
+  gameConfig?: any;
+  mmSpellsRef?: React.RefObject<any[]>;
+  spellsRef?: React.RefObject<any[]>;
+  fighterSpellsRef?: React.RefObject<any[]>;
+  tankSpellsRef?: React.RefObject<any[]>;
+  assassinSpellsRef?: React.RefObject<any[]>;
+  unitRegistry?: React.RefObject<UnitRuntimeData[]>;
+}
+
+export const RemotePlayerInstance = ({ 
+  id, 
+  username, 
+  cls, 
+  gender, 
+  connectedPlayersRef, 
+  camera, 
+  gameConfig,
+  mmSpellsRef,
+  spellsRef,
+  fighterSpellsRef,
+  tankSpellsRef,
+  assassinSpellsRef,
+  unitRegistry
+}: RemotePlayerInstanceProps) => {
+  // Pre-select model based on actual character Class + Gender from backend registry
+  const modelPath = useMemo(() => {
+    if (gameConfig && gameConfig.character_models) {
+      const genderModels = gameConfig.character_models[gender || "Male"] || gameConfig.character_models["Male"];
+      const path = genderModels[cls || "Beginner"];
+      if (path) return path;
+    }
+    
+    return '/assets-model/Knight_Golden_Male.glb';
+  }, [cls, gender, gameConfig]);
+
+  const { scene, animations } = useGLTF(modelPath) as any;
+  const clone = useMemo(() => {
+    const cloned = SkeletonUtils.clone(scene);
+    cloned.traverse((child: any) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+    return cloned;
+  }, [scene]);
+
+  const groupRef = useRef<THREE.Group>(null!);
+  const nameRef = useRef<THREE.Group>(null!);
+  const textRef = useRef<any>(null);
+  const { actions } = useAnimations(animations, groupRef);
+  const activeAction = useRef<THREE.AnimationAction | null>(null);
+  
+  const currentAnimState = useRef("Idle");
+
+  useFrame((_, delta) => {
+    if (!groupRef.current) return;
+    
+    const players = connectedPlayersRef.current || [];
+    const data = players.find(p => p.id === id);
+    
+    if (!data) {
+      groupRef.current.visible = false;
+      return;
+    }
+    
+    groupRef.current.visible = true;
+    
+    // Smooth position lerping with HIGHER speed & accuracy (18.0 * delta)
+    groupRef.current.position.x += (data.x - groupRef.current.position.x) * Math.min(1, 18.0 * delta);
+    groupRef.current.position.y += (data.y - groupRef.current.position.y) * Math.min(1, 18.0 * delta);
+    groupRef.current.position.z += (data.z - groupRef.current.position.z) * Math.min(1, 18.0 * delta);
+    
+    // Smooth rotation slerp with HIGHER speed & accuracy (18.0 * delta)
+    let diff = data.rotation - groupRef.current.rotation.y;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    groupRef.current.rotation.y += diff * Math.min(1, 18.0 * delta);
+
+    // Update text
+    if (textRef.current) {
+      textRef.current.text = username || id.substring(0, 8);
+    }
+    
+    // Billboard name label
+    if (nameRef.current) {
+      nameRef.current.quaternion.copy(camera.quaternion);
+    }
+
+    // Handle animations inside useFrame dynamically without React state re-render!
+    const animation = data.animation || "Idle";
+    const desired = animation.toLowerCase();
+    const isAttacking = desired.includes("shoot") || desired.includes("attack") || desired.includes("slash");
+    const isUsingSkill = desired.includes("skill");
+
+    const startedNewAttack = isAttacking && (currentAnimState.current !== animation);
+    const startedNewSkill  = isUsingSkill && (currentAnimState.current !== animation);
+
+    if (actions && currentAnimState.current !== animation) {
+      const keys = Object.keys(actions);
+      let clipName = "Idle";
+
+      if (desired.includes("run")) {
+        clipName = keys.find((k) => k === "Run" || k.toLowerCase() === "run") || "Idle";
+      } else if (desired.includes("walk")) {
+        clipName = keys.find((k) => k === "Walk" || k.toLowerCase().includes("walk")) || "Idle";
+      } else if (isAttacking || isUsingSkill) {
+        clipName = keys.find((k) => k.toLowerCase().includes("attack") || k.toLowerCase().includes("slash") || k.toLowerCase().includes("shoot")) || "Idle";
+      } else {
+        clipName = keys.find((k) => k === "Idle" || k.toLowerCase() === "idle") || "Idle";
+      }
+
+      const nextAction = actions[clipName];
+      if (nextAction && nextAction !== activeAction.current) {
+        if (activeAction.current) {
+          nextAction.reset().play();
+          activeAction.current.crossFadeTo(nextAction, 0.15, true);
+        } else {
+          nextAction.reset().fadeIn(0.1).play();
+        }
+        activeAction.current = nextAction;
+      }
+      currentAnimState.current = animation;
+    }
+
+
+
+    // ─── CLASS ULTIMATE ACTIVE SKILL VISUALS SYNCHRONIZER (Rising Edge Trigger) ───
+    if (startedNewSkill) {
+      const pClass = data.class || cls || "Warrior";
+      const fromX = groupRef.current.position.x;
+      const fromY = groupRef.current.position.y + 1.2;
+      const fromZ = groupRef.current.position.z;
+      
+      console.log(`🔥 [VISUAL SYNC] Remote Player ${username} (${pClass}) menggunakan Ultimate Skill!`);
+      
+      if (pClass === "Warrior" && fighterSpellsRef?.current) {
+        const fPool = fighterSpellsRef.current;
+        if (typeof (window as any).globalRemoteFighterPtr === 'undefined') (window as any).globalRemoteFighterPtr = 0;
+        let fPtr = (window as any).globalRemoteFighterPtr;
+        
+        const fs = fPool[fPtr];
+        if (fs) {
+          fs.active = true;
+          fs.x = fromX; fs.y = fromY - 1.1; fs.z = fromZ;
+          fs.startTime = performance.now();
+          fs.color = "#ea580c"; // Fiery orange cyclone
+          fs.isCyclone = true;
+          (window as any).globalRemoteFighterPtr = (fPtr + 1) % fPool.length;
+        }
+      } else if (pClass === "Thief" && assassinSpellsRef?.current) {
+        const aPool = assassinSpellsRef.current;
+        if (typeof (window as any).globalRemoteAssassinPtr === 'undefined') (window as any).globalRemoteAssassinPtr = 0;
+        let aPtr = (window as any).globalRemoteAssassinPtr;
+        
+        const as = aPool[aPtr];
+        if (as) {
+          as.active = true;
+          as.x = fromX; as.y = fromY - 1.1; as.z = fromZ;
+          as.startTime = performance.now();
+          as.color = "#7e22ce";
+          (as as any).isTeleport = true;
+          (window as any).globalRemoteAssassinPtr = (aPtr + 1) % aPool.length;
+        }
+      } else if (pClass === "Priest" && tankSpellsRef?.current) {
+        const tPool = tankSpellsRef.current;
+        if (typeof (window as any).globalRemoteTankPtr === 'undefined') (window as any).globalRemoteTankPtr = 0;
+        let tPtr = (window as any).globalRemoteTankPtr;
+        
+        const ts = tPool[tPtr];
+        if (ts) {
+          ts.active = true;
+          ts.isShield = true; // Sanctuary dome
+          ts.x = fromX; ts.y = fromY - 1.1; ts.z = fromZ;
+          ts.startTime = performance.now();
+          ts.color = "#fbbf24";
+          (ts as any).ownerId = id;
+          (window as any).globalRemoteTankPtr = (tPtr + 1) % tPool.length;
+        }
+      } else if (pClass === "Mage" && spellsRef?.current) {
+        const mPool = spellsRef.current;
+        if (typeof (window as any).globalRemoteMagePtr === 'undefined') (window as any).globalRemoteMagePtr = 0;
+        
+        for (let m = 0; m < 4; m++) {
+          let mPtr = (window as any).globalRemoteMagePtr;
+          const ms = mPool[mPtr];
+          if (ms) {
+            ms.active = true;
+            ms.isBullet = false; // falls from sky
+            ms.fromX = fromX + (Math.random() - 0.5) * 6;
+            ms.fromY = fromY + 10.0;
+            ms.fromZ = fromZ + (Math.random() - 0.5) * 6;
+            ms.toX = fromX + (Math.random() - 0.5) * 4;
+            ms.toY = fromY - 1.1;
+            ms.toZ = fromZ + (Math.random() - 0.5) * 4;
+            ms.startTime = performance.now();
+            ms.color = "#ec4899"; // Arcane Pink meteor
+            ms.isMeteor = true;
+            (window as any).globalRemoteMagePtr = (mPtr + 1) % mPool.length;
+          }
+        }
+      } else if (pClass === "Beginner" && mmSpellsRef?.current) {
+        const pool = mmSpellsRef.current;
+        if (typeof (window as any).globalRemoteSpellPtr === 'undefined') (window as any).globalRemoteSpellPtr = 0;
+        
+        for (let b = 0; b < 12; b++) {
+          let ptr = (window as any).globalRemoteSpellPtr;
+          const s = pool[ptr];
+          if (s) {
+            const angle = (b / 12) * Math.PI * 2;
+            s.active = true;
+            s.isBullet = true;
+            s.fromX = fromX;
+            s.fromY = fromY;
+            s.fromZ = fromZ;
+            s.toX = fromX + Math.sin(angle) * 15.0;
+            s.toY = fromY;
+            s.toZ = fromZ + Math.cos(angle) * 15.0;
+            s.startTime = performance.now();
+            s.color = "#ffd700"; // Golden storm bullets
+            s.targetId = "";
+            (s as any).targetPoolIdx = undefined;
+            (s as any).isSniper = true;
+            (s as any).isFinisher = true;
+            (s as any).bulletSpeed = 140.0;
+            (s as any).playerClass = "Beginner";
+            (window as any).globalRemoteSpellPtr = (ptr + 1) % pool.length;
+          }
+        }
+      }
+    }
+
+    // ─── CLASS BASIC ATTACK VISUALS SYNCHRONIZER (Rising Edge Trigger) ───
+    if (startedNewAttack && mmSpellsRef?.current) {
+      const pClass = data.class || cls || "Warrior";
+      
+      let closestMonster: any = null;
+      
+      if (unitRegistry?.current) {
+        const units = unitRegistry.current;
+        
+        // 1. Authoritative backend Target ID lookup
+        if (data.targetId) {
+          const idx = units.findIndex(u => u.id === data.targetId && u.isActive && !u.isDying);
+          if (idx !== -1) {
+            closestMonster = units[idx];
+            closestMonster.poolIdx = idx;
+          }
+        }
+        
+        // 2. Client-side spatial fallback (if server target info hasn't arrived yet)
+        if (!closestMonster) {
+          let maxRange = 10.0; // Default (10m)
+          if (pClass === "Warrior") maxRange = 4.0;
+          else if (pClass === "Thief") maxRange = 4.0;
+          else if (pClass === "Beginner") maxRange = 11.0; // Ranged Marksman MM fallback (9.0m attack range)
+          else if (pClass === "Mage") maxRange = 10.0;
+          else if (pClass === "Priest") maxRange = 4.5;
+
+          const uPos = groupRef.current.position;
+          let minDist = maxRange;
+          
+          for (let i = 0; i < units.length; i++) {
+            const u = units[i];
+            if (u.isActive && !u.isDying && u.type === 'enemy') {
+              const dx = u.position[0] - uPos.x;
+              const dy = u.position[1] - uPos.y;
+              const dz = u.position[2] - uPos.z;
+              const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+              if (dist < minDist) {
+                minDist = dist;
+                closestMonster = u;
+              }
+            }
+          }
+        }
+      }
+      
+      // Origin coordinates (remote player's hands)
+      const fromX = groupRef.current.position.x;
+      const fromY = groupRef.current.position.y + 1.2;
+      const fromZ = groupRef.current.position.z;
+      
+      let toX = fromX;
+      let toY = fromY;
+      let toZ = fromZ;
+      let targetId = "";
+      let targetPoolIdx = undefined;
+      
+      if (closestMonster) {
+        toX = closestMonster.position[0];
+        toY = closestMonster.position[1] + 1.2;
+        toZ = closestMonster.position[2];
+        targetId = closestMonster.id;
+        targetPoolIdx = closestMonster.poolIdx;
+      } else {
+        // Shoot forward in facing direction if no target is within range
+        const angle = groupRef.current.rotation.y;
+        toX = fromX + Math.sin(angle) * 15;
+        toY = fromY;
+        toZ = fromZ + Math.cos(angle) * 15;
+      }
+      
+      // Dynamic visuals per class
+      let color = "#ef4444";
+      let bulletSpeed = 80.0;
+      let isFinisher = Math.random() > 0.6;
+      
+      if (pClass === "Mage") {
+        color = isFinisher ? "#ec4899" : "#3b82f6";
+        bulletSpeed = isFinisher ? 65.0 : 85.0;
+      } else if (pClass === "Warrior") {
+        color = isFinisher ? "#ea580c" : "#ef4444";
+        bulletSpeed = isFinisher ? 55.0 : 75.0;
+      } else if (pClass === "Priest") {
+        color = isFinisher ? "#fef08a" : "#fbbf24";
+        bulletSpeed = isFinisher ? 70.0 : 90.0;
+      } else if (pClass === "Thief") {
+        color = isFinisher ? "#d8b4fe" : "#7e22ce";
+        bulletSpeed = isFinisher ? 120.0 : 165.0;
+      } else {
+        color = isFinisher ? "#a7f3d0" : "#10b981";
+        bulletSpeed = isFinisher ? 80.0 : 100.0;
+      }
+      
+      // Fetch and setup next spell in the global pool (using global window pointer to avoid overlapping conflicts!)
+      const pool = mmSpellsRef.current;
+      if (typeof (window as any).globalRemoteSpellPtr === 'undefined') {
+        (window as any).globalRemoteSpellPtr = 0;
+      }
+      let ptr = (window as any).globalRemoteSpellPtr;
+      
+      const s = pool[ptr];
+      if (s) {
+        s.active = true;
+        s.isBullet = true;
+        s.fromX = fromX;
+        s.fromY = fromY;
+        s.fromZ = fromZ;
+        s.toX = toX;
+        s.toY = toY;
+        s.toZ = toZ;
+        s.startTime = performance.now();
+        s.color = color;
+        s.targetId = targetId;
+        (s as any).targetPoolIdx = targetPoolIdx;
+        (s as any).isSniper = false;
+        (s as any).isFinisher = isFinisher;
+        (s as any).bulletSpeed = bulletSpeed;
+        (s as any).playerClass = pClass;
+        
+        (window as any).globalRemoteSpellPtr = (ptr + 1) % pool.length;
+      }
+
+      // Trigger premium class-specific visual layers
+      if (pClass === "Warrior" && fighterSpellsRef?.current) {
+        const fPool = fighterSpellsRef.current;
+        if (typeof (window as any).globalRemoteFighterPtr === 'undefined') (window as any).globalRemoteFighterPtr = 0;
+        let fPtr = (window as any).globalRemoteFighterPtr;
+        
+        const fs = fPool[fPtr];
+        if (fs) {
+          fs.active = true;
+          fs.x = toX; fs.y = toY - 1.1; fs.z = toZ;
+          fs.targetX = toX; fs.targetZ = toZ;
+          const dx = toX - fromX;
+          const dz = toZ - fromZ;
+          const len = Math.sqrt(dx * dx + dz * dz) || 1;
+          fs.rotation = Math.atan2(dx / len, dz / len);
+          fs.startTime = performance.now();
+          fs.color = color;
+          fs.isCyclone = isFinisher;
+          (window as any).globalRemoteFighterPtr = (fPtr + 1) % fPool.length;
+        }
+      } else if (pClass === "Thief" && assassinSpellsRef?.current) {
+        const aPool = assassinSpellsRef.current;
+        if (typeof (window as any).globalRemoteAssassinPtr === 'undefined') (window as any).globalRemoteAssassinPtr = 0;
+        let aPtr = (window as any).globalRemoteAssassinPtr;
+        
+        const as = aPool[aPtr];
+        if (as) {
+          as.active = true;
+          as.x = toX; as.y = toY - 1.1; as.z = toZ;
+          as.startTime = performance.now();
+          as.color = color;
+          (as as any).isTeleport = isFinisher;
+          (window as any).globalRemoteAssassinPtr = (aPtr + 1) % aPool.length;
+        }
+      } else if (pClass === "Priest" && tankSpellsRef?.current) {
+        const tPool = tankSpellsRef.current;
+        if (typeof (window as any).globalRemoteTankPtr === 'undefined') (window as any).globalRemoteTankPtr = 0;
+        let tPtr = (window as any).globalRemoteTankPtr;
+        
+        const ts = tPool[tPtr];
+        if (ts) {
+          ts.active = true;
+          ts.x = toX; ts.y = toY - 1.1; ts.z = toZ;
+          ts.startTime = performance.now();
+          ts.color = color;
+          ts.isShield = false;
+          (window as any).globalRemoteTankPtr = (tPtr + 1) % tPool.length;
+        }
+      } else if (pClass === "Mage" && spellsRef?.current) {
+        const mPool = spellsRef.current;
+        if (typeof (window as any).globalRemoteMagePtr === 'undefined') (window as any).globalRemoteMagePtr = 0;
+        let mPtr = (window as any).globalRemoteMagePtr;
+        
+        const ms = mPool[mPtr];
+        if (ms) {
+          ms.active = true;
+          ms.isBullet = true;
+          ms.fromX = fromX; ms.fromY = fromY; ms.fromZ = fromZ;
+          ms.toX = toX; ms.toY = toY; ms.toZ = toZ;
+          ms.startTime = performance.now();
+          ms.color = color;
+          ms.isMeteor = isFinisher;
+          ms.targetId = targetId;
+          (ms as any).targetPoolIdx = targetPoolIdx;
+          (window as any).globalRemoteMagePtr = (mPtr + 1) % mPool.length;
+        }
+      }
+    }
+  });
+
+  return (
+    <group ref={groupRef} visible={false}>
+      <group scale={1.0} position={[0, -1.3, 0]}>
+        <primitive object={clone} />
+      </group>
+      <group ref={nameRef} position={[0, 1.75, 0]}>
+        <Text
+          ref={textRef}
+          fontSize={0.22}
+          anchorX="center"
+          anchorY="bottom"
+          outlineWidth={0.03}
+          outlineColor="#000000"
+          color="#06b6d4"
+          depthOffset={-5}
+        >
+          {""}
+        </Text>
+      </group>
+    </group>
+  );
+};
+
+export interface RemotePlayersRendererProps {
+  activeRemotePlayers: { id: string; username: string; class: string; gender: string }[];
+  connectedPlayersRef: React.RefObject<PlayerNetworkState[]>;
+  gameConfig?: any;
+  mmSpellsRef?: React.RefObject<any[]>;
+  spellsRef?: React.RefObject<any[]>;
+  fighterSpellsRef?: React.RefObject<any[]>;
+  tankSpellsRef?: React.RefObject<any[]>;
+  assassinSpellsRef?: React.RefObject<any[]>;
+  unitRegistry?: React.RefObject<UnitRuntimeData[]>;
+}
+
+export const RemotePlayersRenderer = ({ 
+  activeRemotePlayers, 
+  connectedPlayersRef, 
+  gameConfig,
+  mmSpellsRef,
+  spellsRef,
+  fighterSpellsRef,
+  tankSpellsRef,
+  assassinSpellsRef,
+  unitRegistry
+}: RemotePlayersRendererProps) => {
+  const { camera } = useThree();
+  
+  return (
+    <group>
+      {activeRemotePlayers.map((player) => (
+        <RemotePlayerInstance
+          key={player.id}
+          id={player.id}
+          username={player.username}
+          cls={player.class}
+          gender={player.gender}
+          connectedPlayersRef={connectedPlayersRef}
+          camera={camera}
+          gameConfig={gameConfig}
+          mmSpellsRef={mmSpellsRef}
+          spellsRef={spellsRef}
+          fighterSpellsRef={fighterSpellsRef}
+          tankSpellsRef={tankSpellsRef}
+          assassinSpellsRef={assassinSpellsRef}
+          unitRegistry={unitRegistry}
+        />
+      ))}
+    </group>
+  );
+};
