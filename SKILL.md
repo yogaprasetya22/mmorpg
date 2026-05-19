@@ -2,6 +2,9 @@
 
 This document defines the strict, high-fidelity engineering directives that **every** AI pairing agent must read, acknowledge, and adhere to when contributing to this real-time multiplayer MMORPG ecosystem.
 
+> [!NOTE]
+> Before modifying any architecture, GORM database schema, or React Three Fiber pipeline, you MUST study the comprehensive tech stack and data layout blueprints documented in the main **[Project Blueprint (README.md)](README.md)**.
+
 ---
 
 ## 🎯 1. Core Engineering Philosophies

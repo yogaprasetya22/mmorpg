@@ -105,3 +105,9 @@ Maintains individual stats of monster classes:
 
 > [!TIP]
 > **To add new maps, assets, or monsters**: Simply drop new `.glb` files into the backend `assets-model` folder, configure a spawn point using the World Editor, and the server will automatically distribute them across the multiplayer canvas!
+
+---
+
+## 🤖 5. AI Assistant Pair-Programming Guide
+If you are developing this codebase alongside an AI assistant, ensure that the agent reads and strictly adheres to the authoritative compilation and deployment checks specified in:
+👉 **[AI Assistant Pairing Rules & Instructions (SKILL.md)](SKILL.md)**
