@@ -249,10 +249,12 @@ func (h *ConfigHandler) GetAssetList(c *gin.Context) {
 			return err
 		}
 		if !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".glb") {
-			// Convert system path to web URL path, e.g. "assets-model/kingdom/wall.glb" -> "/assets-model/kingdom/wall.glb"
-			relPath := strings.TrimPrefix(path, root)
+			relPath, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
 			relPath = filepath.ToSlash(relPath)
-			webPath := "/assets-model" + relPath
+			webPath := "/assets-model/" + relPath
 			assets = append(assets, AssetInfo{
 				Name: info.Name(),
 				Path: webPath,
