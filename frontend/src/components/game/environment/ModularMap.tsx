@@ -2,9 +2,8 @@
 
 import { useMemo, useEffect, useRef } from 'react';
 import { useGLTF } from '@react-three/drei';
-import { STATIC_WORLD_MAP } from '@/src/core/logic/environment/mapConfig';
-import { InstancedStaticCollider } from 'bvhecctrl';
 import { useEditorStore } from '@/src/state/useEditorStore';
+import { InstancedStaticCollider } from 'bvhecctrl';
 import * as THREE from 'three';
 
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
@@ -15,14 +14,14 @@ import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-
 (THREE.Mesh.prototype as any).raycast = acceleratedRaycast;
 
 export const ModularMap = ({ debug }: { debug?: boolean }) => {
-  const { items, loadFromStorage } = useEditorStore();
+  const { items, loadFromDatabase } = useEditorStore();
 
   useEffect(() => {
-    loadFromStorage();
-  }, [loadFromStorage]);
+    loadFromDatabase();
+  }, [loadFromDatabase]);
 
   const allItems = useMemo(() => {
-    return items.length > 0 ? items : STATIC_WORLD_MAP;
+    return items;
   }, [items]);
 
   // Group items by their 3D model path
