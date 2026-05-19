@@ -4,19 +4,25 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"mmorpg-backend/internal/domain"
 )
 
 type ConfigHandler struct {
 	configRepo domain.ConfigRepository
+	db         *gorm.DB
 }
 
-func NewConfigHandler(configRepo domain.ConfigRepository) *ConfigHandler {
+func NewConfigHandler(configRepo domain.ConfigRepository, db *gorm.DB) *ConfigHandler {
 	return &ConfigHandler{
 		configRepo: configRepo,
+		db:         db,
 	}
 }
 
@@ -225,5 +231,237 @@ func (h *ConfigHandler) DeleteMonsterConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Konfigurasi monster berhasil dihapus",
 	})
+}
+
+// AssetInfo describes a 3D asset file served over the static URL pathway
+type AssetInfo struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
+// GetAssetList scans backend's ./assets-model directory recursively to serve all GLBs dynamically
+func (h *ConfigHandler) GetAssetList(c *gin.Context) {
+	var assets []AssetInfo
+	root := "./assets-model"
+
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".glb") {
+			// Convert system path to web URL path, e.g. "assets-model/kingdom/wall.glb" -> "/assets-model/kingdom/wall.glb"
+			relPath := strings.TrimPrefix(path, root)
+			relPath = filepath.ToSlash(relPath)
+			webPath := "/assets-model" + relPath
+			assets = append(assets, AssetInfo{
+				Name: info.Name(),
+				Path: webPath,
+			})
+		}
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal men-scan direktori asset: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, assets)
+}
+
+type MapSettingsInput struct {
+	GridSize      float64 `json:"gridSize"`
+	GridEnabled   bool    `json:"gridEnabled"`
+	TerrainConfig struct {
+		Height    float64 `json:"height"`
+		Scale     float64 `json:"scale"`
+		Seed      int     `json:"seed"`
+		Sharpness float64 `json:"sharpness"`
+	} `json:"terrainConfig"`
+	TerrainMaterialID string `json:"terrainMaterialId"`
+	TerrainColor      string `json:"terrainColor"`
+}
+
+type MapItemInput struct {
+	ID    string    `json:"id"`
+	Type  string    `json:"type"`
+	Path  string    `json:"path"`
+	Pos   []float64 `json:"pos"`
+	Rot   []float64 `json:"rot"`
+	Sca   []float64 `json:"sca"`
+	Color string    `json:"color"`
+}
+
+type MapSaveInput struct {
+	MapID      string           `json:"map_id"`
+	Items      []MapItemInput   `json:"items"`
+	Settings   MapSettingsInput `json:"settings"`
+	PaintData  string           `json:"paintData"`
+	SculptData string           `json:"sculptData"`
+}
+
+// SaveMap processes map-editor persistence updates into MapConfig and MapItem tables in GORM
+func (h *ConfigHandler) SaveMap(c *gin.Context) {
+	var input MapSaveInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "JSON body tidak valid: " + err.Error()})
+		return
+	}
+
+	mapID := input.MapID
+	if mapID == "" {
+		mapID = c.DefaultQuery("map_id", "Starter Zone")
+	}
+
+	// Replace existing items inside transactional context
+	err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("map_config_id = ?", mapID).Delete(&domain.MapItem{}).Error; err != nil {
+			return err
+		}
+
+		mapConfig := domain.MapConfig{
+			ID:                mapID,
+			Name:              mapID,
+			GridSize:          input.Settings.GridSize,
+			GridEnabled:       input.Settings.GridEnabled,
+			TerrainHeight:     input.Settings.TerrainConfig.Height,
+			TerrainScale:      input.Settings.TerrainConfig.Scale,
+			TerrainSeed:       input.Settings.TerrainConfig.Seed,
+			TerrainSharpness:  input.Settings.TerrainConfig.Sharpness,
+			TerrainMaterialID: input.Settings.TerrainMaterialID,
+			TerrainColor:      input.Settings.TerrainColor,
+			PaintData:         input.PaintData,
+			SculptData:        input.SculptData,
+		}
+
+		if err := tx.Save(&mapConfig).Error; err != nil {
+			return err
+		}
+
+		for _, item := range input.Items {
+			var px, py, pz, rx, ry, rz, sx, sy, sz float64
+			if len(item.Pos) >= 3 {
+				px, py, pz = item.Pos[0], item.Pos[1], item.Pos[2]
+			}
+			if len(item.Rot) >= 3 {
+				rx, ry, rz = item.Rot[0], item.Rot[1], item.Rot[2]
+			}
+			if len(item.Sca) >= 3 {
+				sx, sy, sz = item.Sca[0], item.Sca[1], item.Sca[2]
+			}
+
+			dbItem := domain.MapItem{
+				ID:          item.ID,
+				MapConfigID: mapConfig.ID,
+				Type:        item.Type,
+				Path:        item.Path,
+				PosX:        px,
+				PosY:        py,
+				PosZ:        pz,
+				RotX:        rx,
+				RotY:        ry,
+				RotZ:        rz,
+				ScaX:        sx,
+				ScaY:        sy,
+				ScaZ:        sz,
+				Color:       item.Color,
+			}
+
+			if err := tx.Create(&dbItem).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan peta ke database: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Peta '" + mapID + "' berhasil disimpan ke database!"})
+}
+
+// LoadMap reads map configuration and preload items list dynamically based on GORM Preload filter
+func (h *ConfigHandler) LoadMap(c *gin.Context) {
+	mapID := c.DefaultQuery("map_id", "Starter Zone")
+
+	var mapConfig domain.MapConfig
+	err := h.db.Preload("Items").First(&mapConfig, "id = ?", mapID).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusOK, gin.H{
+				"map_id": mapID,
+				"items":  []interface{}{},
+				"settings": gin.H{
+					"gridSize":    1.0,
+					"gridEnabled": true,
+					"terrainConfig": gin.H{
+						"height":    12.0,
+						"scale":     0.05,
+						"seed":      0,
+						"sharpness": 2.0,
+					},
+					"terrainMaterialId": "",
+					"terrainColor":      "#3d5c36",
+				},
+				"paintData":  "",
+				"sculptData": "",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengambil peta dari database: " + err.Error()})
+		return
+	}
+
+	itemsOut := make([]gin.H, 0, len(mapConfig.Items))
+	for _, item := range mapConfig.Items {
+		itemsOut = append(itemsOut, gin.H{
+			"id":    item.ID,
+			"type":  item.Type,
+			"path":  item.Path,
+			"pos":   []float64{item.PosX, item.PosY, item.PosZ},
+			"rot":   []float64{item.RotX, item.RotY, item.RotZ},
+			"sca":   []float64{item.ScaX, item.ScaY, item.ScaZ},
+			"color": item.Color,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"map_id": mapConfig.ID,
+		"items":  itemsOut,
+		"settings": gin.H{
+			"gridSize":    mapConfig.GridSize,
+			"gridEnabled": mapConfig.GridEnabled,
+			"terrainConfig": gin.H{
+				"height":    mapConfig.TerrainHeight,
+				"scale":     mapConfig.TerrainScale,
+				"seed":      mapConfig.TerrainSeed,
+				"sharpness": mapConfig.TerrainSharpness,
+			},
+			"terrainMaterialId": mapConfig.TerrainMaterialID,
+			"terrainColor":      mapConfig.TerrainColor,
+		},
+		"paintData":  mapConfig.PaintData,
+		"sculptData": mapConfig.SculptData,
+	})
+}
+
+// ListMaps lists metadata for all existing maps saved inside GORM MapConfig
+func (h *ConfigHandler) ListMaps(c *gin.Context) {
+	type MapMeta struct {
+		ID        string    `json:"id"`
+		Name      string    `json:"name"`
+		UpdatedAt time.Time `json:"updated_at"`
+	}
+
+	var maps []MapMeta
+	if err := h.db.Model(&domain.MapConfig{}).Select("id, name, updated_at").Find(&maps).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengambil daftar peta: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, maps)
 }
 

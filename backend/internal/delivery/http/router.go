@@ -39,6 +39,9 @@ func SetupRouter(authHandler *AuthHandler, wsHandler *ws.GameHandler, configHand
 		})
 	})
 
+	// Serve assets-model folder statically over HTTP from the backend
+	r.Static("/assets-model", "./assets-model")
+
 	// WebSocket Game Route
 	r.GET("/ws", wsHandler.ServeWS)
 
@@ -66,6 +69,12 @@ func SetupRouter(authHandler *AuthHandler, wsHandler *ws.GameHandler, configHand
 		api.GET("/config/monsters", configHandler.GetMonsterConfigs)
 		api.POST("/config/monsters", configHandler.SaveMonsterConfig)
 		api.DELETE("/config/monsters/:type", configHandler.DeleteMonsterConfig)
+
+		// Dynamic Map & Assets configurations
+		api.GET("/config/assets", configHandler.GetAssetList)
+		api.GET("/world-editor/maps", configHandler.ListMaps)
+		api.GET("/world-editor/load", configHandler.LoadMap)
+		api.POST("/world-editor/save", configHandler.SaveMap)
 
 		// Authoritative Game Endpoints (Resolved by Backend)
 		api.POST("/game/spawn-resolve", configHandler.ResolveSpawn)

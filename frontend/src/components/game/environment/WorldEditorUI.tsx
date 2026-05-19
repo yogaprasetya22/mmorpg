@@ -230,7 +230,18 @@ export const WorldEditorUI = () => {
     vegetationDensity,
     setVegetationDensity,
     generateVegetation,
-    clearVegetation
+    clearVegetation,
+    
+    // Multi-map and Dynamic Assets
+    selectedMapId,
+    setSelectedMapId,
+    mapList,
+    fetchMapList,
+    createNewMap,
+    dynamicAssets,
+    fetchDynamicAssets,
+    saveToDatabase,
+    loadFromDatabase
   } = useEditorStore();
 
   const [mounted, setMounted] = React.useState(false);
@@ -239,6 +250,11 @@ export const WorldEditorUI = () => {
 
   React.useEffect(() => {
     setMounted(true);
+    // Dynamic database queries at mount phase
+    loadFromDatabase();
+    fetchDynamicAssets();
+    fetchMapList();
+
     const timer = setTimeout(() => setIsInitializing(false), 1200);
     return () => clearTimeout(timer);
   }, []);
@@ -422,7 +438,7 @@ export const WorldEditorUI = () => {
 
   const filteredAssets = selectedCategory === 'materials' 
     ? FULL_MATERIAL_LIBRARY 
-    : ASSET_LIBRARY.filter(a => {
+    : (dynamicAssets.length > 0 ? dynamicAssets : ASSET_LIBRARY).filter(a => {
         const matchesSearch = a.name.toLowerCase().includes(search.toLowerCase());
         const matchesCategory = selectedCategory === 'all' || a.category === selectedCategory;
         return matchesSearch && matchesCategory;
@@ -521,6 +537,76 @@ export const WorldEditorUI = () => {
 
           {/* Main Content Area - Scrollable */}
           <div className="flex-grow flex flex-col gap-6 overflow-y-auto pr-2 custom-scrollbar">
+            
+            {/* Multi-Map Manager Section */}
+            <div className="bg-white/5 rounded-[24px] p-5 border border-white/5 flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Map & Database Sync</h4>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[8px] font-black text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20 uppercase tracking-wider">ACTIVE</span>
+                </div>
+              </div>
+              
+              <div className="flex flex-col gap-2">
+                <label className="text-[9px] font-bold text-white/40 uppercase">Active Map ID</label>
+                <div className="flex gap-2">
+                  <select 
+                    value={selectedMapId}
+                    onChange={(e) => setSelectedMapId(e.target.value)}
+                    className="flex-1 bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500"
+                  >
+                    {mapList.map((m: any) => (
+                      <option key={m.id} value={m.id} className="bg-neutral-900 text-white">
+                        {m.name}
+                      </option>
+                    ))}
+                    {mapList.length === 0 && (
+                      <option value="Starter Zone" className="bg-neutral-900 text-white">Starter Zone</option>
+                    )}
+                  </select>
+                  <button
+                    onClick={() => saveToDatabase()}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-emerald-400/30 hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    Save DB
+                  </button>
+                </div>
+              </div>
+
+              {/* Create New Map */}
+              <div className="flex flex-col gap-2 border-t border-white/5 pt-3">
+                <label className="text-[9px] font-bold text-white/40 uppercase">Create New Map</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter new map name..."
+                    id="new-map-input"
+                    className="flex-1 bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500 placeholder:text-white/20"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const val = e.currentTarget.value.trim();
+                        if (val) {
+                          createNewMap(val);
+                          e.currentTarget.value = '';
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      const input = document.getElementById('new-map-input') as HTMLInputElement;
+                      if (input && input.value.trim()) {
+                        createNewMap(input.value.trim());
+                        input.value = '';
+                      }
+                    }}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-indigo-400/30"
+                  >
+                    Create
+                  </button>
+                </div>
+              </div>
+            </div>
             
             {/* World Settings Section */}
             <div className="bg-white/5 rounded-[24px] p-5 border border-white/5 flex flex-col gap-5">

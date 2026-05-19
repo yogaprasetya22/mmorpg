@@ -45,6 +45,17 @@ export interface EditorState {
   saveToStorage: () => void;
   saveToDatabase: () => Promise<void>;
   loadFromDatabase: () => Promise<void>;
+
+  // Multi-Map Persist States
+  selectedMapId: string;
+  setSelectedMapId: (mapId: string) => void;
+  mapList: { id: string; name: string; updated_at: string }[];
+  fetchMapList: () => Promise<void>;
+  createNewMap: (mapId: string) => Promise<void>;
+
+  // Dynamic Asset States
+  dynamicAssets: AssetInfo[];
+  fetchDynamicAssets: () => Promise<void>;
   
   gridSize: number;
   setGridSize: (size: number) => void;
@@ -325,44 +336,128 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
   },
 
+  selectedMapId: 'Starter Zone',
+  setSelectedMapId: (mapId) => {
+    set({ selectedMapId: mapId });
+    get().loadFromDatabase();
+  },
+  mapList: [],
+  fetchMapList: async () => {
+    try {
+      const res = await fetch('http://localhost:8080/api/world-editor/maps');
+      if (res.ok) {
+        const list = await res.json();
+        set({ mapList: list });
+      }
+    } catch (e) {
+      console.error("Failed to fetch map list", e);
+    }
+  },
+  createNewMap: async (mapId) => {
+    set({ selectedMapId: mapId, items: [], paintData: null, sculptData: null });
+    await get().saveToDatabase();
+    await get().fetchMapList();
+  },
+
+  dynamicAssets: [],
+  fetchDynamicAssets: async () => {
+    try {
+      const res = await fetch('http://localhost:8080/api/config/assets');
+      if (res.ok) {
+        const assets: { name: string; path: string }[] = await res.json();
+        const mapped: AssetInfo[] = assets.map(item => {
+          let category: 'kingdom' | 'env' | 'tree' = 'env';
+          if (item.path.includes('/kingdom/')) {
+            category = 'kingdom';
+          } else if (item.path.includes('/assets-tree/')) {
+            category = 'tree';
+          }
+          const path = `http://localhost:8080${item.path}`;
+          const name = item.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+
+          return {
+            name,
+            path,
+            category
+          };
+        });
+        set({ dynamicAssets: mapped });
+      }
+    } catch (e) {
+      console.error("Failed to fetch dynamic assets", e);
+    }
+  },
+
   saveToDatabase: async () => {
-    const { items, gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, paintData, sculptData } = get();
+    const { selectedMapId, items, gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, paintData, sculptData } = get();
+    // Sanitize item paths to ensure we don't save full URL prefixes to database redundantly
+    const sanitizedToSave = items.map(item => {
+      let path = item.path;
+      if (path.startsWith('http://localhost:8080/')) {
+        path = path.replace('http://localhost:8080', '');
+      }
+      return { ...item, path };
+    });
+
     const payload = {
-      items,
+      map_id: selectedMapId,
+      items: sanitizedToSave,
       settings: { gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor },
       paintData,
       sculptData
     };
 
     try {
-      // Endpoint API Laravel/Next.js Anda
-      const res = await fetch('/api/world-editor/save', {
+      const res = await fetch(`http://localhost:8080/api/world-editor/save?map_id=${encodeURIComponent(selectedMapId)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      if (res.ok) console.log("Map synced to database!");
+      if (res.ok) {
+        console.log(`Map '${selectedMapId}' synced to database!`);
+        get().fetchMapList();
+      }
     } catch (e) {
-      console.error("Failed to sync to database", e);
+      console.error("Failed to sync map to database", e);
     }
   },
 
   loadFromDatabase: async () => {
+    const { selectedMapId } = get();
     try {
-      const res = await fetch('/api/world-editor/load');
+      const res = await fetch(`http://localhost:8080/api/world-editor/load?map_id=${encodeURIComponent(selectedMapId)}`);
       if (res.ok) {
         const data = await res.json();
+        
+        const sanitizedItems = (data.items || []).map((item: any) => {
+          let path = item.path;
+          if (path.startsWith('/assets-model/') || path.startsWith('/kingdom/') || path.startsWith('/assets-tree/')) {
+            path = `http://localhost:8080${path}`;
+          }
+          return { ...item, path };
+        });
+
         set({ 
-          items: data.items, 
-          ...data.settings, 
-          paintData: data.paintData,
-          sculptData: data.sculptData,
-          history: [data.items],
+          items: sanitizedItems, 
+          gridSize: data.settings?.gridSize ?? 1.0,
+          gridEnabled: data.settings?.gridEnabled ?? true,
+          terrainConfig: {
+            height: 12.0,
+            scale: 0.05,
+            seed: 0,
+            sharpness: 2.0,
+            ...(data.settings?.terrainConfig || {})
+          },
+          terrainMaterialId: data.settings?.terrainMaterialId ?? null,
+          terrainColor: data.settings?.terrainColor ?? '#3d5c36',
+          paintData: data.paintData || null,
+          sculptData: data.sculptData || null,
+          history: [sanitizedItems],
           historyIndex: 0
         });
       }
     } catch (e) {
-      console.error("Failed to load from database", e);
+      console.error("Failed to load map from database", e);
     }
   },
 
