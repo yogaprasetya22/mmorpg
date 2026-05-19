@@ -1087,11 +1087,6 @@ export default function MultiplayerArena() {
               <PlayerController 
                 modelPath={localPlayerModelPath}
                 playerClass={selectedCharacter?.class || "Warrior"}
-                initialPosition={[
-                  selectedCharacter?.last_x ?? 0,
-                  (selectedCharacter?.last_y ?? 0) === 0 ? 3 : selectedCharacter.last_y,
-                  selectedCharacter?.last_z ?? 0
-                ]}
                 settingsRef={settingsRef}
                 damageQueue={damageQueue}
                 mmSpellsRef={mmSpellsRef}

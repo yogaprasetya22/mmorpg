@@ -221,9 +221,9 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 						h.MaxHP = tData.MaxHP
 					}
 					
-					// Move player back to starter coordinates in registry and Redis
-					u.UpdatePlayerMovement(tID, 0, 0, 0, 0, "idle", "")
-					fmt.Printf("🛡️ Player %s telah hidup kembali di kota starter.\n", tUser)
+					// Move player back to their last exited/saved coordinates in registry and Redis
+					u.UpdatePlayerMovement(tID, tData.LastX, tData.LastY, tData.LastZ, 0, "idle", "")
+					fmt.Printf("🛡️ Player %s telah hidup kembali di koordinat terakhir (%f, %f, %f).\n", tUser, tData.LastX, tData.LastY, tData.LastZ)
 				}
 			}(targetID, targetData.Username)
 		}

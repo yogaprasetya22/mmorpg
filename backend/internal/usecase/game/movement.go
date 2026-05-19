@@ -42,4 +42,25 @@ func (u *gameUsecase) UpdatePlayerMovement(playerID string, x, y, z, rotation fl
 	go func() {
 		_ = u.stateRepo.SavePlayerState(context.Background(), pState)
 	}()
+
+	// Dynamically update coordinate persistence and current HP inside GORM/Redis active player profile
+	u.activePlayersMu.Lock()
+	pData, existsProfile := u.activePlayers[playerID]
+	if existsProfile && pData != nil {
+		pData.LastX = x
+		pData.LastY = y
+		pData.LastZ = z
+
+		// Sync current HP from ECS registry if present
+		if healthComp, found := u.registry.GetComponent(domain.EntityID(playerID), "Health"); found {
+			h := healthComp.(*domain.HealthComponent)
+			pData.HP = h.HP
+		}
+
+		// Save profile dynamically (extremely fast write-back caching handles this safely!)
+		go func(p *domain.Player) {
+			_ = u.playerRepo.Update(p)
+		}(pData)
+	}
+	u.activePlayersMu.Unlock()
 }

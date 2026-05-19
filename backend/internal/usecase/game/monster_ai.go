@@ -346,8 +346,17 @@ func (u *gameUsecase) processMonsterAI(m *domain.Monster, dt float32) {
 					if exists && pl != nil {
 						pl.HP = pl.MaxHP
 						_ = u.playerRepo.Update(pl)
-						u.UpdatePlayerMovement(pID, 0, 0, 0, 0, "idle", "")
-						fmt.Printf("🛡️ Player %s telah hidup kembali di kota starter.\n", pUser)
+
+						// Update player HP in ECS registry
+						if pHcomp, found := u.registry.GetComponent(domain.EntityID(pID), "Health"); found {
+							h := pHcomp.(*domain.HealthComponent)
+							h.HP = pl.HP
+							h.MaxHP = pl.MaxHP
+						}
+
+						// Move player back to their last exited/saved coordinates in registry and Redis
+						u.UpdatePlayerMovement(pID, pl.LastX, pl.LastY, pl.LastZ, 0, "idle", "")
+						fmt.Printf("🛡️ Player %s telah hidup kembali di koordinat terakhir (%f, %f, %f).\n", pUser, pl.LastX, pl.LastY, pl.LastZ)
 					}
 				}(targetPlayer.ID, pData.Username)
 			}

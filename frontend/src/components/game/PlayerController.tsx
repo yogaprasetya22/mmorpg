@@ -133,7 +133,6 @@ export const PlayerController = ({
   simTimeRef,
   sendPlayerState,
   playerStats,
-  initialPosition = [0, 3, 0],
 }: {
   modelPath?: string;
   playerClass?: string;
@@ -150,7 +149,6 @@ export const PlayerController = ({
   simTimeRef?: React.RefObject<number>;
   sendPlayerState?: (state: { x: number; y: number; z: number; rotation: number; animation: string; targetId?: string }) => void;
   playerStats?: any;
-  initialPosition?: [number, number, number];
 }) => {
   const poolRef      = useRef<ProjectilePoolHandle>(null);
   const ecctrlRef    = useRef<any>(null);
@@ -797,7 +795,7 @@ export const PlayerController = ({
       <BVHEcctrl
         ref={ecctrlRef}
         paused={paused}
-        position={initialPosition}
+        position={[0, 3, 0]}
         floatHeight={0.3}
         floatSensorRadius={0.3}
         delay={0.5}
