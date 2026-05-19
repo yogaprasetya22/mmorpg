@@ -198,22 +198,22 @@ const ECSArmyRendererInner = ({
 }: ECSArmyRendererProps) => {
 
   // ── Load all GLTF assets (preload happens at bottom of file) ──
-  const f1 = useGLTF('/assets-model/Knight_Golden_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
-  const f2 = useGLTF('/assets-model/Knight_Golden_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
-  const f3 = useGLTF('/assets-model/Knight_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
-  const t1 = useGLTF('/assets-model/Viking_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
-  const t2 = useGLTF('/assets-model/Viking_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
-  const g1 = useGLTF('/assets-model/Witch.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
-  const g2 = useGLTF('/assets-model/Wizard.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
-  const m1 = useGLTF('/assets-model/Cowboy_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
-  const n1 = useGLTF('/assets-model/Ninja_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
-  const n2 = useGLTF('/assets-model/Ninja_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
+  const f1 = useGLTF('http://localhost:8080/assets-model/Knight_Golden_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
+  const f2 = useGLTF('http://localhost:8080/assets-model/Knight_Golden_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
+  const f3 = useGLTF('http://localhost:8080/assets-model/Knight_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
+  const t1 = useGLTF('http://localhost:8080/assets-model/Viking_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
+  const t2 = useGLTF('http://localhost:8080/assets-model/Viking_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
+  const g1 = useGLTF('http://localhost:8080/assets-model/Witch.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
+  const g2 = useGLTF('http://localhost:8080/assets-model/Wizard.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
+  const m1 = useGLTF('http://localhost:8080/assets-model/Cowboy_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
+  const n1 = useGLTF('http://localhost:8080/assets-model/Ninja_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
+  const n2 = useGLTF('http://localhost:8080/assets-model/Ninja_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
 
   // Monsters for enemies
-  const gob1 = useGLTF('/assets-model/Goblin_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
-  const gob2 = useGLTF('/assets-model/Goblin_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
-  const zom1 = useGLTF('/assets-model/Zombie_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
-  const zom2 = useGLTF('/assets-model/Zombie_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
+  const gob1 = useGLTF('http://localhost:8080/assets-model/Goblin_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
+  const gob2 = useGLTF('http://localhost:8080/assets-model/Goblin_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
+  const zom1 = useGLTF('http://localhost:8080/assets-model/Zombie_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
+  const zom2 = useGLTF('http://localhost:8080/assets-model/Zombie_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
 
   // Map classKey → array of GLTF assets to pick from randomly
   const gltfByPool = useMemo<Record<string, any[]>>(() => ({
@@ -663,17 +663,17 @@ export const ECSArmyRenderer = React.memo(ECSArmyRendererInner);
 
 // ─── Preload all assets ───────────────────────────────────────────────────────
 const _preload = (path: string) => useGLTF.preload(path, true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-_preload('/assets-model/Knight_Golden_Female.glb');
-_preload('/assets-model/Knight_Golden_Male.glb');
-_preload('/assets-model/Knight_Male.glb');
-_preload('/assets-model/Viking_Male.glb');
-_preload('/assets-model/Viking_Female.glb');
-_preload('/assets-model/Witch.glb');
-_preload('/assets-model/Wizard.glb');
-_preload('/assets-model/Cowboy_Female.glb');
-_preload('/assets-model/Ninja_Female.glb');
-_preload('/assets-model/Ninja_Male.glb');
-_preload('/assets-model/Goblin_Male.glb');
-_preload('/assets-model/Goblin_Female.glb');
-_preload('/assets-model/Zombie_Male.glb');
-_preload('/assets-model/Zombie_Female.glb');
+_preload('http://localhost:8080/assets-model/Knight_Golden_Female.glb');
+_preload('http://localhost:8080/assets-model/Knight_Golden_Male.glb');
+_preload('http://localhost:8080/assets-model/Knight_Male.glb');
+_preload('http://localhost:8080/assets-model/Viking_Male.glb');
+_preload('http://localhost:8080/assets-model/Viking_Female.glb');
+_preload('http://localhost:8080/assets-model/Witch.glb');
+_preload('http://localhost:8080/assets-model/Wizard.glb');
+_preload('http://localhost:8080/assets-model/Cowboy_Female.glb');
+_preload('http://localhost:8080/assets-model/Ninja_Female.glb');
+_preload('http://localhost:8080/assets-model/Ninja_Male.glb');
+_preload('http://localhost:8080/assets-model/Goblin_Male.glb');
+_preload('http://localhost:8080/assets-model/Goblin_Female.glb');
+_preload('http://localhost:8080/assets-model/Zombie_Male.glb');
+_preload('http://localhost:8080/assets-model/Zombie_Female.glb');
