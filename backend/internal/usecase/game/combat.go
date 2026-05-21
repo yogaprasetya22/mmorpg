@@ -235,24 +235,6 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 	}
 }
 
-func (u *gameUsecase) SimulateMonstersTick(dt float32) {
-	u.monstersMu.Lock()
-	defer u.monstersMu.Unlock()
-	u.playersMu.RLock()
-	defer u.playersMu.RUnlock()
+// SimulateMonstersTick telah dipindah ke game_usecase.go dengan implementasi
+// processMonsterAIWithSnapshot yang lock-free menggunakan player snapshot.
 
-	// Diagnostic logging to inspect actual speed and coordinates once every 50 ticks (randomized) - DISABLED FOR PERFORMANCE
-	/*
-	if time.Now().UnixNano()%50 < 3 {
-		for id, m := range u.monsters {
-			fmt.Printf("🔍 DIAGNOSTIC: %s | Pos=(%.2f, %.2f) | Speed=%.3f | Target=%s | dt=%.4f\n",
-				id, m.Position.X, m.Position.Z, m.Speed, m.TargetPlayerID, dt)
-			break
-		}
-	}
-	*/
-
-	for _, m := range u.monsters {
-		u.processMonsterAI(m, dt)
-	}
-}

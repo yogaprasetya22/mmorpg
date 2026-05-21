@@ -4,7 +4,7 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Environment, useTexture } from "@react-three/drei";
+import { Environment, useTexture, Sky } from "@react-three/drei";
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from "three-mesh-bvh";
 import { StaticCollider, characterStatus } from "bvhecctrl";
 
@@ -14,7 +14,7 @@ import { useEditorStore } from "@/src/state/useEditorStore";
 import { getTerrainElevation } from "@/src/core/utils/terrainHeight";
 import { FULL_MATERIAL_LIBRARY } from "@/src/core/logic/environment/assetRegistry";
 import { useVFX } from "../systems/VFXManager";
-import { PainterlyShaderUtils } from "../systems/effects/PainterlyMaterials";
+import { PainterlyShaderUtils, PainterlyWaterMaterial } from "../systems/effects/PainterlyMaterials";
 import { registerCollider, unregisterCollider } from "@/src/core/utils/globalRaycaster";
 
 // Add BVH support to THREE with any cast to avoid lint errors
@@ -627,6 +627,7 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
   return (
     <>
       <StaticCollider 
+        key={`terrain-sc-${sculptTrigger}`}
         debug={debug}
         restitution={0}
         friction={1}
@@ -704,12 +705,8 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
   const isSetup    = gameState === "SETUP";
   const { spawnVFX } = useVFX();
 
-  useEffect(() => {
-    globalIsSculptLoaded = false;
-    globalSculptHeights.fill(0);
-  }, []);
-
   useFrame(state => {
+    PainterlyWaterMaterial.uniforms.time.value = state.clock.elapsedTime;
     if (isSetup || potatoMode) return;
     if (state.clock.elapsedTime % 0.25 < 0.025) {
       if (characterStatus && characterStatus.position) {
@@ -755,19 +752,34 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
   const fogFar  = 1200;
   const fogColor = "#c8dff0";
 
+  const sky = useEditorStore(s => s.sky) || 'sunset';
+
+  const skyFile = useMemo(() => {
+    if (sky === 'night') return 'http://localhost:8080/assets-model/Textures/qwantani_night_1k.exr';
+    if (sky === 'sunset') return 'http://localhost:8080/assets-model/Textures/qwantani_sunset_1k.exr';
+    return null;
+  }, [sky]);
+
   return (
     <group>
-      <Environment 
-        files="/qwantani_sunset_1k.exr"
-        background
-        blur={0}
-      />
-      <hemisphereLight intensity={1.0} color="#ffffff" groundColor="#445544" />
-      <ambientLight intensity={0.8} />
+      {skyFile ? (
+        <Environment 
+          files={skyFile}
+          background
+          blur={0}
+        />
+      ) : (
+        <>
+          <color attach="background" args={["#a0c4ff"]} />
+          <Sky sunPosition={[100, 20, 100]} />
+        </>
+      )}
+      <hemisphereLight intensity={sky === 'night' ? 0.3 : 1.0} color={sky === 'night' ? "#a5b4fc" : "#ffffff"} groundColor={sky === 'night' ? "#1e1b4b" : "#445544"} />
+      <ambientLight intensity={sky === 'night' ? 0.2 : 0.8} />
 
       <directionalLight
         position={[10, 100, 10]}
-        intensity={2.5}
+        intensity={sky === 'night' ? 0.8 : 2.5}
 
         castShadow={!isSetup}
         shadow-mapSize={[512, 512]}
@@ -787,6 +799,12 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
         onReady={onReady} 
         onSculptLoaded={() => {}} 
       />
+      
+      {/* WATER PLANE (NO COLLIDER) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.85, 0]}>
+        <planeGeometry args={[1500, 1500]} />
+        <primitive object={PainterlyWaterMaterial} attach="material" />
+      </mesh>
       
       {/* Rain and Lightning disabled for permanent daytime */}
       <fog attach="fog" args={[fogColor, fogNear, fogFar]} />

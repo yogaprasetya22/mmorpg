@@ -13,6 +13,8 @@ type MapConfig struct {
 	TerrainSharpness  float64   `json:"terrain_sharpness" gorm:"default:2.0"`
 	TerrainMaterialID string    `json:"terrain_material_id" gorm:"default:''"`
 	TerrainColor      string    `json:"terrain_color" gorm:"default:'#3d5c36'"`
+	Sky               string    `json:"sky" gorm:"default:'sunset'"`
+	Environment       string    `json:"environment" gorm:"default:'STORM'"`
 	PaintData         string    `json:"paint_data" gorm:"type:text"`
 	SculptData        string    `json:"sculpt_data" gorm:"type:text"`
 	Items             []MapItem `json:"items" gorm:"foreignKey:MapConfigID;constraint:OnDelete:CASCADE"`

@@ -8,12 +8,16 @@ import { SkeletonUtils } from 'three-stdlib';
 import { PlayerNetworkState } from "@/src/hooks/useWebSocketGame";
 import { UnitRuntimeData } from "@/src/core/domain/unit.types";
 
+// Pre-built player Map for O(1) lookup inside useFrame (avoids O(n) find every 60fps)
+export type PlayerMapRef = React.RefObject<Map<string, PlayerNetworkState>>;
+
 export interface RemotePlayerInstanceProps {
   id: string;
   username: string;
   cls: string;
   gender: string;
   connectedPlayersRef: React.RefObject<PlayerNetworkState[]>;
+  playerMapRef: PlayerMapRef;
   camera: THREE.Camera;
   gameConfig?: any;
   mmSpellsRef?: React.RefObject<any[]>;
@@ -29,8 +33,9 @@ export const RemotePlayerInstance = ({
   username, 
   cls, 
   gender, 
-  connectedPlayersRef, 
-  camera, 
+  connectedPlayersRef: _connectedPlayersRef, // kept for API compat
+  playerMapRef,
+  camera: _camera, // kept for API compat
   gameConfig,
   mmSpellsRef,
   spellsRef,
@@ -55,8 +60,10 @@ export const RemotePlayerInstance = ({
     const cloned = SkeletonUtils.clone(scene);
     cloned.traverse((child: any) => {
       if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
+        // Shadows disabled on remote players for performance (shadow maps are expensive)
+        child.castShadow = false;
+        child.receiveShadow = false;
+        child.geometry?.computeBoundingSphere?.();
       }
     });
     return cloned;
@@ -74,8 +81,8 @@ export const RemotePlayerInstance = ({
   useFrame((_, delta) => {
     if (!groupRef.current) return;
     
-    const players = connectedPlayersRef.current || [];
-    const data = players.find(p => p.id === id);
+    // O(1) Map lookup — avoids O(n) find() per frame
+    const data = playerMapRef.current?.get(id);
     
     if (!data) {
       groupRef.current.visible = false;
@@ -157,10 +164,8 @@ export const RemotePlayerInstance = ({
       textRef.current.text = username || id.substring(0, 8);
     }
     
-    // Billboard name label
-    if (nameRef.current) {
-      nameRef.current.quaternion.copy(camera.quaternion);
-    }
+    // Billboard name label: quaternion copy removed — nameRef is a group, not Billboard.
+    // Skip camera.quaternion.copy per player — use drei <Billboard> in JSX instead if needed.
 
     // Handle animations inside useFrame dynamically without React state re-render!
     const animation = data.animation || "Idle";
@@ -544,6 +549,17 @@ export const RemotePlayersRenderer = ({
   unitRegistry
 }: RemotePlayersRendererProps) => {
   const { camera } = useThree();
+  // Build O(1) player Map every frame — replaces find() in every RemotePlayerInstance
+  const playerMapRef = useRef<Map<string, PlayerNetworkState>>(new Map());
+
+  useFrame(() => {
+    const players = connectedPlayersRef.current || [];
+    const map = playerMapRef.current;
+    map.clear();
+    for (let i = 0; i < players.length; i++) {
+      map.set(players[i].id, players[i]);
+    }
+  });
   
   return (
     <group>
@@ -555,6 +571,7 @@ export const RemotePlayersRenderer = ({
           cls={player.class}
           gender={player.gender}
           connectedPlayersRef={connectedPlayersRef}
+          playerMapRef={playerMapRef}
           camera={camera}
           gameConfig={gameConfig}
           mmSpellsRef={mmSpellsRef}

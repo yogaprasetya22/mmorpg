@@ -14,7 +14,7 @@ func (u *gameUsecase) UpdatePlayerMovement(playerID string, x, y, z, rotation fl
 		pState.Z = z
 		pState.Rotation = rotation
 		pState.Animation = animation
-		
+
 		if targetID != "" {
 			pState.TargetID = targetID
 		} else if animation != "Attack" && animation != "Skill" {
@@ -27,7 +27,7 @@ func (u *gameUsecase) UpdatePlayerMovement(playerID string, x, y, z, rotation fl
 		return
 	}
 
-	// Update PositionComponent in ECS registry
+	// Update PositionComponent in ECS registry (in-memory, ultra-fast)
 	posComp, found := u.registry.GetComponent(domain.EntityID(playerID), "Position")
 	if found {
 		pComponent := posComp.(*domain.PositionComponent)
@@ -38,12 +38,7 @@ func (u *gameUsecase) UpdatePlayerMovement(playerID string, x, y, z, rotation fl
 		pComponent.Animation = animation
 	}
 
-	// Cache to Redis State repository asynchronously (avoid blocking game updates)
-	go func() {
-		_ = u.stateRepo.SavePlayerState(context.Background(), pState)
-	}()
-
-	// Dynamically update coordinate persistence and current HP inside GORM/Redis active player profile
+	// Update last-known position in activePlayer (in-memory only, no DB write per frame)
 	u.activePlayersMu.Lock()
 	pData, existsProfile := u.activePlayers[playerID]
 	if existsProfile && pData != nil {
@@ -56,11 +51,15 @@ func (u *gameUsecase) UpdatePlayerMovement(playerID string, x, y, z, rotation fl
 			h := healthComp.(*domain.HealthComponent)
 			pData.HP = h.HP
 		}
-
-		// Save profile dynamically (extremely fast write-back caching handles this safely!)
-		go func(p *domain.Player) {
-			_ = u.playerRepo.Update(p)
-		}(pData)
 	}
 	u.activePlayersMu.Unlock()
+
+	// Cache to Redis asynchronously (non-blocking, only network state not DB)
+	go func() {
+		_ = u.stateRepo.SavePlayerState(context.Background(), pState)
+	}()
+
+	// NOTE: Heavy GORM/Postgres DB write is intentionally removed from here.
+	// Player coordinates are persisted during autosave every ~10 seconds AND on disconnect.
+	// This eliminates hundreds of goroutine DB writes per second at 60Hz client movement.
 }

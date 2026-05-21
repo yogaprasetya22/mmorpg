@@ -15,7 +15,7 @@ const createSeededRandom = (seed: string) => {
 
 const noise = new SimplexNoise(createSeededRandom("SEAL_M_STABLE_SEED") as any);
 
-const TERRAIN_SIZE = 120; // Storm environment bounds size
+const TERRAIN_SIZE = 1500; // Storm environment bounds size
 
 export function getTerrainElevation(
   x: number, 

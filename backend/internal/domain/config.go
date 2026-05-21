@@ -66,6 +66,7 @@ type SimulationSetting struct {
 	VfxIntensity           float32   `json:"vfxIntensity"`
 	MaxUnits               int       `json:"maxUnits"`
 	PotatoMode             bool      `json:"potatoMode"`
+	ActiveMapID            string    `json:"activeMapId" gorm:"default:'Starter Zone'"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

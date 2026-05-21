@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { getTerrainElevation } from '@/src/core/utils/terrainHeight';
+import { useStore } from './useStore';
 
 export interface MapItem {
   id: string;
@@ -48,7 +49,7 @@ export interface EditorState {
 
   // Multi-Map Persist States
   selectedMapId: string;
-  setSelectedMapId: (mapId: string) => void;
+  setSelectedMapId: (mapId: string) => Promise<void>;
   mapList: { id: string; name: string; updated_at: string }[];
   fetchMapList: () => Promise<void>;
   createNewMap: (mapId: string) => Promise<void>;
@@ -75,6 +76,12 @@ export interface EditorState {
   
   terrainColor: string;
   setTerrainColor: (color: string) => void;
+  
+  sky: string;
+  setSky: (sky: string) => void;
+
+  environment: string;
+  setEnvironment: (env: string) => void;
 
   paintMode: boolean;
   setPaintMode: (mode: boolean) => void;
@@ -279,6 +286,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           terrainConfig: loadedConfig, 
           terrainMaterialId: parsed.terrainMaterialId,
           terrainColor: parsed.terrainColor || '#3d5c36',
+          sky: parsed.sky || 'sunset',
+          environment: parsed.environment || 'STORM',
           lastUsedScales: parsed.lastUsedScales || {},
           lastUsedRotations: parsed.lastUsedRotations || {}
         });
@@ -325,10 +334,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
   
   saveToStorage: () => {
-    const { items, gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, paintData, sculptData } = get();
+    const { items, gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment, paintData, sculptData } = get();
     try {
       localStorage.setItem('world_editor_map', JSON.stringify(items));
-      localStorage.setItem('world_editor_settings', JSON.stringify({ gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor }));
+      localStorage.setItem('world_editor_settings', JSON.stringify({ gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment }));
       if (paintData) localStorage.setItem('world_editor_paint', paintData);
       if (sculptData) localStorage.setItem('world_editor_sculpt', sculptData);
     } catch (e) {
@@ -337,9 +346,30 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   selectedMapId: 'Starter Zone',
-  setSelectedMapId: (mapId) => {
+  setSelectedMapId: async (mapId) => {
     set({ selectedMapId: mapId });
-    get().loadFromDatabase();
+    await get().loadFromDatabase();
+    
+    // Sync the active map selection to the database global simulation settings
+    try {
+      const resSettings = await fetch("http://localhost:8080/api/config/settings");
+      let dataSettings = {};
+      if (resSettings.ok) {
+        dataSettings = await resSettings.json();
+      }
+      const updated = {
+        ...dataSettings,
+        activeMapId: mapId
+      };
+      await fetch("http://localhost:8080/api/config/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated)
+      });
+      console.log(`Global activeMapId synced to: ${mapId}`);
+    } catch (e) {
+      console.warn("Failed to sync global activeMapId to database:", e);
+    }
   },
   mapList: [],
   fetchMapList: async () => {
@@ -354,9 +384,37 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
   },
   createNewMap: async (mapId) => {
-    set({ selectedMapId: mapId, items: [], paintData: null, sculptData: null });
+    set({ 
+      selectedMapId: mapId, 
+      items: [], 
+      paintData: null, 
+      sculptData: null,
+      history: [[]],
+      historyIndex: 0
+    });
     await get().saveToDatabase();
     await get().fetchMapList();
+
+    // Sync the active map selection to the database global simulation settings
+    try {
+      const resSettings = await fetch("http://localhost:8080/api/config/settings");
+      let dataSettings = {};
+      if (resSettings.ok) {
+        dataSettings = await resSettings.json();
+      }
+      const updated = {
+        ...dataSettings,
+        activeMapId: mapId
+      };
+      await fetch("http://localhost:8080/api/config/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated)
+      });
+      console.log(`Global activeMapId synced to: ${mapId}`);
+    } catch (e) {
+      console.warn("Failed to sync global activeMapId to database:", e);
+    }
   },
 
   dynamicAssets: [],
@@ -389,7 +447,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   saveToDatabase: async () => {
-    const { selectedMapId, items, gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, paintData, sculptData } = get();
+    const { selectedMapId, items, gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment, paintData, sculptData } = get();
     // Sanitize item paths to ensure we don't save full URL prefixes to database redundantly
     const sanitizedToSave = items.map(item => {
       let path = item.path;
@@ -402,7 +460,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const payload = {
       map_id: selectedMapId,
       items: sanitizedToSave,
-      settings: { gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor },
+      settings: { gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment },
       paintData,
       sculptData
     };
@@ -437,6 +495,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           return { ...item, path };
         });
 
+        const loadedEnv = data.settings?.environment ?? 'STORM';
+        useStore.getState().setEnvironment(loadedEnv as any);
+
         set({ 
           items: sanitizedItems, 
           gridSize: data.settings?.gridSize ?? 1.0,
@@ -450,6 +511,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           },
           terrainMaterialId: data.settings?.terrainMaterialId ?? null,
           terrainColor: data.settings?.terrainColor ?? '#3d5c36',
+          sky: data.settings?.sky ?? 'sunset',
+          environment: loadedEnv,
           paintData: data.paintData || null,
           sculptData: data.sculptData || null,
           history: [sanitizedItems],
@@ -494,6 +557,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   terrainColor: '#3d5c36',
   setTerrainColor: (color) => {
     set({ terrainColor: color });
+    debouncedSave();
+  },
+
+  sky: 'sunset',
+  setSky: (sky) => {
+    set({ sky });
+    debouncedSave();
+  },
+
+  environment: 'STORM',
+  setEnvironment: (environment) => {
+    set({ environment });
+    useStore.getState().setEnvironment(environment as any);
     debouncedSave();
   },
 

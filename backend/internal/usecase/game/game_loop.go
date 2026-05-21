@@ -8,12 +8,14 @@ import (
 )
 
 func (u *gameUsecase) StartGameLoop(ctx context.Context) {
-	// Fixed Tick Rate of 30Hz (33.3 milliseconds per frame)
-	tickInterval := 33 * time.Millisecond
+	// Tick Rate 20Hz (50ms) — sweet spot antara smooth gameplay dan server overhead.
+	// 30Hz terlalu agresif kalau ada banyak monster; 20Hz lebih ringan tapi masih
+	// sangat smooth dengan client-side interpolation di frontend.
+	tickInterval := 50 * time.Millisecond
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
 
-	// Periodic autosave counter: 300 ticks = ~10 seconds
+	// Autosave setiap ~10 detik (200 ticks @ 20Hz)
 	autosaveCounter := 0
 
 	for {
@@ -21,9 +23,8 @@ func (u *gameUsecase) StartGameLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// Use a rock-solid fixed physics step (30Hz = 0.03333s) for the monster simulation.
-			// This completely eliminates server-side speed spikes and thread scheduling jitter!
-			fixedDt := float32(0.03333)
+			// Fixed physics step sesuai tick rate (50ms = 0.050s)
+			fixedDt := float32(0.050)
 
 			// 1. Simulate Monster AI and movement for this tick
 			u.SimulateMonstersTick(fixedDt)
@@ -31,14 +32,14 @@ func (u *gameUsecase) StartGameLoop(ctx context.Context) {
 			// 2. Fetch all real-time players and monsters states
 			payload := u.GetStatePayload()
 
-			// 3. Broadcast the game state to all active client WebSocket connections
+			// 3. Broadcast game state asynchronously agar game loop tidak block
 			if u.broadcastCallback != nil {
-				u.broadcastCallback(payload)
+				go u.broadcastCallback(payload)
 			}
 
-			// 4. Perform periodic lightweight autosave of active players in the background
+			// 4. Periodic autosave
 			autosaveCounter++
-			if autosaveCounter >= 300 {
+			if autosaveCounter >= 200 {
 				autosaveCounter = 0
 				u.autosaveActivePlayers()
 			}
@@ -53,7 +54,7 @@ func (u *gameUsecase) autosaveActivePlayers() {
 		u.activePlayersMu.RUnlock()
 		return
 	}
-	
+
 	// Copy pointers to avoid holding the lock during slow operations
 	players := make([]*domain.Player, 0, len(u.activePlayers))
 	for _, p := range u.activePlayers {

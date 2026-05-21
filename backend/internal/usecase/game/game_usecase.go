@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"sort"
 	"sync"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"mmorpg-backend/internal/domain"
 	"mmorpg-backend/internal/repository/redis"
 )
+
 
 type GameUsecase interface {
 	StartGameLoop(ctx context.Context)
@@ -220,6 +220,30 @@ func (u *gameUsecase) SpawnMonster(name string, mType string, x, y, z float32) s
 	return id
 }
 
+func (u *gameUsecase) SimulateMonstersTick(dt float32) {
+	// Snapshot player positions first under short read-lock, then release
+	u.playersMu.RLock()
+	playerSnapshot := make(map[string]*domain.PlayerNetworkState, len(u.players))
+	for id, p := range u.players {
+		cp := *p // value copy — safe to read without lock after this
+		playerSnapshot[id] = &cp
+	}
+	u.playersMu.RUnlock()
+
+	// Snapshot monsters list (pointers — mutations below are still guarded by monstersMu)
+	u.monstersMu.Lock()
+	monsters := make([]*domain.Monster, 0, len(u.monsters))
+	for _, m := range u.monsters {
+		monsters = append(monsters, m)
+	}
+	u.monstersMu.Unlock()
+
+	// Process each monster AI with no broad locks held — reads from snapshots
+	for _, m := range monsters {
+		u.processMonsterAIWithSnapshot(m, dt, playerSnapshot)
+	}
+}
+
 func (u *gameUsecase) RegisterPlayer(playerID string, username string) {
 	u.playersMu.Lock()
 	defer u.playersMu.Unlock()
@@ -424,27 +448,22 @@ func (u *gameUsecase) UnregisterPlayer(playerID string) {
 }
 
 func (u *gameUsecase) GetStatePayload() domain.GameStatePayload {
+	// Acquire both locks in a consistent order to avoid deadlock (players first, then monsters)
 	u.playersMu.RLock()
-	defer u.playersMu.RUnlock()
-	u.monstersMu.RLock()
-	defer u.monstersMu.RUnlock()
-
-	var playerStates []domain.PlayerNetworkState
+	playerStates := make([]domain.PlayerNetworkState, 0, len(u.players))
 	for _, p := range u.players {
 		playerStates = append(playerStates, *p)
 	}
-	sort.Slice(playerStates, func(i, j int) bool {
-		return playerStates[i].ID < playerStates[j].ID
-	})
+	u.playersMu.RUnlock()
 
-	var monsterStates []domain.Monster
+	u.monstersMu.RLock()
+	monsterStates := make([]domain.Monster, 0, len(u.monsters))
 	for _, m := range u.monsters {
 		monsterStates = append(monsterStates, *m)
 	}
-	sort.Slice(monsterStates, func(i, j int) bool {
-		return monsterStates[i].ID < monsterStates[j].ID
-	})
+	u.monstersMu.RUnlock()
 
+	// Sorting removed: game clients don't require sorted state — eliminates alloc per tick
 	return domain.GameStatePayload{
 		Players:  playerStates,
 		Monsters: monsterStates,

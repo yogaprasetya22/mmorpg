@@ -282,6 +282,8 @@ type MapSettingsInput struct {
 	} `json:"terrainConfig"`
 	TerrainMaterialID string `json:"terrainMaterialId"`
 	TerrainColor      string `json:"terrainColor"`
+	Sky               string `json:"sky"`
+	Environment       string `json:"environment"`
 }
 
 type MapItemInput struct {
@@ -321,6 +323,16 @@ func (h *ConfigHandler) SaveMap(c *gin.Context) {
 			return err
 		}
 
+		skyPreset := input.Settings.Sky
+		if skyPreset == "" {
+			skyPreset = "sunset"
+		}
+
+		envMode := input.Settings.Environment
+		if envMode == "" {
+			envMode = "STORM"
+		}
+
 		mapConfig := domain.MapConfig{
 			ID:                mapID,
 			Name:              mapID,
@@ -332,6 +344,8 @@ func (h *ConfigHandler) SaveMap(c *gin.Context) {
 			TerrainSharpness:  input.Settings.TerrainConfig.Sharpness,
 			TerrainMaterialID: input.Settings.TerrainMaterialID,
 			TerrainColor:      input.Settings.TerrainColor,
+			Sky:               skyPreset,
+			Environment:       envMode,
 			PaintData:         input.PaintData,
 			SculptData:        input.SculptData,
 		}
@@ -407,6 +421,7 @@ func (h *ConfigHandler) LoadMap(c *gin.Context) {
 					},
 					"terrainMaterialId": "",
 					"terrainColor":      "#3d5c36",
+					"sky":               "sunset",
 				},
 				"paintData":  "",
 				"sculptData": "",
@@ -431,23 +446,25 @@ func (h *ConfigHandler) LoadMap(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"map_id": mapConfig.ID,
-		"items":  itemsOut,
-		"settings": gin.H{
-			"gridSize":    mapConfig.GridSize,
-			"gridEnabled": mapConfig.GridEnabled,
-			"terrainConfig": gin.H{
-				"height":    mapConfig.TerrainHeight,
-				"scale":     mapConfig.TerrainScale,
-				"seed":      mapConfig.TerrainSeed,
-				"sharpness": mapConfig.TerrainSharpness,
+			"map_id": mapConfig.ID,
+			"items":  itemsOut,
+			"settings": gin.H{
+				"gridSize":    mapConfig.GridSize,
+				"gridEnabled": mapConfig.GridEnabled,
+				"terrainConfig": gin.H{
+					"height":    mapConfig.TerrainHeight,
+					"scale":     mapConfig.TerrainScale,
+					"seed":      mapConfig.TerrainSeed,
+					"sharpness": mapConfig.TerrainSharpness,
+				},
+				"terrainMaterialId": mapConfig.TerrainMaterialID,
+				"terrainColor":      mapConfig.TerrainColor,
+				"sky":               mapConfig.Sky,
+				"environment":       mapConfig.Environment,
 			},
-			"terrainMaterialId": mapConfig.TerrainMaterialID,
-			"terrainColor":      mapConfig.TerrainColor,
-		},
-		"paintData":  mapConfig.PaintData,
-		"sculptData": mapConfig.SculptData,
-	})
+			"paintData":  mapConfig.PaintData,
+			"sculptData": mapConfig.SculptData,
+		})
 }
 
 // ListMaps lists metadata for all existing maps saved inside GORM MapConfig

@@ -1,18 +1,17 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { Sky, KeyboardControls, useGLTF, StatsGl, PerformanceMonitor, AdaptiveEvents, AdaptiveDpr } from "@react-three/drei";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { KeyboardControls, useGLTF, StatsGl, PerformanceMonitor, AdaptiveEvents, AdaptiveDpr } from "@react-three/drei";
 import { useWebSocketGame, PlayerNetworkState, MonsterNetworkState, GameStatePayload } from "@/src/hooks/useWebSocketGame";
 import { PlayerController, keyboardMap } from "@/src/components/game/PlayerController";
 import { RemotePlayersRenderer } from "@/src/components/game/RemotePlayersRenderer";
 import { RemoteMonstersRenderer } from "@/src/components/game/RemoteMonstersRenderer";
-import { StormEnvironment } from "@/src/components/game/environment/StormEnvironment";
-import { WhimsicalDiorama } from "@/src/components/game/environment/WhimsicalDiorama";
+import { EnvironmentMultiGlobal } from "@/src/components/game/environment/EnvironmentMultiGlobal";
 import { ModularMap } from "@/src/components/game/environment/ModularMap";
 import { Sword, Shield, User, Key, Users, RefreshCw, Trophy, Zap, Sparkles, LogOut, Skull, Target, MessageSquare, Activity, X } from "lucide-react";
 import * as THREE from 'three';
-import { useStore } from "@/src/state/useStore";
+import { useEditorStore } from "@/src/state/useEditorStore";
 import { EffectComposer, Bloom, ToneMapping } from "@react-three/postprocessing";
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 import { battleGrid } from "@/src/core/logic/combat/spatialGrid";
@@ -58,13 +57,23 @@ const FPSCounterUpdater = ({ onFpsUpdate }: { onFpsUpdate: (fps: number) => void
   return null;
 };
 
+// --- ExposureBridge: sync toneMappingExposure inside Canvas (mirrors World-Editor VisualTuningBridge) ---
+const ExposureBridge = ({ exposure }: { exposure: number }) => {
+  const { gl } = useThree();
+  useEffect(() => {
+    gl.toneMappingExposure = exposure;
+  }, [gl, exposure]);
+  return null;
+};
+
 // --- Camera Director for Epic Endings & Shake ---
 const CameraDirector = () => {
   return null;
 };
 
 export default function MultiplayerArena() {
-  const environment = useStore(s => s.environment);
+  const selectedMapId = useEditorStore(s => s.selectedMapId);
+  const [envReady, setEnvReady] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [token, setToken] = useState("");
@@ -72,7 +81,9 @@ export default function MultiplayerArena() {
   const [selectedCharacter, setSelectedCharacter] = useState<any>(null);
   const [gameConfig, setGameConfig] = useState<any>(null);
   const [fps, setFps] = useState(60);
-  const [dpr, setDpr] = useState(1.0);
+  // DPR default 0.75: balances quality vs performance for low-spec laptops.
+  // PerformanceMonitor will increase it dynamically if GPU can handle more.
+  const [dpr, setDpr] = useState(0.75);
   
   // Customization & creation states
   const [isCreatingChar, setIsCreatingChar] = useState(false);
@@ -134,10 +145,12 @@ export default function MultiplayerArena() {
   const tankSpellsRef = useRef<any[]>(new Array(300).fill(null).map(() => ({ active: false })));
   const assassinSpellsRef = useRef<any[]>(new Array(300).fill(null).map(() => ({ active: false })));
   const unitRegistryRef = useRef<UnitRuntimeData[]>([]);
+  // Throttle expensive operations that don't need to run at full WS rate (20Hz)
+  const lastBattleGridUpdate = useRef(0);
+  const lastRemotePlayerHash = useRef("");
 
   // Load authoritative assets configuration and check active login session on mount
   useEffect(() => {
-    useStore.getState().setEnvironment("DIORAMA");
     const fetchConfig = async () => {
       try {
         const res = await fetch("http://localhost:8080/api/initialize");
@@ -186,12 +199,27 @@ export default function MultiplayerArena() {
           console.log("🎮 CLASS_CONFIG dynamically synced from database!", CLASS_CONFIG);
         }
 
+        // Fetch map list on mount for active workspace switching
+        try {
+          await useEditorStore.getState().fetchMapList();
+        } catch (e) {
+          console.warn("Failed to fetch map list on mount:", e);
+        }
+
         // Fetch dynamic global simulation settings from PostgreSQL database
         const resSettings = await fetch("http://localhost:8080/api/config/settings");
         if (resSettings.ok) {
           const dataSettings = await resSettings.json();
           Object.assign(INITIAL_SETTINGS, dataSettings);
           console.log("🎮 INITIAL_SETTINGS dynamically synced from database!", INITIAL_SETTINGS);
+          if (dataSettings.activeMapId) {
+            console.log(`🎮 Setting active map from database settings: ${dataSettings.activeMapId}`);
+            if (useEditorStore.getState().selectedMapId !== dataSettings.activeMapId) {
+              await useEditorStore.getState().setSelectedMapId(dataSettings.activeMapId);
+            } else {
+              await useEditorStore.getState().loadFromDatabase();
+            }
+          }
         }
       } catch (err) {
         console.error("Gagal memuat konfigurasi aset game dari backend", err);
@@ -240,6 +268,7 @@ export default function MultiplayerArena() {
               if (matchedChar) {
                 // Smooth transition: small delay so users feel the luxury load screen
                 setTimeout(() => {
+                  setEnvReady(false);
                   setSelectedCharacter(matchedChar);
                   setSuccessMsg("Sesi karakter dikembalikan!");
                   setIsRecoveringSession(false);
@@ -273,18 +302,15 @@ export default function MultiplayerArena() {
     token,
     selectedCharacter?.id || "",
     (payload: GameStatePayload) => {
-      // Receive real-time multi-entities state payload from Go Backend into refs (zero re-renders!)
+      // Update refs (zero React re-renders for 3D rendering)
       connectedPlayersRef.current = payload.players;
       worldMonstersRef.current = payload.monsters;
 
-      // Extract and filter remote players
+      // Remote players list: only diff-check and re-render when player roster changes
       const remotes = payload.players.filter(p => p.id !== (selectedCharacter?.id || ""));
-      
-      // Compare to check if the list of player IDs, classes, or genders actually changed
-      const currentHash = activeRemotePlayersRef.current.map(p => `${p.id}-${p.class}-${p.gender}`).join(",");
       const nextHash = remotes.map(p => `${p.id}-${p.class}-${p.gender}`).join(",");
-      
-      if (currentHash !== nextHash) {
+      if (lastRemotePlayerHash.current !== nextHash) {
+        lastRemotePlayerHash.current = nextHash;
         const nextList = remotes.map(p => ({
           id: p.id,
           username: p.username || "",
@@ -295,31 +321,32 @@ export default function MultiplayerArena() {
         setActiveRemotePlayers(nextList);
       }
 
-      // Rebuild high-performance spatial hash grid for PlayerController auto-aim lock
-      const mockUnits: UnitRuntimeData[] = payload.monsters.map((m) => {
-        // Use frame-accurate visual coordinates if available to completely eliminate visual lerp delay in auto-aim lock
-        const visualPos = (window as any).monsterVisualPositions?.get(m.id);
-        const posX = visualPos ? visualPos.x : m.position.x;
-        const posZ = visualPos ? visualPos.z : m.position.z;
-        return {
-          id: m.id,
-          name: m.name,
-          type: "enemy",
-          isActive: !m.is_dead,
-          isDying: m.is_dead,
-          hp: m.hp,
-          maxHp: m.max_hp,
-          position: [posX, m.position.y, posZ],
-          level: m.type === "boss" ? 50 : 15,
-          rarity: "common",
-          class: "monster",
-          poolIdx: 0,
-          isAggro: m.target_player_id !== "",
-        } as any;
-      });
-
-      unitRegistryRef.current = mockUnits;
-      battleGrid.update(mockUnits);
+      // battleGrid + unitRegistry rebuild: throttled to 5Hz max
+      // Runs on every WS tick was causing ~20 full map allocs per second on main thread
+      const now = performance.now();
+      if (now - lastBattleGridUpdate.current >= 200) {
+        lastBattleGridUpdate.current = now;
+        const mockUnits: UnitRuntimeData[] = payload.monsters.map((m) => {
+          const visualPos = (window as any).monsterVisualPositions?.get(m.id);
+          return {
+            id: m.id,
+            name: m.name,
+            type: "enemy",
+            isActive: !m.is_dead,
+            isDying: m.is_dead,
+            hp: m.hp,
+            maxHp: m.max_hp,
+            position: [visualPos ? visualPos.x : m.position.x, m.position.y, visualPos ? visualPos.z : m.position.z],
+            level: m.type === "boss" ? 50 : 15,
+            rarity: "common",
+            class: "monster",
+            poolIdx: 0,
+            isAggro: m.target_player_id !== "",
+          } as any;
+        });
+        unitRegistryRef.current = mockUnits;
+        battleGrid.update(mockUnits);
+      }
     }
   );
 
@@ -327,16 +354,14 @@ export default function MultiplayerArena() {
   useEffect(() => {
     if (!token || !selectedCharacter) return;
 
+    // Slow sync of HUD counts and player profile — 3s interval is enough
     const profileInterval = setInterval(async () => {
-      // Slow sync of HUD counts from refs to avoid 30Hz page-level lag
       setPlayerCount(connectedPlayersRef.current.length + 1);
       setAliveMonsterCount(worldMonstersRef.current.filter((m: any) => !m.is_dead).length);
 
       try {
         const response = await fetch(`http://localhost:8080/api/player/profile?character_id=${selectedCharacter.id}`, {
-          headers: {
-            "Authorization": `Bearer ${token}`
-          }
+          headers: { "Authorization": `Bearer ${token}` }
         });
         if (response.ok) {
           const data = await response.json();
@@ -347,7 +372,7 @@ export default function MultiplayerArena() {
       } catch (err) {
         console.error("Gagal sinkronisasi data pemain", err);
       }
-    }, 1500);
+    }, 3000); // 3s is plenty — avoids hammering HTTP server every 1.5s
 
     return () => clearInterval(profileInterval);
   }, [token, selectedCharacter]);
@@ -978,6 +1003,7 @@ export default function MultiplayerArena() {
                       onClick={(e) => {
                         e.stopPropagation();
                         localStorage.setItem("game_active_char_id", char.id);
+                        setEnvReady(false);
                         setSelectedCharacter(char);
                       }}
                       className="w-full bg-cyan-500/10 hover:bg-cyan-500 border border-cyan-500/30 hover:border-cyan-400 group-hover:scale-102 hover:text-black py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
@@ -1011,49 +1037,88 @@ export default function MultiplayerArena() {
   return (
     <div className="fixed inset-0 w-screen h-[100dvh] overflow-hidden touch-none select-none bg-black text-white font-sans">
       
+      {/* Premium Loading Screen Overlay */}
+      {!envReady && (
+        <div className="absolute inset-0 z-[9999] flex flex-col justify-center items-center bg-[#07070a]">
+          <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+            <div className="absolute top-[20%] left-[20%] w-[60%] h-[60%] bg-cyan-600/10 blur-[130px] rounded-full" />
+            <div className="absolute bottom-[20%] right-[20%] w-[60%] h-[60%] bg-indigo-600/10 blur-[130px] rounded-full" />
+          </div>
+          <div className="relative z-10 flex flex-col items-center gap-6 max-w-md px-6 text-center animate-in fade-in zoom-in-95 duration-500">
+            {/* Logo / Title */}
+            <div className="flex flex-col gap-1 items-center animate-pulse">
+              <span className="text-[10px] font-black uppercase text-cyan-400 tracking-[0.3em] ml-1">MENYIAPKAN PETA DUNIA</span>
+              <h1 className="text-4xl font-black uppercase tracking-tighter text-white italic">
+                SEAL-M <span className="text-cyan-400">ARENA</span>
+              </h1>
+            </div>
+
+            {/* Spinner */}
+            <div className="relative w-16 h-16 flex items-center justify-center my-4">
+              <div className="absolute inset-0 border-4 border-cyan-500/10 rounded-full" />
+              <div className="absolute inset-0 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+              <Sparkles className="w-6 h-6 text-cyan-400 animate-pulse" />
+            </div>
+
+            {/* Status Messages */}
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-bold text-zinc-100">Memuat Aset & Tinggi Terrain...</p>
+              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
+                Mempersiapkan struktur data BVH untuk stabilitas fisika karakter
+              </p>
+            </div>
+            
+            {/* Tip */}
+            <div className="mt-8 p-4 bg-zinc-900/50 border border-white/5 rounded-2xl text-left">
+              <span className="text-[9px] font-black text-cyan-400 uppercase tracking-widest block mb-1">TIPS BERMAIN</span>
+              <p className="text-[10px] text-zinc-400 leading-normal">
+                Gunakan tombol WASD untuk bergerak, tombol Shift untuk berlari, dan arahkan kursor mouse untuk auto-aim target monster terdekat di sekitar jangkauan serangan kelas Anda!
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 3D CANVAS */}
       <div className="absolute inset-0 w-full h-full z-0">
         <KeyboardControls map={keyboardMap}>
           <Canvas
-            shadows
+            shadows={{ type: THREE.BasicShadowMap }} // BasicShadowMap: 2x faster than PCF, shadows still visible
             dpr={dpr}
-            gl={{ antialias: true, powerPreference: "high-performance" }}
+            gl={{
+              antialias: false,  // Disable MSAA — large GPU win, TAA-style blending from AdaptiveDpr covers it
+              powerPreference: "high-performance",
+              logarithmicDepthBuffer: false,
+              stencil: false,
+              depth: true,
+              alpha: false,
+              failIfMajorPerformanceCaveat: false,
+              precision: "mediump",
+            }}
             className="w-full h-full"
           >
             <StatsGl className="!absolute !top-24 !left-2 !right-auto !bottom-auto !z-[2000]" />
-            <PerformanceMonitor onIncline={() => setDpr(Math.min(dpr + 0.05, 0.9))} onDecline={() => setDpr(Math.max(dpr - 0.05, 0.6))} />
+            {/* Aggressively scale DPR: floor 0.5 for low-spec, ceiling 0.8 */}
+            <PerformanceMonitor onIncline={() => setDpr(Math.min(dpr + 0.05, 0.8))} onDecline={() => setDpr(Math.max(dpr - 0.05, 0.5))} />
             <AdaptiveEvents />
             <AdaptiveDpr pixelated={true} />
+            {/* Sync tone mapping exposure with World-Editor default (2.0) */}
+            <ExposureBridge exposure={2.0} />
 
-            <Sky sunPosition={[100, 20, 100]} />
-            <ambientLight intensity={1.5} />
-            <directionalLight 
-              position={[10, 20, 10]} 
-              intensity={2.0} 
-              castShadow 
-              shadow-mapSize={[2048, 2048]}
-            />
-            
             <VFXProvider>
               <CameraDirector />
               <FPSCounterUpdater onFpsUpdate={setFps} />
               {/* Environment Scene */}
-              {environment === 'DIORAMA' ? (
-                <>
-                  <WhimsicalDiorama
-                    settingsRef={settingsRef}
-                    debug={false}
-                    onReady={() => {}}
-                  />
-                  <ModularMap debug={false} />
-                </>
-              ) : (
-                <StormEnvironment 
-                  potatoMode={settingsRef.current.potatoMode}
-                  debug={false} 
-                  onReady={() => {}}
-                />
-              )}
+              <EnvironmentMultiGlobal
+                settingsRef={settingsRef}
+                debug={false}
+                onReady={() => {
+                  setTimeout(() => {
+                    setEnvReady(true);
+                  }, 600);
+                }}
+              />
+              <ModularMap debug={false} />
 
               {/* Real-time 3D projectile spells renderer */}
               <MMSpellEffect 
@@ -1085,6 +1150,7 @@ export default function MultiplayerArena() {
 
               {/* Local Player Character Controlled Mesh */}
               <PlayerController 
+                paused={!envReady}
                 modelPath={localPlayerModelPath}
                 playerClass={selectedCharacter?.class || "Warrior"}
                 settingsRef={settingsRef}
@@ -1290,14 +1356,28 @@ export default function MultiplayerArena() {
             </button>
 
             <button
-              onClick={() => {
-                const nextEnv = environment === "DIORAMA" ? "STORM" : "DIORAMA";
-                useStore.getState().setEnvironment(nextEnv);
+              onClick={async () => {
+                const currentMapId = useEditorStore.getState().selectedMapId;
+                let currentMapList = useEditorStore.getState().mapList;
+                if (currentMapList.length === 0) {
+                  await useEditorStore.getState().fetchMapList();
+                  currentMapList = useEditorStore.getState().mapList;
+                }
+                if (currentMapList.length > 1) {
+                  const currentIndex = currentMapList.findIndex(m => m.id === currentMapId);
+                  const nextIndex = (currentIndex + 1) % currentMapList.length;
+                  const nextMap = currentMapList[nextIndex];
+                  setEnvReady(false);
+                  await useEditorStore.getState().setSelectedMapId(nextMap.id);
+                } else {
+                  setEnvReady(false);
+                  await useEditorStore.getState().loadFromDatabase();
+                }
               }}
               className="flex-1 bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 py-2 rounded-xl text-indigo-300 flex items-center justify-center gap-1.5 text-[8.5px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md shadow-indigo-500/10 animate-pulse"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              {environment === "DIORAMA" ? "Clover Zone" : "Storm Zone"}
+              {selectedMapId ? selectedMapId.toUpperCase() : "ZONE"}
             </button>
 
             <button

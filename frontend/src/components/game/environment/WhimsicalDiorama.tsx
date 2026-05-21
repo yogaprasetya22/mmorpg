@@ -1,10 +1,10 @@
 'use client';
 
-import { useMemo, useEffect, useRef } from 'react';
+import { useMemo, useEffect, useRef, useState } from 'react';
 import React from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { Environment } from '@react-three/drei';
+import { Environment, Sky } from '@react-three/drei';
 import { StaticCollider } from 'bvhecctrl';
 import { getTerrainElevation } from "@/src/core/utils/terrainHeight";
 import {
@@ -14,6 +14,7 @@ import {
 } from '../systems/effects/PainterlyMaterials';
 
 import { useStore } from "@/src/state/useStore";
+import { useEditorStore } from "@/src/state/useEditorStore";
 import { registerCollider, unregisterCollider } from '@/src/core/utils/globalRaycaster';
 
 
@@ -37,6 +38,64 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
     const weather = useStore(s => s.weather);
     const meshRef = useRef<THREE.Mesh>(null!);
 
+    // Load sculpt heights and config from editor store
+    const sculptData = useEditorStore(s => s.sculptData);
+    const terrainConfig = useEditorStore(s => s.terrainConfig);
+
+    const [sculptCanvas] = useState(() => {
+        if (typeof window === 'undefined') return null;
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            ctx.fillStyle = '#808080';
+            ctx.fillRect(0, 0, 256, 256);
+        }
+        return canvas;
+    });
+
+    const [sculptTrigger, setSculptTrigger] = useState(0);
+
+    useEffect(() => {
+        if (!sculptCanvas) return;
+        const ctx = sculptCanvas.getContext('2d');
+        if (!ctx) return;
+
+        if (!sculptData) {
+            // Fill canvas with middle-gray (representing 0 displacement)
+            ctx.fillStyle = '#808080';
+            ctx.fillRect(0, 0, 256, 256);
+            if (typeof window !== 'undefined') {
+                const heights = new Float32Array(256 * 256);
+                heights.fill(0);
+                (window as any).sculptHeights = heights;
+            }
+            setSculptTrigger(prev => prev + 1);
+            return;
+        }
+
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+            ctx.clearRect(0, 0, 256, 256);
+            ctx.drawImage(img, 0, 0);
+            
+            // Update heights cache
+            const imgData = ctx.getImageData(0, 0, 256, 256).data;
+            const heights = new Float32Array(256 * 256);
+            for (let i = 0; i < 256 * 256; i++) {
+                const rValue = imgData[i * 4];
+                heights[i] = ((rValue - 128) / 128) * 35; // maxDisplacement = 35 meters
+            }
+            if (typeof window !== 'undefined') {
+                (window as any).sculptHeights = heights;
+            }
+            setSculptTrigger(prev => prev + 1);
+        };
+        img.src = sculptData;
+    }, [sculptCanvas, sculptData]);
+
     const terrainGeometry = useMemo(() => {
         const size = 1500.0;
         // CRITICAL FIX: Removed isSetup dependency — rebuilding geometry on SETUP->PLAYING
@@ -48,14 +107,14 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
         for (let i = 0; i < pos.count; i++) {
             const x = pos.getX(i);
             const y = pos.getY(i);
-            const elevation = getTerrainElevation(x, y, "DIORAMA", baseDistance);
+            const elevation = getTerrainElevation(x, y, "DIORAMA", baseDistance, terrainConfig);
             pos.setZ(i, elevation);
         }
 
         geo.computeVertexNormals();
         (geo as any).computeBoundsTree({ maxDepth: 64, maxLeafSize: 5 });
         return geo;
-    }, [baseDistance]); // REMOVED isSetup — this was the root cause!
+    }, [baseDistance, terrainConfig, sculptTrigger, settingsRef?.current?.potatoMode]); // REMOVED isSetup — this was the root cause!
 
     // Signal parent that BVH is ready (next frame after geometry mounts)
     useEffect(() => {
@@ -80,22 +139,37 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
         PainterlyGrassMaterial.uniforms.time.value = time;
     });
 
+    const sky = useEditorStore(s => s.sky) || 'sunset';
+
+    const skyFile = useMemo(() => {
+        if (sky === 'night') return 'http://localhost:8080/assets-model/Textures/qwantani_night_1k.exr';
+        if (sky === 'sunset') return 'http://localhost:8080/assets-model/Textures/qwantani_sunset_1k.exr';
+        return null;
+    }, [sky]);
+
     return (
         <group>
             {/* 1. SKYBOX & SUNLIGHT (High Noon / 12 PM) */}
-            <Environment 
-                files="/qwantani_sunset_1k.exr" 
-                background 
-                blur={0}
-            />
+            {skyFile ? (
+                <Environment 
+                    files={skyFile} 
+                    background 
+                    blur={0}
+                />
+            ) : (
+                <>
+                    <color attach="background" args={["#a0c4ff"]} />
+                    <Sky sunPosition={[100, 20, 100]} />
+                </>
+            )}
 
-            <ambientLight intensity={3.5} color="#ffffff" />
+            <ambientLight intensity={sky === 'night' ? 0.8 : 3.5} color={sky === 'night' ? "#a5b4fc" : "#ffffff"} />
 
             <directionalLight
                 position={[10, 100, 10]}
-                intensity={15.0}
+                intensity={sky === 'night' ? 2.5 : 15.0}
 
-                color="#ffffff"
+                color={sky === 'night' ? "#a5b4fc" : "#ffffff"}
                 castShadow
                 shadow-mapSize={[1024, 1024]}
 
@@ -106,7 +180,7 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
                 shadow-camera-near={0.5}
                 shadow-camera-far={500}
             />
-            <pointLight position={[0, 15, 0]} intensity={4.0} color="#ffaa00" distance={250} />
+            <pointLight position={[0, 15, 0]} intensity={sky === 'night' ? 6.0 : 4.0} color={sky === 'night' ? "#ff5500" : "#ffaa00"} distance={250} />
 
 
             {/* 2. WEATHER EFFECTS */}
@@ -117,6 +191,7 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
 
             {/* 3. TERRAIN ISLAND & MOUNTAINS */}
             <StaticCollider 
+                key={`terrain-sc-${sculptTrigger}`}
                 debug={debug}
                 BVHOptions={{
                     strategy: 1, // SAH

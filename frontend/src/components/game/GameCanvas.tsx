@@ -3,90 +3,29 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   MapControls,
-  StatsGl,
   PerformanceMonitor,
   AdaptiveEvents,
   AdaptiveDpr,
-  Sphere,
-  KeyboardControls,
 } from "@react-three/drei";
 import { useControls, Leva, folder } from "leva";
 import dynamic from 'next/dynamic';
 
 const Perf = dynamic(() => import("r3f-perf").then((mod) => mod.Perf), { ssr: false });
 
-import { VFXProvider, useVFX } from "./systems/VFXManager";
-import { BattleArmy } from "./systems/BattleArmy";
-import { WhimsicalDiorama } from "./environment/WhimsicalDiorama";
-import { StormEnvironment } from "./environment/StormEnvironment";
-import { DamageHUDBatcher } from "./systems/DamageHUDBatcher";
+import { EnvironmentMultiGlobal } from "./environment/EnvironmentMultiGlobal";
 
 import { EffectComposer, Bloom, ToneMapping } from "@react-three/postprocessing";
 
-import { BattleConfig, MapObstacle, UnitRuntimeData } from "@/src/core/domain/unit.types";
+import { MapObstacle } from "@/src/core/domain/unit.types";
 
 import { useStore } from "@/src/state/useStore";
+import { useEditorStore } from "@/src/state/useEditorStore";
 import React, { useState, useRef, useEffect } from "react";
 import { Activity, RefreshCw } from "lucide-react";
 import * as THREE from 'three';
-import { PlayerController, keyboardMap } from "./PlayerController";
 import { WorldEditor } from "./environment/WorldEditor";
 import { WorldEditorUI } from "./environment/WorldEditorUI";
 import { ModularMap } from "./environment/ModularMap";
-
-
-// Map removed as requested. Base ground provided by OrbitControls/Sky.
-
-// --- Camera Director for Epic Endings & Shake ---
-const _targetPos = new THREE.Vector3(); // Fix #4: zero-alloc, reused per frame
-
-const CameraDirector = () => {
-  const { camera } = useThree();
-  const { spawnVFX } = useVFX();
-  const hasTriggeredRef = useRef(false);
-
-  const lastBaseHp = useRef({ player: 1000, enemy: 1000 });
-  const shakeIntensity = useRef(0);
-
-  useFrame((_, delta) => {
-    const gameState = useStore.getState().gameState;
-    const playerBaseHp = useStore.getState().playerBaseHp;
-    const enemyBaseHp = useStore.getState().enemyBaseHp;
-
-    // 1. Damage Shake
-    if (playerBaseHp < lastBaseHp.current.player || enemyBaseHp < lastBaseHp.current.enemy) {
-      shakeIntensity.current = 0.35;
-      lastBaseHp.current = { player: playerBaseHp, enemy: enemyBaseHp };
-    }
-
-    if (shakeIntensity.current > 0) {
-      camera.position.x += (Math.random() - 0.5) * shakeIntensity.current;
-      camera.position.y += (Math.random() - 0.5) * shakeIntensity.current;
-      shakeIntensity.current -= delta * 1.8;
-    }
-
-    // 2. Cinematic Ending
-    if (gameState === 'WON' || gameState === 'LOST') {
-      const targetZ = gameState === 'WON' ? -18 : 18;
-      // Fix #4: reuse _targetPos instead of new THREE.Vector3() each frame
-      _targetPos.set(0, 7, targetZ + (gameState === 'WON' ? -12 : 12));
-
-      camera.position.lerp(_targetPos, 0.05);
-      camera.lookAt(0, 0, targetZ);
-
-      if (!hasTriggeredRef.current) {
-        spawnVFX([0, 0, targetZ], 'mega_explosion', gameState === 'WON' ? '#ef4444' : '#3b82f6');
-        spawnVFX([0, 0, targetZ], 'shockwave', '#ffffff');
-        hasTriggeredRef.current = true;
-      }
-    } else {
-      hasTriggeredRef.current = false;
-    }
-  });
-
-  return null;
-};
-
 
 /**
  * SceneAnalyzer - Diagnostic Tool
@@ -146,112 +85,39 @@ const SceneAnalyzer = () => {
   return null;
 };
 
-/**
- * EnemyRespawnManager
- * Monitors the battlefield and spawns new enemies if the population drops.
- */
-const EnemyRespawnManager = ({ spawnUnit, unitRegistry, envReady }: any) => {
-  const lastCheck = useRef(0);
-  
-  useFrame((state) => {
-    const now = state.clock.elapsedTime;
-    if (now - lastCheck.current < 5) return; // Check every 5 seconds
-    lastCheck.current = now;
-    
-    if (!envReady || !spawnUnit || !unitRegistry.current) return;
-    
-    const activeEnemies = unitRegistry.current.filter((u: any) => u.isActive && u.type === 'enemy' && !u.isDying);
-    
-    // Maintain a minimum of 10 enemies for constant action
-    if (activeEnemies.length < 10) {
-       // Spawn in a wide arc around the player or at fixed spawn points
-       const angle = Math.random() * Math.PI * 2;
-       const dist = 30 + Math.random() * 30;
-       const rx = Math.cos(angle) * dist;
-       const rz = Math.sin(angle) * dist;
-       
-       spawnUnit(10, "Reinforcement", "enemy", false, "enemy_grunt", undefined, undefined, [rx, -0.4, rz]);
-    }
-  });
-  
-  return null;
-};
-
-
 interface GameCanvasProps {
-  battleConfig?: BattleConfig;
   isCinematic: boolean;
   setMapObstacles: (obs: MapObstacle[]) => void;
   mapObstacles: MapObstacle[];
   debug: boolean;
-  unitRegistry: React.RefObject<UnitRuntimeData[]>;
   isFullscreen?: boolean;
-  updateSimulation: (delta: number) => void;
-  damageQueue: React.RefObject<any[]>;
   settingsRef: React.RefObject<any>;
-  simTimeRef: React.RefObject<number>;
-  setBattleConfig?: (config: BattleConfig | ((prev: BattleConfig) => BattleConfig)) => void;
-  spellsRef: React.RefObject<any[]>;
-  mmSpellsRef: React.RefObject<any[]>;
-  fighterSpellsRef: React.RefObject<any[]>;
-  tankSpellsRef: React.RefObject<any[]>;
-  assassinSpellsRef: React.RefObject<any[]>;
   downloadPerfLogs?: () => void;
   clearVFXCache?: () => void;
-  compBuffers?: any;
-  spawnUnit?: (level?: number, userName?: string, type?: "player" | "enemy", isBoss?: boolean, forcedClass?: any, profileImage?: string, forcedRarity?: any, customPos?: [number, number, number]) => void;
-  dealPlayerDamage?: (targetId: string, damage: number, isCrit?: boolean) => void;
   isEditor?: boolean;
 }
 
-
 export const GameCanvas = React.memo(({
-  battleConfig: propBattleConfig,
-  setBattleConfig: propSetBattleConfig,
-
   isCinematic: _isCinematic,
-  mapObstacles,
   debug,
-  unitRegistry,
   isFullscreen,
-  updateSimulation,
-  damageQueue,
-  spawnUnit,
   settingsRef,
-  simTimeRef,
-  spellsRef,
-  mmSpellsRef,
-  fighterSpellsRef,
-  tankSpellsRef,
-  assassinSpellsRef,
   downloadPerfLogs,
   clearVFXCache,
-  compBuffers,
-  dealPlayerDamage,
   isEditor = false,
 }: GameCanvasProps) => {
-  const battleConfig = propBattleConfig || {
-    player: { name: "Player", color: "#0066ff", active: true },
-    enemy: { name: "Monster", color: "#ff0033", active: true },
-    maxUnits: 25,
-    unitConfig: { hpMultiplier: 1, speedMultiplier: 1, attackMultiplier: 1 }
-  };
-  const setBattleConfig = propSetBattleConfig;
-
   const [dpr, setDpr] = useState(1.0);
   const [envReady, setEnvReady] = useState(false); // Terrain BVH readiness gate
   const isSettingsOpen = useStore(s => s.isSettingsOpen);
-  const environment = useStore(s => s.environment);
-  const setEnvironment = useStore(s => s.setEnvironment);
+  const selectedMapId = useEditorStore(s => s.selectedMapId);
 
-  // Reset env gate whenever environment type changes so character re-waits for new BVH
+  // Reset env gate whenever map workspace changes so character re-waits for new BVH
   useEffect(() => {
     setEnvReady(false);
-  }, [environment]);
-
+  }, [selectedMapId]);
 
   // Helper to persist updated simulation settings directly into the GORM PostgreSQL backend
-  const syncSettingsToBackend = async (updates: Partial<typeof settingsRef.current>) => {
+  const syncSettingsToBackend = async (updates: Partial<any>) => {
     try {
       const fullSettings = {
         ...settingsRef.current,
@@ -267,67 +133,7 @@ export const GameCanvas = React.memo(({
     }
   };
 
-  // --- High-Performance Simulation Controls (Leva) ---
-  useControls("Military Tuning", {
-    hpMult: {
-      value: settingsRef.current.globalHpMultiplier, min: 0.1, max: 5, step: 0.1, label: "HP Multiplier",
-      onChange: (v) => {
-        settingsRef.current.globalHpMultiplier = v;
-        syncSettingsToBackend({ globalHpMultiplier: v });
-      }
-    },
-    dmgMult: {
-      value: settingsRef.current.globalDamageMultiplier, min: 0.1, max: 5, step: 0.1, label: "DMG Multiplier",
-      onChange: (v) => {
-        settingsRef.current.globalDamageMultiplier = v;
-        syncSettingsToBackend({ globalDamageMultiplier: v });
-      }
-    },
-    speedMult: {
-      value: settingsRef.current.globalSpeedMultiplier, min: 0.1, max: 3, step: 0.1, label: "Speed Multiplier",
-      onChange: (v) => {
-        settingsRef.current.globalSpeedMultiplier = v;
-        syncSettingsToBackend({ globalSpeedMultiplier: v });
-      }
-    },
-    cooldown: {
-      value: settingsRef.current.globalAttackCooldown, min: 100, max: 2000, step: 50, label: "Atk Cooldown (ms)",
-      onChange: (v) => {
-        settingsRef.current.globalAttackCooldown = v;
-        syncSettingsToBackend({ globalAttackCooldown: v });
-      }
-    },
-    crit: {
-      value: settingsRef.current.critChance, min: 0, max: 1, step: 0.05, label: "Crit Chance",
-      onChange: (v) => {
-        settingsRef.current.critChance = v;
-        syncSettingsToBackend({ critChance: v });
-      }
-    },
-    maxCap: {
-      value: battleConfig.maxUnits, min: 1, max: 300, step: 1, label: "Max Units",
-      onChange: (v) => {
-        if (setBattleConfig) setBattleConfig(prev => ({ ...prev, maxUnits: v }));
-        syncSettingsToBackend({ maxUnits: v });
-      }
-    }
-  }, { collapsed: false, render: () => debug });
-
   const { fov, fogDensity, exposure } = useControls("World Tuning", {
-    timeScale: {
-      value: settingsRef.current.timeScale, min: 0.1, max: 3.0, step: 0.1, label: "Time Scale",
-      onChange: (v) => {
-        settingsRef.current.timeScale = v;
-        syncSettingsToBackend({ timeScale: v });
-      }
-    },
-    unitScale: {
-      value: settingsRef.current.unitScale, min: 0.2, max: 2.0, step: 0.1, label: "Unit Visual Scale",
-      onChange: (v) => {
-        settingsRef.current.unitScale = v;
-        syncSettingsToBackend({ unitScale: v });
-      }
-    },
     potato: {
       value: !!settingsRef.current.potatoMode, label: "Potato Mode (Extreme FPS)",
       onChange: (v) => {
@@ -335,18 +141,11 @@ export const GameCanvas = React.memo(({
         syncSettingsToBackend({ potatoMode: v });
       }
     },
-    mapType: {
-      value: environment,
-      options: ["DIORAMA", "STORM"],
-      label: "Map Environment",
-      onChange: (v) => setEnvironment(v)
-    },
     fov: { value: 50, min: 30, max: 90, step: 1, label: "Field of View (FOV)" },
     fogDensity: { value: 0.002, min: 0, max: 0.05, step: 0.0001, label: "Fog Density" },
     fogNear: { value: 60, min: 10, max: 300, step: 5, label: "Fog Near" },
     fogFar: { value: 450, min: 100, max: 1000, step: 10, label: "Fog Far" },
     exposure: { value: 2.0, min: 0.1, max: 4.0, step: 0.1, label: "Sky Exposure" },
-
 
     sensitivity: { 
       value: settingsRef.current.mouseSensitivity || 0.002, min: 0.0005, max: 0.01, step: 0.0001, label: "Mouse Sensitivity",
@@ -356,27 +155,10 @@ export const GameCanvas = React.memo(({
       value: settingsRef.current.vfxQuality || 'HIGH', options: ['LOW', 'MEDIUM', 'HIGH'], label: 'VFX Quality',
       onChange: (v) => { settingsRef.current.vfxQuality = v; }
     }
-
   }, { collapsed: true, render: () => debug }) as any;
-
-  useEffect(() => {
-    if (envReady && spawnUnit) {
-      // Spawn enemies at different points (Scattered across the map)
-      spawnUnit(10, "Guest", "enemy", false, "enemy_grunt", undefined, undefined, [15, -0.4, -20]);
-      spawnUnit(10, "Guest", "enemy", false, "enemy_grunt", undefined, undefined, [0, -0.4, -35]);
-      spawnUnit(10, "Guest", "enemy", false, "enemy_grunt", undefined, undefined, [-15, -0.4, -20]);
-      spawnUnit(10, "Guest", "enemy", false, "enemy_grunt", undefined, undefined, [25, -0.4, -10]);
-      spawnUnit(10, "Guest", "enemy", false, "enemy_grunt", undefined, undefined, [-25, -0.4, -10]);
-    }
-  }, [envReady, spawnUnit]);
-
-
 
   const [{ perfPosition, minimal, deepAnalyze, showPerf }, setDiag] = useControls("Diagnostics", () => ({
     engineTime: { value: 0, label: "Engine Tick (ms)", editable: false },
-    units: { value: 0, label: "Active Units", editable: false },
-    vfx: { value: 0, label: "Active Particles", editable: false },
-    triangles: { value: 0, label: "Estimated Triangles", editable: false },
     suspect: { value: "OPTIMAL", label: "Lag Suspect", editable: false },
     "Performance Tool": folder({
       showPerf: { value: false, label: "Show R3F-Perf" },
@@ -398,8 +180,8 @@ export const GameCanvas = React.memo(({
       if (now - lastUpdate.current > 1000) {
         lastUpdate.current = now;
         if (settingsRef.current.telemetry) {
-          const { engineMs, unitCount, vfxCount, bottleneck } = settingsRef.current.telemetry;
-          setDiag({ engineTime: engineMs, units: unitCount, vfx: vfxCount, suspect: bottleneck });
+          const { engineMs, bottleneck } = settingsRef.current.telemetry;
+          setDiag({ engineTime: engineMs, suspect: bottleneck });
         }
       }
     });
@@ -446,22 +228,26 @@ export const GameCanvas = React.memo(({
         />
 
         {/* Performance Downloader */}
-        <button
-          onClick={downloadPerfLogs}
-          title="Download Performance Analysis Report"
-          className="mt-4 w-full py-3 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 rounded-2xl flex items-center justify-center gap-3 text-indigo-400 hover:text-indigo-300 transition-all group"
-        >
-          <Activity className="w-4 h-4 group-hover:scale-110 transition-transform" />
-          <span className="text-[10px] font-black uppercase tracking-widest">Download Performance Report</span>
-        </button>
+        {downloadPerfLogs && (
+          <button
+            onClick={downloadPerfLogs}
+            title="Download Performance Analysis Report"
+            className="mt-4 w-full py-3 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 rounded-2xl flex items-center justify-center gap-3 text-indigo-400 hover:text-indigo-300 transition-all group"
+          >
+            <Activity className="w-4 h-4 group-hover:scale-110 transition-transform" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Download Performance Report</span>
+          </button>
+        )}
 
-        <button
-          onClick={clearVFXCache}
-          className="mt-2 w-full py-3 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-2xl flex items-center justify-center gap-3 text-rose-400 hover:text-rose-300 transition-all group"
-        >
-          <RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
-          <span className="text-[10px] font-black uppercase tracking-widest">Clear VFX Cache</span>
-        </button>
+        {clearVFXCache && (
+          <button
+            onClick={clearVFXCache}
+            className="mt-2 w-full py-3 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-2xl flex items-center justify-center gap-3 text-rose-400 hover:text-rose-300 transition-all group"
+          >
+            <RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Clear VFX Cache</span>
+          </button>
+        )}
       </div>
       
       <div className="flex-grow w-full relative h-full">
@@ -479,137 +265,83 @@ export const GameCanvas = React.memo(({
           DPR: {(dpr || 1).toFixed(2)}
         </div>
 
-        <KeyboardControls map={keyboardMap}>
-          <Canvas
-            shadows={{ type: THREE.PCFShadowMap }}
-            dpr={dpr}
-            gl={{
-              antialias: true,
-              powerPreference: "high-performance",
-              logarithmicDepthBuffer: false,
-              stencil: false,
-              depth: true,
-              alpha: false,
-              failIfMajorPerformanceCaveat: false,
-              precision: "mediump",
+        <Canvas
+          shadows={{ type: THREE.PCFShadowMap }}
+          dpr={dpr}
+          gl={{
+            antialias: true,
+            powerPreference: "high-performance",
+            logarithmicDepthBuffer: false,
+            stencil: false,
+            depth: true,
+            alpha: false,
+            failIfMajorPerformanceCaveat: false,
+            precision: "mediump",
+          }}
+          className="select-none touch-none w-full h-full"
+        >
+          <SceneAnalyzer />
+          <PerformanceMonitor onIncline={() => setDpr(Math.min(dpr + 0.05, 0.9))} onDecline={() => setDpr(Math.max(dpr - 0.05, 0.6))} />
+
+          <AdaptiveEvents />
+          <AdaptiveDpr pixelated={true} />
+
+          {(showPerf || isEditor) && (
+            <Perf
+              position={isEditor ? "bottom-right" : perfPosition}
+              minimal={minimal}
+              showGraph={!minimal}
+              deepAnalyze={deepAnalyze}
+              className="z-[2000]"
+            />
+          )}
+
+          {(isEditor || (!isFullscreen && !envReady)) && (
+            <MapControls
+              enableDamping={true}
+              dampingFactor={0.05}
+              screenSpacePanning={true}
+              minDistance={1}
+              maxDistance={800}
+              maxPolarAngle={Math.PI / 2.1}
+              minPolarAngle={0}
+              mouseButtons={{
+                LEFT: null as any,
+                MIDDLE: THREE.MOUSE.ROTATE,
+                RIGHT: THREE.MOUSE.PAN
+              }}
+              makeDefault
+            />
+          )}
+
+          <EnvironmentMultiGlobal
+            settingsRef={settingsRef}
+            debug={debug}
+            onReady={() => {
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => setEnvReady(true));
+              });
             }}
-            className="select-none touch-none w-full h-full"
-          >
-            <SceneAnalyzer />
-            {!isEditor && <EnemyRespawnManager spawnUnit={spawnUnit} unitRegistry={unitRegistry} envReady={envReady} />}
-            <StatsGl className="!absolute !top-24 !left-2 !right-auto !bottom-auto !z-[2000]" />
-            <PerformanceMonitor onIncline={() => setDpr(Math.min(dpr + 0.05, 0.9))} onDecline={() => setDpr(Math.max(dpr - 0.05, 0.6))} />
+          />
 
-            <AdaptiveEvents />
-            <AdaptiveDpr pixelated={true} />
+          <ModularMap debug={debug} />
+          {isEditor && <WorldEditor />}
 
-            {showPerf && (
-              <Perf
-                position={perfPosition}
-                minimal={minimal}
-                showGraph={!minimal}
-                deepAnalyze={deepAnalyze}
-                className="z-[2000]"
-              />
-            )}
+          <DiagnosticsBridge />
+          <VisualTuningBridge fov={fov} fogDensity={fogDensity} exposure={exposure} />
 
-            {(isEditor || (!isFullscreen && !envReady)) && (
-              <MapControls
-                enableDamping={true}
-                dampingFactor={0.05}
-                screenSpacePanning={true}
-                minDistance={1}
-                maxDistance={800}
-                maxPolarAngle={Math.PI / 2.1}
-                minPolarAngle={0}
-                mouseButtons={{
-                  LEFT: null as any,
-                  MIDDLE: THREE.MOUSE.ROTATE,
-                  RIGHT: THREE.MOUSE.PAN
-                }}
-                makeDefault
-              />
-            )}
 
-            {environment === 'DIORAMA' ? (
-              <WhimsicalDiorama
-                settingsRef={settingsRef}
-                debug={debug}
-                onReady={() => {
-                  requestAnimationFrame(() => {
-                    requestAnimationFrame(() => setEnvReady(true));
-                  });
-                }}
-              />
-            ) : (
-              <StormEnvironment
-                potatoMode={settingsRef.current.potatoMode}
-                debug={debug}
-                onReady={() => {
-                  requestAnimationFrame(() => {
-                    requestAnimationFrame(() => setEnvReady(true));
-                  });
-                }}
-              />
-            )}
 
-            <ModularMap debug={debug} />
-            {isEditor && <WorldEditor />}
-
-            <DiagnosticsBridge />
-            <VisualTuningBridge fov={fov} fogDensity={fogDensity} exposure={exposure} />
-
-            <VFXProvider>
-              {!isEditor && <CameraDirector />}
-              <DamageHUDBatcher damageQueue={damageQueue} />
-
-              {!isEditor && (
-                <>
-                  <BattleArmy
-                    unitRegistry={unitRegistry}
-                    battleConfig={battleConfig}
-                    updateSimulation={updateSimulation}
-                    settingsRef={settingsRef}
-                    simTimeRef={simTimeRef}
-                    spellsRef={spellsRef}
-                    mmSpellsRef={mmSpellsRef}
-                    fighterSpellsRef={fighterSpellsRef}
-                    tankSpellsRef={tankSpellsRef}
-                    assassinSpellsRef={assassinSpellsRef}
-                    compBuffers={compBuffers}
-                  />
-
-                  {envReady && (
-                    <PlayerController
-                      damageQueue={damageQueue}
-                      settingsRef={settingsRef}
-                      paused={false}
-                      unitRegistry={unitRegistry}
-                      dealPlayerDamage={dealPlayerDamage}
-                      mmSpellsRef={mmSpellsRef}
-                      simTimeRef={simTimeRef}
-                    />
-                  )}
-                </>
-              )}
-
-              {debug && mapObstacles.map((obs: MapObstacle, i: number) => (
-                <Sphere key={`debug-obs-${i}`} args={[obs.r, 16, 16]} position={[obs.x, -0.4, obs.z]}>
-                  <meshBasicMaterial color="yellow" wireframe transparent opacity={0.3} />
-                </Sphere>
-              ))}
-            </VFXProvider>
-
-            {!settingsRef.current.potatoMode && (
-              <EffectComposer enableNormalPass={false} multisampling={0}>
-                <Bloom luminanceThreshold={1.0} mipmapBlur intensity={0.5} radius={0.4} />
-                <ToneMapping adaptive={false} />
-              </EffectComposer>
-            )}
-          </Canvas>
-        </KeyboardControls>
+          {!settingsRef.current.potatoMode && (
+            <EffectComposer enableNormalPass={false} multisampling={0}>
+              <Bloom luminanceThreshold={1.0} mipmapBlur intensity={0.5} radius={0.4} />
+              <ToneMapping adaptive={false} />
+            </EffectComposer>
+          )}
+        </Canvas>
       </div>
       {isEditor && <WorldEditorUI />}
     </div>
   );
 });
+GameCanvas.displayName = "GameCanvas";

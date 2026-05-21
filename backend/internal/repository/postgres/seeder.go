@@ -253,6 +253,7 @@ func SeedConfigurations(db *gorm.DB) error {
 			VfxIntensity:           1.0,
 			MaxUnits:               20,
 			PotatoMode:             false,
+			ActiveMapID:            "Starter Zone",
 		}
 
 		if err := db.Create(&defaultSettings).Error; err != nil {
@@ -408,6 +409,33 @@ func SeedConfigurations(db *gorm.DB) error {
 			}
 		}
 		fmt.Println("✅ Success: Monster configurations seeded!")
+	}
+
+	// 4. Seed MapConfig for "Starter Zone"
+	var mapCount int64
+	if err := db.Model(&domain.MapConfig{}).Count(&mapCount).Error; err != nil {
+		return err
+	}
+	if mapCount == 0 {
+		fmt.Println("🌱 Seeding default Starter Zone map config...")
+		starterMap := domain.MapConfig{
+			ID:                "Starter Zone",
+			Name:              "Starter Zone",
+			GridSize:          1.0,
+			GridEnabled:       true,
+			TerrainHeight:     12.0,
+			TerrainScale:      0.05,
+			TerrainSeed:       0,
+			TerrainSharpness:  2.0,
+			TerrainMaterialID: "",
+			TerrainColor:      "#3d5c36",
+			Sky:               "sunset",
+			Environment:       "STORM",
+		}
+		if err := db.Create(&starterMap).Error; err != nil {
+			return fmt.Errorf("failed to seed starter map: %w", err)
+		}
+		fmt.Println("✅ Success: Starter Zone map configuration seeded!")
 	}
 
 	return nil

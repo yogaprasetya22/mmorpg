@@ -2,28 +2,11 @@
 
 import { useRef } from 'react';
 import { GameCanvas } from '@/src/components/game/GameCanvas';
-import { useBattleSystem } from '@/src/hooks/battle/useBattleSystem';
 
 export default function WorldEditorPage() {
-  const {
-    unitRegistry,
-    battleConfig,
-    updateSimulation,
-    damageQueue,
-    spellsRef,
-    mmSpellsRef,
-    fighterSpellsRef,
-    tankSpellsRef,
-    assassinSpellsRef,
-    spawnUnit,
-    dealPlayerDamage,
-    simTimeRef, // Added
-  } = useBattleSystem();
-
   const settingsRef = useRef({
     potatoMode: false,
-    vfxQuality: 1,
-    bloomIntensity: 0.5,
+    vfxQuality: 'HIGH',
   });
 
   return (
@@ -36,25 +19,12 @@ export default function WorldEditorPage() {
       </div>
 
       <GameCanvas
-        unitRegistry={unitRegistry}
-        battleConfig={battleConfig}
-        updateSimulation={updateSimulation}
-        damageQueue={damageQueue}
-        settingsRef={settingsRef}
-        spellsRef={spellsRef}
-        mmSpellsRef={mmSpellsRef}
-        fighterSpellsRef={fighterSpellsRef}
-        tankSpellsRef={tankSpellsRef}
-        assassinSpellsRef={assassinSpellsRef}
-        spawnUnit={spawnUnit}
-        dealPlayerDamage={dealPlayerDamage}
         isEditor={true}
-        // Missing props added below
+        settingsRef={settingsRef}
         isCinematic={false}
         debug={false}
         mapObstacles={[]}
         setMapObstacles={() => {}}
-        simTimeRef={simTimeRef}
       />
     </main>
   );

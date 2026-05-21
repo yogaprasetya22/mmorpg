@@ -295,13 +295,13 @@ export const FULL_MATERIAL_LIBRARY: MaterialInfo[] = [
   {
     id: "texture_1",
     name: "Texture 1",
-    diffuse: "/Textures/texture_1/textures/marble_cliff_03_diff_1k.jpg",
-    displacement: "/Textures/texture_1/textures/marble_cliff_03_disp_1k.png",
+    diffuse: "http://localhost:8080/assets-model/Textures/Textures/texture_1/textures/marble_cliff_03_diff_1k.jpg",
+    displacement: "http://localhost:8080/assets-model/Textures/Textures/texture_1/textures/marble_cliff_03_disp_1k.png",
   },
   {
     id: "texture_2",
     name: "Texture 2",
-    diffuse: "/Textures/texture_2/textures/rocky_terrain_02_diff_1k.jpg",
-    displacement: "/Textures/texture_2/textures/rocky_terrain_02_disp_1k.png",
+    diffuse: "http://localhost:8080/assets-model/Textures/Textures/texture_2/textures/rocky_terrain_02_diff_1k.jpg",
+    displacement: "http://localhost:8080/assets-model/Textures/Textures/texture_2/textures/rocky_terrain_02_disp_1k.png",
   },
 ];

@@ -19,8 +19,9 @@ import * as THREE from 'three';
 import { useVFX } from './systems/VFXManager';
 import ProjectilePool, { ProjectilePoolHandle } from './systems/ProjectilePool';
 import { useStore } from '@/src/state/useStore';
+import { useEditorStore } from '@/src/state/useEditorStore';
+import { getTerrainElevation } from '@/src/core/utils/terrainHeight';
 import { UnitRuntimeData } from '@/src/core/domain/unit.types';
-import { PlayerInput } from './systems/PlayerECS';
 import {
   executeClassAttack,
   executeClassSkill,
@@ -260,19 +261,21 @@ export const PlayerController = ({
     // Resurrection Teleport on client side when HP resets to full
     if (lastHpRef.current <= 0 && currentHp > 0) {
       if (ecctrlRef.current) {
-        ecctrlRef.current.group.position.set(0, 3, 0);
+        const activeEnv = useEditorStore.getState().environment;
+        const terrainConfig = useEditorStore.getState().terrainConfig;
+        const spawnH = getTerrainElevation(0, 0, activeEnv, 24, terrainConfig);
+        ecctrlRef.current.group.position.set(0, spawnH + 3.0, 0);
         ecctrlRef.current.resetLinVel();
-        console.log("🛡️ Player resurrected! Teleporting back to starter town center (0, 3, 0).");
+        console.log("🛡️ Player resurrected! Teleporting back to starter town center above ground height:", spawnH + 3.0);
       }
     }
     lastHpRef.current = currentHp;
 
     if (isDead) {
-      // Clear movement inputs and lock velocity to 0
-      ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+      // Lock horizontal velocity only — let gravity (Y) run freely
       const vel = characterStatus.linvel;
-      _originVec.set(0, vel.y, 0);
-      ecctrlRef.current?.setLinVel(_originVec);
+      ecctrlRef.current?.setLinVel({ x: 0, y: vel.y, z: 0 } as any);
+      ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
       
       charState[0] = 0; // Return to normal state
       
@@ -319,6 +322,36 @@ export const PlayerController = ({
     _charPos.copy(characterStatus.position as THREE.Vector3);
     (window as any).localPlayerPos = _charPos;
 
+    // Failsafe: Snapping player back up if they fall below the sculpted ground level
+    const activeEnv = useEditorStore.getState().environment;
+    const terrainConfig = useEditorStore.getState().terrainConfig;
+    const baseDistance = (activeEnv === "STORM" || activeEnv === "RAIN" || activeEnv === "THUNDER" || activeEnv === "CLEAR") ? 45.0 : 35.0;
+    const mathElev = getTerrainElevation(_charPos.x, _charPos.z, activeEnv, baseDistance, terrainConfig);
+    const groundH = typeof window !== 'undefined' && (window as any).getGroundHeight
+      ? (window as any).getGroundHeight(_charPos.x, _charPos.z, mathElev)
+      : mathElev;
+
+    // Failsafe: Snapping player back up if they fall below the sculpted ground level
+    if (!isDead && _charPos.y < groundH - 12.0) {
+      if (ecctrlRef.current) {
+        // Give BVHEcctrl float spring enough clearance to settle (avoid re-clipping)
+        ecctrlRef.current.group.position.y = groundH + 5.0;
+        ecctrlRef.current.resetLinVel();
+        _charPos.y = groundH + 5.0;
+        console.warn("⚠️ Player fell through map! Snapped back to ground height:", groundH + 5.0);
+      }
+    } else if (!isDead && _charPos.y < groundH - 0.05) {
+      // Real-time anti-penetration: Push player up to terrain surface immediately if they clip
+      if (ecctrlRef.current) {
+        ecctrlRef.current.group.position.y = groundH;
+        _charPos.y = groundH;
+        if (ecctrlRef.current.setLinVel) {
+          const currentVel = characterStatus.linvel;
+          ecctrlRef.current.setLinVel(new THREE.Vector3(currentVel.x, Math.max(0, currentVel.y), currentVel.z));
+        }
+      }
+    }
+
     // Update player position in store (for enemy AI targeting)
     useStore.getState().setPlayerPosition([_charPos.x, _charPos.y, _charPos.z]);
     
@@ -356,11 +389,6 @@ export const PlayerController = ({
         });
       }
     }
-    
-    // Sync position to PlayerECS for enemies to seek without GC pressure
-    PlayerInput.playerPosition[0] = _charPos.x;
-    PlayerInput.playerPosition[1] = _charPos.y;
-    PlayerInput.playerPosition[2] = _charPos.z;
 
     // Lerp zoom (ECS buffers → no allocation)
     camZoom[0] += (camZoomTarget[0] - camZoom[0]) * Math.min(1, ZOOM_LERP * delta);
@@ -674,10 +702,10 @@ export const PlayerController = ({
         charState[0] = 0; 
       } else {
         // 1. Berhenti Saat Menyerang (Animation Lock)
-        // Force velocity X & Z to 0, but keep Y for gravity
+        // Lock horizontal velocity — let BVH gravity & float spring handle Y
         const vel = characterStatus.linvel;
-        _originVec.set(0, vel.y, 0);
-        ecctrlRef.current?.setLinVel(_originVec);
+        ecctrlRef.current?.setLinVel({ x: 0, y: vel.y, z: 0 } as any);
+        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
         
         // Face target dynamically
         if (hasTarget[0]) {
@@ -781,7 +809,7 @@ export const PlayerController = ({
       const resetLerpT = Math.min(1, 10 * delta);
       characterRef.current.rotation.y += (0 - characterRef.current.rotation.y) * resetLerpT;
     }
-  }, -1); // priority -1: runs before physics
+  }, 1); // priority 1: runs AFTER physics tick so characterStatus is fresh
 
   // ─── RENDER ──────────────────────────────────────────────────────────────
   return (
@@ -795,18 +823,32 @@ export const PlayerController = ({
       <BVHEcctrl
         ref={ecctrlRef}
         paused={paused}
-        position={[0, 3, 0]}
-        floatHeight={0.3}
-        floatSensorRadius={0.3}
-        delay={0.5}
+        position={[0, 8, 0]}
+        /* ── Collider ── */
         colliderCapsuleArgs={[0.4, 1.2, 4, 8]}
+        /* ── Float / Ground Detection (BVHEcctrl default-safe values) ── */
+        floatCheckType="BOTH"
+        floatHeight={0.2}
+        floatSpringK={600}
+        floatDampingC={28}
+        /* ── Movement ── */
         maxWalkSpeed={3.5}
-        maxRunSpeed={6}
+        maxRunSpeed={6.5}
+        acceleration={35}
+        deceleration={25}
         turnSpeed={20}
-        jumpVel={4} 
-        collisionCheckIteration={15} 
-        collisionPushBackVelocity={1.5} 
-        collisionPushBackDamping={0.05}
+        /* ── Jump / Gravity ── */
+        jumpVel={5}
+        gravity={9.81}
+        fallGravityFactor={3.5}
+        maxFallSpeed={40}
+        mass={1}
+        /* ── Slope ── */
+        maxSlope={0.85}
+        /* ── Collision ── */
+        collisionCheckIteration={4}
+        collisionPushBackVelocity={1.2}
+        collisionPushBackDamping={0.08}
         collisionPushBackThreshold={0.01}
       >
         <group ref={characterRef} dispose={null} position={[0, -1.3, 0]}>

@@ -16,7 +16,6 @@
     "@react-three/rapier": "^2.2.0",
     "@tiktool/live": "^2.6.7",
     "@types/three": "^0.183.1",
-    "bitecs": "0.3.40",
     "bvhecctrl": "^0.0.18",
     "ecctrl": "^1.0.97",
     "leva": "^0.10.1",
@@ -30,7 +29,6 @@
     "three": "^0.183.2",
     "three-mesh-bvh": "^0.9.9",
     "three-stdlib": "^2.36.1",
-    "yuka": "^0.7.8",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
@@ -40,7 +38,6 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/yuka": "^0.7.4",
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
     "postcss": "^8.5.9",

@@ -14,11 +14,11 @@ import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-
 (THREE.Mesh.prototype as any).raycast = acceleratedRaycast;
 
 export const ModularMap = ({ debug }: { debug?: boolean }) => {
-  const { items, loadFromDatabase } = useEditorStore();
+  const { items, selectedMapId, loadFromDatabase } = useEditorStore();
 
   useEffect(() => {
     loadFromDatabase();
-  }, [loadFromDatabase]);
+  }, [selectedMapId, loadFromDatabase]);
 
   const allItems = useMemo(() => {
     return items;
@@ -69,7 +69,7 @@ const InstancedModelGroup = ({ path, instances, debug }: { path: string, instanc
         
         extracted.push({
           geometry: child.geometry,
-          material: child.material.clone(), // Clone to allow individual coloring
+          material: child.material, // Reuse reference to prevent shader compile stutters
           localMatrix: child.matrixWorld.clone() // Save its local offset inside the GLB
         });
       }
