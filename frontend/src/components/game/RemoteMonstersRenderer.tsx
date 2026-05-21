@@ -353,38 +353,35 @@ export const RemoteMonstersRenderer = ({
 }: RemoteMonstersRendererProps) => {
   const { camera } = useThree();
   const [activeMonsterIds, setActiveMonsterIds] = useState<string[]>([]);
-  const lastUpdate = useRef(0);
+  const seenIdsSet = useRef<Set<string>>(new Set());
 
   // Pre-built Map<id, monster> so each RemoteMonsterInstance does O(1) lookup per frame
   const monsterMapRef = useRef<Map<string, MonsterNetworkState>>(new Map());
 
-  useFrame((state) => {
-    const now = state.clock.elapsedTime;
-
-    // Always keep monsterMap fresh every frame (very cheap Map rebuild)
+  useFrame(() => {
     const list = worldMonstersRef.current || [];
     const map = monsterMapRef.current;
+    
+    // Always keep monsterMap fresh every frame (very cheap Map rebuild)
     map.clear();
     for (let i = 0; i < list.length; i++) {
       map.set(list[i].id, list[i]);
     }
 
-    // Throttle React state update to 3Hz — just for mounting/unmounting instances
-    if (now - lastUpdate.current < 0.333) return;
-    lastUpdate.current = now;
-
-    const aliveIds = list.filter(m => !m.is_dead).map(m => m.id);
-    
-    let changed = aliveIds.length !== activeMonsterIds.length;
-    if (!changed) {
-      for (let i = 0; i < aliveIds.length; i++) {
-        if (aliveIds[i] !== activeMonsterIds[i]) {
-          changed = true;
-          break;
-        }
+    // Only update React state when a BRAND NEW monster ID is discovered.
+    // We never remove IDs, ensuring components stay mounted and just toggle visibility!
+    let hasNewId = false;
+    for (let i = 0; i < list.length; i++) {
+      const id = list[i].id;
+      if (!seenIdsSet.current.has(id)) {
+        seenIdsSet.current.add(id);
+        hasNewId = true;
       }
     }
-    if (changed) setActiveMonsterIds(aliveIds);
+
+    if (hasNewId) {
+      setActiveMonsterIds(Array.from(seenIdsSet.current));
+    }
   });
 
   return (
