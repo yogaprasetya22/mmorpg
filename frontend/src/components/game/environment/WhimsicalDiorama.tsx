@@ -139,6 +139,7 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
         PainterlyGrassMaterial.uniforms.time.value = time;
     });
 
+    const { lightIntensity, ambientIntensity, sunAngle, fogDensity } = useEditorStore();
     const sky = useEditorStore(s => s.sky) || 'sunset';
 
     const skyFile = useMemo(() => {
@@ -146,6 +147,11 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
         if (sky === 'sunset') return 'http://localhost:8080/assets-model/Textures/qwantani_sunset_1k.exr';
         return null;
     }, [sky]);
+
+    const sunPosition = useMemo(() => {
+        const rad = (sunAngle * Math.PI) / 180;
+        return [Math.cos(rad) * 120, 80, Math.sin(rad) * 120] as [number, number, number];
+    }, [sunAngle]);
 
     return (
         <group>
@@ -159,15 +165,15 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
             ) : (
                 <>
                     <color attach="background" args={["#a0c4ff"]} />
-                    <Sky sunPosition={[100, 20, 100]} />
+                    <Sky sunPosition={sunPosition} />
                 </>
             )}
 
-            <ambientLight intensity={sky === 'night' ? 0.8 : 3.5} color={sky === 'night' ? "#a5b4fc" : "#ffffff"} />
+            <ambientLight intensity={ambientIntensity ?? (sky === 'night' ? 0.8 : 3.5)} color={sky === 'night' ? "#a5b4fc" : "#ffffff"} />
 
             <directionalLight
-                position={[10, 100, 10]}
-                intensity={sky === 'night' ? 2.5 : 15.0}
+                position={sunPosition}
+                intensity={lightIntensity ?? (sky === 'night' ? 2.5 : 15.0)}
 
                 color={sky === 'night' ? "#a5b4fc" : "#ffffff"}
                 castShadow
@@ -228,7 +234,7 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
             <FloatingDebris count={60} />
 
             {/* 7. FOG FOR DEPTH */}
-            <fog attach="fog" args={["#1a1a2e", settingsRef?.current?.fogNear ?? 60, settingsRef?.current?.fogFar ?? 450]} />
+            <fogExp2 attach="fog" args={[sky === 'night' ? "#0b0f19" : "#1a1a2e", fogDensity]} />
         </group>
     );
 };

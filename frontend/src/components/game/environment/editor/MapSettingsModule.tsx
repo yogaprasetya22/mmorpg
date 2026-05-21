@@ -1,6 +1,6 @@
 'use client';
 
-import { Grid, Mountain, Paintbrush, Database, SunMoon, Globe } from 'lucide-react';
+import { Grid, Mountain, Paintbrush, Database, SunMoon, Globe, Sun, CloudFog } from 'lucide-react';
 import { useEditorStore } from '@/src/state/useEditorStore';
 
 export const MapSettingsModule = () => {
@@ -19,7 +19,15 @@ export const MapSettingsModule = () => {
     setSky,
     environment,
     setEnvironment,
-    createNewMap
+    createNewMap,
+    lightIntensity,
+    setLightIntensity,
+    ambientIntensity,
+    setAmbientIntensity,
+    sunAngle,
+    setSunAngle,
+    fogDensity,
+    setFogDensity
   } = useEditorStore();
 
   return (
@@ -112,8 +120,102 @@ export const MapSettingsModule = () => {
         </select>
       </div>
 
+      {/* ─── ATMOSPHERE & LIGHTING CONFIGS ─── */}
+      <div className="flex flex-col gap-3 pt-2.5 border-t border-zinc-900/60">
+        <span className="text-[9px] font-black uppercase text-zinc-400 tracking-wider flex items-center gap-1.5">
+          <Sun className="w-3.5 h-3.5 text-yellow-550 animate-pulse" />
+          Atmosphere & Lighting
+        </span>
+
+        {/* Slider: Sun Angle */}
+        <div className="flex flex-col gap-1">
+          <div className="flex justify-between items-center text-[8px] font-bold text-zinc-500">
+            <span className="uppercase tracking-widest flex items-center gap-1">
+              Sun Angle (Shadow Rotation)
+            </span>
+            <span className="text-blue-400 font-bold">{sunAngle}°</span>
+          </div>
+          <input 
+            type="range" min="0" max="360" step="5" 
+            value={sunAngle} 
+            onChange={(e) => setSunAngle(parseInt(e.target.value))}
+            className="w-full accent-blue-500 hover:accent-blue-400 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+          />
+        </div>
+
+        {/* Slider: Direct Light */}
+        <div className="flex flex-col gap-1">
+          <div className="flex justify-between items-center text-[8px] font-bold text-zinc-500">
+            <span className="uppercase tracking-widest flex items-center gap-1">
+              Direct Sun Intensity
+            </span>
+            <span className="text-blue-400 font-bold">{lightIntensity !== null ? lightIntensity.toFixed(1) : 'Auto'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input 
+              type="range" min="0.1" max="5.0" step="0.1" 
+              value={lightIntensity ?? (sky === 'night' ? (environment === 'DIORAMA' ? 2.5 : 0.8) : (environment === 'DIORAMA' ? 15.0 : 2.5))} 
+              onChange={(e) => setLightIntensity(parseFloat(e.target.value))}
+              className="flex-1 accent-blue-500 hover:accent-blue-400 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+            />
+            {lightIntensity !== null && (
+              <button 
+                onClick={() => setLightIntensity(null)} 
+                className="text-[7.5px] font-bold bg-zinc-900 border border-zinc-800 px-1 py-0.5 rounded text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                AUTO
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Slider: Ambient Light */}
+        <div className="flex flex-col gap-1">
+          <div className="flex justify-between items-center text-[8px] font-bold text-zinc-500">
+            <span className="uppercase tracking-widest flex items-center gap-1">
+              Ambient Glow Intensity
+            </span>
+            <span className="text-blue-400 font-bold">{ambientIntensity !== null ? ambientIntensity.toFixed(1) : 'Auto'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input 
+              type="range" min="0.1" max="4.0" step="0.1" 
+              value={ambientIntensity ?? (sky === 'night' ? (environment === 'DIORAMA' ? 0.8 : 0.2) : (environment === 'DIORAMA' ? 3.5 : 0.8))} 
+              onChange={(e) => setAmbientIntensity(parseFloat(e.target.value))}
+              className="flex-1 accent-blue-500 hover:accent-blue-400 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+            />
+            {ambientIntensity !== null && (
+              <button 
+                onClick={() => setAmbientIntensity(null)} 
+                className="text-[7.5px] font-bold bg-zinc-900 border border-zinc-800 px-1 py-0.5 rounded text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                AUTO
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Slider: Fog Density */}
+        <div className="flex flex-col gap-1">
+          <div className="flex justify-between items-center text-[8px] font-bold text-zinc-500">
+            <span className="uppercase tracking-widest flex items-center gap-1.5">
+              <CloudFog className="w-3.5 h-3.5 text-zinc-400" />
+              Exponential Fog
+            </span>
+            <span className="text-blue-400 font-bold">{(fogDensity * 1000).toFixed(1)}k</span>
+          </div>
+          <input 
+            type="range" min="0.0001" max="0.015" step="0.0001" 
+            value={fogDensity} 
+            onChange={(e) => setFogDensity(parseFloat(e.target.value))}
+            className="w-full accent-blue-500 hover:accent-blue-400 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+          />
+        </div>
+
+      </div>
+
       {/* ─── CUSTOM BLUE-KNOB SLIDERS ─── */}
-      <div className="flex flex-col gap-3.5 pt-1">
+      <div className="flex flex-col gap-3.5 pt-2.5 border-t border-zinc-900/60">
         
         {/* Slider 1: Grid Snapping */}
         <div className="flex flex-col gap-1">

@@ -748,9 +748,7 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
     );
   }
 
-  const fogNear = 120;
-  const fogFar  = 1200;
-  const fogColor = "#c8dff0";
+  const { lightIntensity, ambientIntensity, sunAngle, fogDensity } = useEditorStore();
 
   const sky = useEditorStore(s => s.sky) || 'sunset';
 
@@ -759,6 +757,14 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
     if (sky === 'sunset') return 'http://localhost:8080/assets-model/Textures/qwantani_sunset_1k.exr';
     return null;
   }, [sky]);
+
+  const sunPosition = useMemo(() => {
+    const rad = (sunAngle * Math.PI) / 180;
+    // Keep a beautiful elevation of 80 units
+    return [Math.cos(rad) * 120, 80, Math.sin(rad) * 120] as [number, number, number];
+  }, [sunAngle]);
+
+  const fogColor = sky === 'night' ? "#0b0f19" : "#c8dff0";
 
   return (
     <group>
@@ -771,15 +777,19 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
       ) : (
         <>
           <color attach="background" args={["#a0c4ff"]} />
-          <Sky sunPosition={[100, 20, 100]} />
+          <Sky sunPosition={sunPosition} />
         </>
       )}
-      <hemisphereLight intensity={sky === 'night' ? 0.3 : 1.0} color={sky === 'night' ? "#a5b4fc" : "#ffffff"} groundColor={sky === 'night' ? "#1e1b4b" : "#445544"} />
-      <ambientLight intensity={sky === 'night' ? 0.2 : 0.8} />
+      <hemisphereLight 
+        intensity={sky === 'night' ? 0.3 : 1.0} 
+        color={sky === 'night' ? "#a5b4fc" : "#ffffff"} 
+        groundColor={sky === 'night' ? "#1e1b4b" : "#445544"} 
+      />
+      <ambientLight intensity={ambientIntensity ?? (sky === 'night' ? 0.2 : 0.8)} />
 
       <directionalLight
-        position={[10, 100, 10]}
-        intensity={sky === 'night' ? 0.8 : 2.5}
+        position={sunPosition}
+        intensity={lightIntensity ?? (sky === 'night' ? 0.8 : 2.5)}
 
         castShadow={!isSetup}
         shadow-mapSize={[512, 512]}
@@ -806,8 +816,8 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
         <primitive object={PainterlyWaterMaterial} attach="material" />
       </mesh>
       
-      {/* Rain and Lightning disabled for permanent daytime */}
-      <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
+      {/* Exponential Fog for depth */}
+      <fogExp2 attach="fog" args={[fogColor, fogDensity]} />
     </group>
   );
 };

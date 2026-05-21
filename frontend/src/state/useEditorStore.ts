@@ -83,6 +83,15 @@ export interface EditorState {
   environment: string;
   setEnvironment: (env: string) => void;
 
+  lightIntensity: number | null;
+  setLightIntensity: (intensity: number | null) => void;
+  ambientIntensity: number | null;
+  setAmbientIntensity: (intensity: number | null) => void;
+  sunAngle: number;
+  setSunAngle: (angle: number) => void;
+  fogDensity: number;
+  setFogDensity: (density: number) => void;
+
   paintMode: boolean;
   setPaintMode: (mode: boolean) => void;
   brushSize: number;
@@ -141,6 +150,12 @@ const debouncedSave = () => {
         terrainConfig: state.terrainConfig,
         terrainMaterialId: state.terrainMaterialId,
         terrainColor: state.terrainColor,
+        sky: state.sky,
+        environment: state.environment,
+        lightIntensity: state.lightIntensity,
+        ambientIntensity: state.ambientIntensity,
+        sunAngle: state.sunAngle,
+        fogDensity: state.fogDensity,
         lastUsedScales: state.lastUsedScales,
         lastUsedRotations: state.lastUsedRotations
       }));
@@ -288,6 +303,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           terrainColor: parsed.terrainColor || '#3d5c36',
           sky: parsed.sky || 'sunset',
           environment: parsed.environment || 'STORM',
+          lightIntensity: parsed.lightIntensity !== undefined ? parsed.lightIntensity : null,
+          ambientIntensity: parsed.ambientIntensity !== undefined ? parsed.ambientIntensity : null,
+          sunAngle: parsed.sunAngle !== undefined ? parsed.sunAngle : 45,
+          fogDensity: parsed.fogDensity !== undefined ? parsed.fogDensity : 0.002,
           lastUsedScales: parsed.lastUsedScales || {},
           lastUsedRotations: parsed.lastUsedRotations || {}
         });
@@ -447,7 +466,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   saveToDatabase: async () => {
-    const { selectedMapId, items, gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment, paintData, sculptData } = get();
+    const { selectedMapId, items, gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment, paintData, sculptData, lightIntensity, ambientIntensity, sunAngle, fogDensity } = get();
     // Sanitize item paths to ensure we don't save full URL prefixes to database redundantly
     const sanitizedToSave = items.map(item => {
       let path = item.path;
@@ -460,7 +479,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const payload = {
       map_id: selectedMapId,
       items: sanitizedToSave,
-      settings: { gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment },
+      settings: { gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment, lightIntensity, ambientIntensity, sunAngle, fogDensity },
       paintData,
       sculptData
     };
@@ -513,6 +532,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           terrainColor: data.settings?.terrainColor ?? '#3d5c36',
           sky: data.settings?.sky ?? 'sunset',
           environment: loadedEnv,
+          lightIntensity: data.settings?.lightIntensity !== undefined ? data.settings?.lightIntensity : null,
+          ambientIntensity: data.settings?.ambientIntensity !== undefined ? data.settings?.ambientIntensity : null,
+          sunAngle: data.settings?.sunAngle !== undefined ? data.settings?.sunAngle : 45,
+          fogDensity: data.settings?.fogDensity !== undefined ? data.settings?.fogDensity : 0.002,
           paintData: data.paintData || null,
           sculptData: data.sculptData || null,
           history: [sanitizedItems],
@@ -570,6 +593,27 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setEnvironment: (environment) => {
     set({ environment });
     useStore.getState().setEnvironment(environment as any);
+    debouncedSave();
+  },
+
+  lightIntensity: null,
+  setLightIntensity: (lightIntensity) => {
+    set({ lightIntensity });
+    debouncedSave();
+  },
+  ambientIntensity: null,
+  setAmbientIntensity: (ambientIntensity) => {
+    set({ ambientIntensity });
+    debouncedSave();
+  },
+  sunAngle: 45,
+  setSunAngle: (sunAngle) => {
+    set({ sunAngle });
+    debouncedSave();
+  },
+  fogDensity: 0.002,
+  setFogDensity: (fogDensity) => {
+    set({ fogDensity });
     debouncedSave();
   },
 
@@ -691,7 +735,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const terrainH = getTerrainElevation(x, z, "STORM", baseDistance, terrainConfig, false);
       const y = terrainH - 0.3; // Align with GROUND_Y
 
-      const modelPath = config.paths[Math.floor(Math.random() * config.paths.length)];
+      let modelPath = config.paths[Math.floor(Math.random() * config.paths.length)];
+      if (modelPath.startsWith('/')) {
+        modelPath = `http://localhost:8080${modelPath}`;
+      }
       const sizeScale = 0.6 + Math.random() * 0.9; // 0.6 to 1.5 times
       
       const pos: [number, number, number] = [x, y, z];
