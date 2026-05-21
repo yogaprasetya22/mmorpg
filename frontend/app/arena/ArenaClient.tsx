@@ -25,6 +25,7 @@ import { AssassinSpellEffect } from "@/src/components/game/systems/effects/Assas
 import { MageSpellEffect } from "@/src/components/game/systems/effects/MageSpellEffect";
 import { MeshoptDecoder } from 'meshoptimizer';
 import { CLASS_CONFIG, INITIAL_SETTINGS } from "@/src/core/logic/combat/constants";
+import { API_BASE_URL, WS_BASE_URL } from "@/src/core/config";
 
 // Extend THREE global prototype for spatial acceleration structures (BVH)
 (THREE.BufferGeometry.prototype as any).computeBoundsTree = computeBoundsTree;
@@ -153,14 +154,14 @@ export default function MultiplayerArena() {
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const res = await fetch("http://localhost:8080/api/initialize");
+        const res = await fetch(`${API_BASE_URL}/api/initialize`);
         if (res.ok) {
           const data = await res.json();
           setGameConfig(data);
         }
 
         // Fetch dynamic class balance configs from PostgreSQL database
-        const resClasses = await fetch("http://localhost:8080/api/config/classes");
+        const resClasses = await fetch(`${API_BASE_URL}/api/config/classes`);
         if (resClasses.ok) {
           const dataClasses = await resClasses.json();
           dataClasses.forEach((row: any) => {
@@ -207,7 +208,7 @@ export default function MultiplayerArena() {
         }
 
         // Fetch dynamic global simulation settings from PostgreSQL database
-        const resSettings = await fetch("http://localhost:8080/api/config/settings");
+        const resSettings = await fetch(`${API_BASE_URL}/api/config/settings`);
         if (resSettings.ok) {
           const dataSettings = await resSettings.json();
           Object.assign(INITIAL_SETTINGS, dataSettings);
@@ -245,7 +246,7 @@ export default function MultiplayerArena() {
     
     const fetchCharacters = async () => {
       try {
-        const res = await fetch(`http://localhost:8080/api/player/characters`, {
+        const res = await fetch(`${API_BASE_URL}/api/player/characters`, {
           headers: {
             "Authorization": `Bearer ${token}`
           }
@@ -298,7 +299,7 @@ export default function MultiplayerArena() {
 
   // 1. Establish WebSocket link with our Go Server using selected character ID
   const { sendPlayerState, sendPlayerAttack, sendDistributeStat } = useWebSocketGame(
-    "ws://localhost:8080/ws",
+    WS_BASE_URL,
     token,
     selectedCharacter?.id || "",
     (payload: GameStatePayload) => {
@@ -360,7 +361,7 @@ export default function MultiplayerArena() {
       setAliveMonsterCount(worldMonstersRef.current.filter((m: any) => !m.is_dead).length);
 
       try {
-        const response = await fetch(`http://localhost:8080/api/player/profile?character_id=${selectedCharacter.id}`, {
+        const response = await fetch(`${API_BASE_URL}/api/player/profile?character_id=${selectedCharacter.id}`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
         if (response.ok) {
@@ -386,7 +387,7 @@ export default function MultiplayerArena() {
 
     const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register";
     try {
-      const response = await fetch(`http://localhost:8080${endpoint}`, {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -426,7 +427,7 @@ export default function MultiplayerArena() {
     setSuccessMsg("");
 
     try {
-      const response = await fetch(`http://localhost:8080/api/player/characters`, {
+      const response = await fetch(`${API_BASE_URL}/api/player/characters`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -450,7 +451,7 @@ export default function MultiplayerArena() {
       setCharName("");
       
       // Refresh characters list
-      const resList = await fetch(`http://localhost:8080/api/player/characters`, {
+      const resList = await fetch(`${API_BASE_URL}/api/player/characters`, {
         headers: {
           "Authorization": `Bearer ${token}`
         }
@@ -484,7 +485,7 @@ export default function MultiplayerArena() {
     // Re-fetch character list to ensure freshness
     if (token) {
       try {
-        const res = await fetch(`http://localhost:8080/api/player/characters`, {
+        const res = await fetch(`${API_BASE_URL}/api/player/characters`, {
           headers: {
             "Authorization": `Bearer ${token}`
           }
@@ -501,7 +502,7 @@ export default function MultiplayerArena() {
 
   const fetchMonsterConfigs = async () => {
     try {
-      const res = await fetch(`http://localhost:8080/api/config/monsters`);
+      const res = await fetch(`${API_BASE_URL}/api/config/monsters`);
       if (res.ok) {
         const data = await res.json();
         setMonsterConfigs(data || []);
@@ -514,7 +515,7 @@ export default function MultiplayerArena() {
   const handleSaveMonsterConfig = async (config: any) => {
     try {
       setErrorMsg("");
-      const res = await fetch(`http://localhost:8080/api/config/monsters`, {
+      const res = await fetch(`${API_BASE_URL}/api/config/monsters`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -538,7 +539,7 @@ export default function MultiplayerArena() {
   const handleDeleteMonsterConfig = async (type: string) => {
     try {
       setErrorMsg("");
-      const res = await fetch(`http://localhost:8080/api/config/monsters/${type}`, {
+      const res = await fetch(`${API_BASE_URL}/api/config/monsters/${type}`, {
         method: "DELETE"
       });
       if (res.ok) {

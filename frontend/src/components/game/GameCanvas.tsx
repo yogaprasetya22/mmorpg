@@ -20,6 +20,7 @@ import { MapObstacle } from "@/src/core/domain/unit.types";
 
 import { useStore } from "@/src/state/useStore";
 import { useEditorStore } from "@/src/state/useEditorStore";
+import { API_BASE_URL } from "@/src/core/config";
 import React, { useState, useRef, useEffect } from "react";
 import { Activity, RefreshCw } from "lucide-react";
 import * as THREE from 'three';
@@ -123,7 +124,7 @@ export const GameCanvas = React.memo(({
         ...settingsRef.current,
         ...updates
       };
-      await fetch("http://localhost:8080/api/config/settings", {
+      await fetch(`${API_BASE_URL}/api/config/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(fullSettings)

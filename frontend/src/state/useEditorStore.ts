@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { getTerrainElevation } from '@/src/core/utils/terrainHeight';
 import { useStore } from './useStore';
+import { API_BASE_URL } from '@/src/core/config';
 
 export interface MapItem {
   id: string;
@@ -371,7 +372,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     
     // Sync the active map selection to the database global simulation settings
     try {
-      const resSettings = await fetch("http://localhost:8080/api/config/settings");
+      const resSettings = await fetch(`${API_BASE_URL}/api/config/settings`);
       let dataSettings = {};
       if (resSettings.ok) {
         dataSettings = await resSettings.json();
@@ -380,7 +381,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         ...dataSettings,
         activeMapId: mapId
       };
-      await fetch("http://localhost:8080/api/config/settings", {
+      await fetch(`${API_BASE_URL}/api/config/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updated)
@@ -393,7 +394,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   mapList: [],
   fetchMapList: async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/world-editor/maps');
+      const res = await fetch(`${API_BASE_URL}/api/world-editor/maps`);
       if (res.ok) {
         const list = await res.json();
         set({ mapList: list });
@@ -416,7 +417,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     // Sync the active map selection to the database global simulation settings
     try {
-      const resSettings = await fetch("http://localhost:8080/api/config/settings");
+      const resSettings = await fetch(`${API_BASE_URL}/api/config/settings`);
       let dataSettings = {};
       if (resSettings.ok) {
         dataSettings = await resSettings.json();
@@ -425,7 +426,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         ...dataSettings,
         activeMapId: mapId
       };
-      await fetch("http://localhost:8080/api/config/settings", {
+      await fetch(`${API_BASE_URL}/api/config/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updated)
@@ -439,7 +440,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   dynamicAssets: [],
   fetchDynamicAssets: async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/config/assets');
+      const res = await fetch(`${API_BASE_URL}/api/config/assets`);
       if (res.ok) {
         const assets: { name: string; path: string }[] = await res.json();
         const mapped: AssetInfo[] = assets.map(item => {
@@ -449,7 +450,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           } else if (item.path.includes('/assets-tree/')) {
             category = 'tree';
           }
-          const path = `http://localhost:8080${item.path}`;
+          const path = `${API_BASE_URL}${item.path}`;
           const name = item.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
 
           return {
@@ -473,6 +474,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       if (path.startsWith('http://localhost:8080/')) {
         path = path.replace('http://localhost:8080', '');
       }
+      if (path.startsWith(API_BASE_URL + '/')) {
+        path = path.replace(API_BASE_URL, '');
+      }
       return { ...item, path };
     });
 
@@ -485,7 +489,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     };
 
     try {
-      const res = await fetch(`http://localhost:8080/api/world-editor/save?map_id=${encodeURIComponent(selectedMapId)}`, {
+      const res = await fetch(`${API_BASE_URL}/api/world-editor/save?map_id=${encodeURIComponent(selectedMapId)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -502,14 +506,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   loadFromDatabase: async () => {
     const { selectedMapId } = get();
     try {
-      const res = await fetch(`http://localhost:8080/api/world-editor/load?map_id=${encodeURIComponent(selectedMapId)}`);
+      const res = await fetch(`${API_BASE_URL}/api/world-editor/load?map_id=${encodeURIComponent(selectedMapId)}`);
       if (res.ok) {
         const data = await res.json();
         
         const sanitizedItems = (data.items || []).map((item: any) => {
           let path = item.path;
           if (path.startsWith('/assets-model/') || path.startsWith('/kingdom/') || path.startsWith('/assets-tree/')) {
-            path = `http://localhost:8080${path}`;
+            path = `${API_BASE_URL}${path}`;
           }
           return { ...item, path };
         });
@@ -737,7 +741,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
       let modelPath = config.paths[Math.floor(Math.random() * config.paths.length)];
       if (modelPath.startsWith('/')) {
-        modelPath = `http://localhost:8080${modelPath}`;
+        modelPath = `${API_BASE_URL}${modelPath}`;
       }
       const sizeScale = 0.6 + Math.random() * 0.9; // 0.6 to 1.5 times
       

@@ -16,6 +16,7 @@ import { FULL_MATERIAL_LIBRARY } from "@/src/core/logic/environment/assetRegistr
 import { useVFX } from "../systems/VFXManager";
 import { PainterlyShaderUtils, PainterlyWaterMaterial } from "../systems/effects/PainterlyMaterials";
 import { registerCollider, unregisterCollider } from "@/src/core/utils/globalRaycaster";
+import { API_BASE_URL } from "@/src/core/config";
 
 // Add BVH support to THREE with any cast to avoid lint errors
 (THREE.BufferGeometry.prototype as any).computeBoundsTree = computeBoundsTree;
@@ -753,8 +754,8 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
   const sky = useEditorStore(s => s.sky) || 'sunset';
 
   const skyFile = useMemo(() => {
-    if (sky === 'night') return 'http://localhost:8080/assets-model/Textures/qwantani_night_1k.exr';
-    if (sky === 'sunset') return 'http://localhost:8080/assets-model/Textures/qwantani_sunset_1k.exr';
+    if (sky === 'night') return `${API_BASE_URL}/assets-model/Textures/qwantani_night_1k.exr`;
+    if (sky === 'sunset') return `${API_BASE_URL}/assets-model/Textures/qwantani_sunset_1k.exr`;
     return null;
   }, [sky]);
 

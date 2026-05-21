@@ -16,6 +16,7 @@ import {
 import { useStore } from "@/src/state/useStore";
 import { useEditorStore } from "@/src/state/useEditorStore";
 import { registerCollider, unregisterCollider } from '@/src/core/utils/globalRaycaster';
+import { API_BASE_URL } from '@/src/core/config';
 
 
 import { PainterlyGrass } from './effects/PainterlyGrass';
@@ -143,8 +144,8 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
     const sky = useEditorStore(s => s.sky) || 'sunset';
 
     const skyFile = useMemo(() => {
-        if (sky === 'night') return 'http://localhost:8080/assets-model/Textures/qwantani_night_1k.exr';
-        if (sky === 'sunset') return 'http://localhost:8080/assets-model/Textures/qwantani_sunset_1k.exr';
+        if (sky === 'night') return `${API_BASE_URL}/assets-model/Textures/qwantani_night_1k.exr`;
+        if (sky === 'sunset') return `${API_BASE_URL}/assets-model/Textures/qwantani_sunset_1k.exr`;
         return null;
     }, [sky]);
 
