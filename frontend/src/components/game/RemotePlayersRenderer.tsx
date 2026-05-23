@@ -27,6 +27,7 @@ export interface RemotePlayerInstanceProps {
   tankSpellsRef?: React.RefObject<any[]>;
   assassinSpellsRef?: React.RefObject<any[]>;
   unitRegistry?: React.RefObject<UnitRuntimeData[]>;
+  visiblePlayerIdsRef: React.RefObject<Set<string>>;
 }
 
 export const RemotePlayerInstance = ({ 
@@ -43,7 +44,8 @@ export const RemotePlayerInstance = ({
   fighterSpellsRef,
   tankSpellsRef,
   assassinSpellsRef,
-  unitRegistry
+  unitRegistry,
+  visiblePlayerIdsRef
 }: RemotePlayerInstanceProps) => {
   // Pre-select model based on actual character Class + Gender from backend registry
   const modelPath = useMemo(() => {
@@ -89,6 +91,14 @@ export const RemotePlayerInstance = ({
     
     if (!data) {
       groupRef.current.visible = false;
+      return;
+    }
+
+    // ─── Density Culling — limit maximum rendered player count when gathered ──────
+    const isDensityCulled = visiblePlayerIdsRef.current && !visiblePlayerIdsRef.current.has(id);
+    if (isDensityCulled) {
+      groupRef.current.visible = false;
+      if (activeAction.current) activeAction.current.paused = true;
       return;
     }
 
@@ -603,14 +613,35 @@ export const RemotePlayersRenderer = ({
   const { camera } = useThree();
   // Build O(1) player Map every frame — replaces find() in every RemotePlayerInstance
   const playerMapRef = useRef<Map<string, PlayerNetworkState>>(new Map());
+  const visiblePlayerIdsRef = useRef<Set<string>>(new Set());
 
-  useFrame(() => {
+  useFrame((state) => {
     const players = connectedPlayersRef.current || [];
     const map = playerMapRef.current;
     map.clear();
     for (let i = 0; i < players.length; i++) {
       map.set(players[i].id, players[i]);
     }
+
+    // Sort players by distance to camera
+    const camPos = state.camera.position;
+    const playerDistances = players.map(p => {
+      const dx = p.x - camPos.x;
+      const dy = p.y - camPos.y;
+      const dz = p.z - camPos.z;
+      const distSq = dx * dx + dy * dy + dz * dz;
+      return { id: p.id, distSq };
+    });
+
+    playerDistances.sort((a, b) => a.distSq - b.distSq);
+
+    // Limit maximum visible player models to 20 to preserve steady 60 FPS
+    const visibleSet = new Set<string>();
+    const limit = Math.min(playerDistances.length, 20);
+    for (let i = 0; i < limit; i++) {
+      visibleSet.add(playerDistances[i].id);
+    }
+    visiblePlayerIdsRef.current = visibleSet;
   });
   
   return (
@@ -633,6 +664,7 @@ export const RemotePlayersRenderer = ({
             tankSpellsRef={tankSpellsRef}
             assassinSpellsRef={assassinSpellsRef}
             unitRegistry={unitRegistry}
+            visiblePlayerIdsRef={visiblePlayerIdsRef}
           />
         </Suspense>
       ))}
