@@ -197,6 +197,7 @@ export default function MultiplayerArena() {
   const [activeRemotePlayers, setActiveRemotePlayers] = useState<{ id: string; username: string; class: string; gender: string }[]>([]);
   const [isRecoveringSession, setIsRecoveringSession] = useState(false);
   const activeRemotePlayersRef = useRef<{ id: string; username: string; class: string; gender: string }[]>([]);
+  const lastRosterUpdate = useRef(0);
 
   const connectedPlayersRef = useRef<PlayerNetworkState[]>([]);
   const worldMonstersRef = useRef<MonsterNetworkState[]>([]);
@@ -401,24 +402,27 @@ export default function MultiplayerArena() {
         }
       }
 
-      // Remote players list: only diff-check and re-render when player roster changes
-      const remotes = payload.players.filter(p => p.id !== (selectedCharacter?.id || ""));
-      const nextHash = remotes.map(p => `${p.id}-${p.class}-${p.gender}`).join(",");
-      if (lastRemotePlayerHash.current !== nextHash) {
-        lastRemotePlayerHash.current = nextHash;
-        const nextList = remotes.map(p => ({
-          id: p.id,
-          username: p.username || "",
-          class: p.class || "Beginner",
-          gender: p.gender || "Male"
-        }));
-        activeRemotePlayersRef.current = nextList;
-        setActiveRemotePlayers(nextList);
+      // Remote players list: only check and update roster at max 1Hz to prevent React rendering choke
+      const now = performance.now();
+      if (now - lastRosterUpdate.current >= 1000) {
+        lastRosterUpdate.current = now;
+        const remotes = payload.players.filter(p => p.id !== (selectedCharacter?.id || ""));
+        const nextHash = remotes.map(p => `${p.id}-${p.class}-${p.gender}`).join(",");
+        if (lastRemotePlayerHash.current !== nextHash) {
+          lastRemotePlayerHash.current = nextHash;
+          const nextList = remotes.map(p => ({
+            id: p.id,
+            username: p.username || "",
+            class: p.class || "Beginner",
+            gender: p.gender || "Male"
+          }));
+          activeRemotePlayersRef.current = nextList;
+          setActiveRemotePlayers(nextList);
+        }
       }
 
       // battleGrid + unitRegistry rebuild: throttled to 5Hz max
       // Runs on every WS tick was causing ~20 full map allocs per second on main thread
-      const now = performance.now();
       if (now - lastBattleGridUpdate.current >= 200) {
         lastBattleGridUpdate.current = now;
         const mockUnits: UnitRuntimeData[] = payload.monsters.map((m) => {
