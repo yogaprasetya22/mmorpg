@@ -78,6 +78,8 @@ export const RemotePlayerInstance = ({
   
   const currentAnimState = useRef("Idle");
   const stateBufferRef = useRef<{ x: number, y: number, z: number, rotation: number, timestamp: number }[]>([]);
+  const prevVisualPos = useRef<{ x: number, z: number } | null>(null);
+  const smoothedSpeed = useRef(0);
 
   useFrame((_, delta) => {
     if (!groupRef.current) return;
@@ -91,6 +93,19 @@ export const RemotePlayerInstance = ({
     }
     
     groupRef.current.visible = true;
+
+    if (prevVisualPos.current === null) {
+      prevVisualPos.current = { x: groupRef.current.position.x, z: groupRef.current.position.z };
+    }
+    const currentMeshX = groupRef.current.position.x;
+    const currentMeshZ = groupRef.current.position.z;
+    const visualDx = currentMeshX - prevVisualPos.current.x;
+    const visualDz = currentMeshZ - prevVisualPos.current.z;
+    const visualDistance = Math.sqrt(visualDx * visualDx + visualDz * visualDz);
+    prevVisualPos.current = { x: currentMeshX, z: currentMeshZ };
+
+    const currentSpeed = visualDistance / Math.max(0.0001, delta);
+    smoothedSpeed.current += (currentSpeed - smoothedSpeed.current) * Math.min(1, 10.0 * delta);
 
     // Push new network state to buffer if it differs from the last pushed state
     const buf = stateBufferRef.current;
@@ -202,6 +217,17 @@ export const RemotePlayerInstance = ({
         activeAction.current = nextAction;
       }
       currentAnimState.current = animation;
+    }
+
+    // Adjust animation timescale dynamically to match visual velocity
+    if (activeAction.current) {
+      if (desired.includes("walk")) {
+        activeAction.current.timeScale = Math.max(0.4, Math.min(1.8, smoothedSpeed.current / 1.5));
+      } else if (desired.includes("run")) {
+        activeAction.current.timeScale = Math.max(0.4, Math.min(2.0, smoothedSpeed.current / 3.0));
+      } else {
+        activeAction.current.timeScale = 1.0;
+      }
     }
 
 

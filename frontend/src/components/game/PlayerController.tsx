@@ -1069,6 +1069,24 @@ export const PlayerController = ({
       const resetLerpT = Math.min(1, 10 * delta);
       characterRef.current.rotation.y += (0 - characterRef.current.rotation.y) * resetLerpT;
     }
+
+    // Adjust animation timescale dynamically to match actual physics velocity
+    if (activeAction.current) {
+      const animStatus = useAnimationStore.getState().animationStatus;
+      const animName = ecctrlAnimationSet[animStatus] ?? animationSet.idle;
+      const desired = animName.toLowerCase();
+      
+      const linvel = characterStatus.linvel;
+      const horizontalSpeed = Math.sqrt(linvel.x * linvel.x + linvel.z * linvel.z);
+      
+      if (desired.includes("walk")) {
+        activeAction.current.timeScale = Math.max(0.4, Math.min(1.8, horizontalSpeed / 1.5));
+      } else if (desired.includes("run")) {
+        activeAction.current.timeScale = Math.max(0.4, Math.min(2.0, horizontalSpeed / 4.0));
+      } else {
+        activeAction.current.timeScale = 1.0;
+      }
+    }
     }
   }, 1); // priority 1: runs AFTER physics tick so characterStatus is fresh
 
