@@ -128,3 +128,11 @@ loadtest-peaceful:
 	@echo "🔥 Starting Peaceful Game Server Load/Stress Test (50 simulated players, NO attack)..."
 	@cd backend && go run cmd/loadtest/main.go -players=50 -duration=45s -attack=false
 
+loadtest-extreme:
+	@echo "💥 Starting EXTREME Game Server Load/Stress Test (120 simulated players, NO attack, wider movement)..."
+	@cd backend && go run cmd/loadtest/main.go -players=120 -duration=60s -attack=false -radius=25.0
+
+loadtest-fast-combat:
+	@echo "⚔️  Starting RAPID COMBAT Load/Stress Test (40 simulated players, attacking every 500ms, tight group)..."
+	@cd backend && go run cmd/loadtest/main.go -players=40 -duration=30s -attack=true -attack-rate=10 -radius=8.0
+

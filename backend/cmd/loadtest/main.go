@@ -90,6 +90,8 @@ func main() {
 	hostUrl := flag.String("host", "http://localhost:8080", "Target server HTTP URL")
 	runDuration := flag.Duration("duration", 45*time.Second, "Test run duration")
 	enableAttack := flag.Bool("attack", true, "Enable simulated players to attack monsters")
+	attackRate := flag.Int("attack-rate", 30, "Ticks between attacks (1 tick = 50ms)")
+	radiusVal := flag.Float64("radius", 15.0, "Radius spread of player circle movement around spawn")
 	flag.Parse()
 
 	u, err := url.Parse(*hostUrl)
@@ -106,7 +108,8 @@ func main() {
 
 	fmt.Printf("🎯 Host: %s (WS: %s://%s)\n", *hostUrl, wsScheme, wsHost)
 	fmt.Printf("👥 Players count: %d\n", *numPlayers)
-	fmt.Printf("⚔️  Attacking enabled: %v\n", *enableAttack)
+	fmt.Printf("⚔️  Attacking enabled: %v (rate: every %d ticks)\n", *enableAttack, *attackRate)
+	fmt.Printf("⭕ Radius spread: %.1f units\n", *radiusVal)
 	fmt.Printf("⏳ Run duration: %s\n", *runDuration)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -382,7 +385,7 @@ func main() {
 
 			// Position simulation metrics
 			var angle float64 = rand.Float64() * 2 * math.Pi
-			radius := 10.0 + rand.Float64()*15.0
+			radius := (*radiusVal) * (0.6 + rand.Float64()*0.8)
 			centerX := 0.0
 			centerZ := 0.0
 
@@ -420,9 +423,9 @@ func main() {
 						atomic.AddInt64(&metrics.BytesSent, int64(len(data)))
 					}
 
-					// Periodic attack (every 30 ticks = 1.5 seconds)
+					// Periodic attack
 					attackCounter++
-					if *enableAttack && attackCounter >= 30 {
+					if *enableAttack && attackCounter >= *attackRate {
 						attackCounter = 0
 						monsterMutex.RLock()
 						targetID := ""
