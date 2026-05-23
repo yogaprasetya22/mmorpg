@@ -193,6 +193,7 @@ export function DamageHUDBatcher({ damageQueue }: { damageQueue: React.RefObject
     const aOpacity = useMemo(() => new Float32Array(MAX_INST), []);
     const aCrit    = useMemo(() => new Float32Array(MAX_INST), []);
     const aCol     = useMemo(() => new Float32Array(MAX_INST * 3), []);
+    const hadActiveEvents = useRef(false);
 
     useEffect(() => {
         const m = meshRef.current;
@@ -419,11 +420,22 @@ export function DamageHUDBatcher({ damageQueue }: { damageQueue: React.RefObject
             }
         }
 
-        m.instanceMatrix.needsUpdate = true;
-        (m.geometry.attributes.aCharIdx as THREE.InstancedBufferAttribute).needsUpdate = true;
-        (m.geometry.attributes.aOpacity as THREE.InstancedBufferAttribute).needsUpdate = true;
-        (m.geometry.attributes.aCrit    as THREE.InstancedBufferAttribute).needsUpdate = true;
-        (m.geometry.attributes.aCol     as THREE.InstancedBufferAttribute).needsUpdate = true;
+        let anyActive = false;
+        for (let ei = 0; ei < MAX_EVENTS; ei++) {
+            if (evts[ei].alive) {
+                anyActive = true;
+                break;
+            }
+        }
+
+        if (anyActive || hadActiveEvents.current) {
+            m.instanceMatrix.needsUpdate = true;
+            (m.geometry.attributes.aCharIdx as THREE.InstancedBufferAttribute).needsUpdate = true;
+            (m.geometry.attributes.aOpacity as THREE.InstancedBufferAttribute).needsUpdate = true;
+            (m.geometry.attributes.aCrit    as THREE.InstancedBufferAttribute).needsUpdate = true;
+            (m.geometry.attributes.aCol     as THREE.InstancedBufferAttribute).needsUpdate = true;
+        }
+        hadActiveEvents.current = anyActive;
     });
 
     return (

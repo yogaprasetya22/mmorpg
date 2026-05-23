@@ -637,9 +637,9 @@ export const RemotePlayersRenderer = ({
 
     playerDistances.sort((a, b) => a.distSq - b.distSq);
 
-    // Limit maximum visible player models to 20 to preserve steady 60 FPS
+    // Limit maximum visible player models to 12 to preserve steady 60 FPS
     const visibleSet = new Set<string>();
-    const limit = Math.min(playerDistances.length, 20);
+    const limit = Math.min(playerDistances.length, 12);
     for (let i = 0; i < limit; i++) {
       visibleSet.add(playerDistances[i].id);
     }

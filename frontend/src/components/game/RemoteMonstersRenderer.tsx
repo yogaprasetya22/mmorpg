@@ -29,6 +29,7 @@ export interface RemoteMonsterInstanceProps {
   remotePlayerMapRef: React.RefObject<Map<string, PlayerNetworkState>>;
   localPlayerId?: string;
   gameConfig?: any;
+  visibleMonsterIdsRef?: React.RefObject<Set<string>>;
 }
 
 // ─── Clip name cache: precomputed once per GLB load ───────────────────────────
@@ -53,7 +54,8 @@ export const RemoteMonsterInstance = ({
   connectedPlayersRef: _connectedPlayersRef, // kept for API compat — logic uses remotePlayerMapRef
   remotePlayerMapRef,
   localPlayerId,
-  gameConfig
+  gameConfig,
+  visibleMonsterIdsRef
 }: RemoteMonsterInstanceProps) => {
   void camera;
 
@@ -173,6 +175,14 @@ export const RemoteMonsterInstance = ({
       if (data) monsterVisualPositions.delete(data.id);
       groupRef.current.visible = false;
       hasInitializedPrevVisual.current = false;
+      if (activeAction.current) activeAction.current.paused = true;
+      return;
+    }
+
+    // ─── Density Culling — limit maximum rendered monster count when gathered ──────
+    const isDensityCulled = visibleMonsterIdsRef && visibleMonsterIdsRef.current && !visibleMonsterIdsRef.current.has(monsterId);
+    if (isDensityCulled) {
+      groupRef.current.visible = false;
       if (activeAction.current) activeAction.current.paused = true;
       return;
     }
@@ -462,6 +472,7 @@ export const RemoteMonstersRenderer = ({
   const { camera } = useThree();
   const [activeMonsterIds, setActiveMonsterIds] = useState<string[]>([]);
   const seenIdsSet = useRef<Set<string>>(new Set());
+  const visibleMonsterIdsRef = useRef<Set<string>>(new Set());
 
   // O(1) lookup map for monsters — rebuilt cheaply each frame
   const monsterMapRef = useRef<Map<string, MonsterNetworkState>>(new Map());
@@ -469,7 +480,7 @@ export const RemoteMonstersRenderer = ({
   // O(1) lookup map for remote players — eliminates O(n) .find() per monster per frame
   const remotePlayerMapRef = useRef<Map<string, PlayerNetworkState>>(new Map());
 
-  useFrame(() => {
+  useFrame((state) => {
     // ─── Rebuild monster map (O(n) but very cheap) ───────────────────────────
     const list = worldMonstersRef.current || [];
     const map = monsterMapRef.current;
@@ -485,6 +496,26 @@ export const RemoteMonstersRenderer = ({
     for (let i = 0; i < players.length; i++) {
       pMap.set(players[i].id, players[i]);
     }
+
+    // Sort monsters by distance to camera
+    const camPos = state.camera.position;
+    const monsterDistances = list.map(m => {
+      const dx = m.x - camPos.x;
+      const dy = m.y - camPos.y;
+      const dz = m.z - camPos.z;
+      const distSq = dx * dx + dy * dy + dz * dz;
+      return { id: m.id, distSq };
+    });
+
+    monsterDistances.sort((a, b) => a.distSq - b.distSq);
+
+    // Limit maximum visible monster models to 12 to preserve steady 60 FPS
+    const visibleSet = new Set<string>();
+    const limit = Math.min(monsterDistances.length, 12);
+    for (let i = 0; i < limit; i++) {
+      visibleSet.add(monsterDistances[i].id);
+    }
+    visibleMonsterIdsRef.current = visibleSet;
 
     // ─── Detect new monster IDs — trigger React state update only on change ──
     let hasNewId = false;
@@ -515,6 +546,7 @@ export const RemoteMonstersRenderer = ({
             remotePlayerMapRef={remotePlayerMapRef}
             localPlayerId={localPlayerId}
             gameConfig={gameConfig}
+            visibleMonsterIdsRef={visibleMonsterIdsRef}
           />
         </Suspense>
       ))}
