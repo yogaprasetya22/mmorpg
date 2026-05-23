@@ -275,8 +275,60 @@ export const RemotePlayerInstance = ({
       const fromX = groupRef.current.position.x;
       const fromY = groupRef.current.position.y + 1.2;
       const fromZ = groupRef.current.position.z;
+
+      let closestMonster: any = null;
+
+      if (unitRegistry?.current) {
+        const units = unitRegistry.current;
+
+        // 1. Authoritative backend Target ID lookup
+        if (data.targetId) {
+          const idx = units.findIndex(u => u.id === data.targetId && u.isActive && !u.isDying);
+          if (idx !== -1) {
+            closestMonster = units[idx];
+            closestMonster.poolIdx = idx;
+          }
+        }
+
+        // 2. Client-side spatial fallback (if server target info hasn't arrived yet)
+        if (!closestMonster) {
+          let maxRange = 15.0; // wider range fallback for skill VFX
+          const uPos = groupRef.current.position;
+          let minDist = maxRange;
+
+          for (let i = 0; i < units.length; i++) {
+            const u = units[i];
+            if (u.isActive && !u.isDying && u.type === 'enemy') {
+              const dx = u.position[0] - uPos.x;
+              const dy = u.position[1] - uPos.y;
+              const dz = u.position[2] - uPos.z;
+              const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+              if (dist < minDist) {
+                minDist = dist;
+                closestMonster = u;
+              }
+            }
+          }
+        }
+      }
+
+      let toX = fromX;
+      let toY = fromY;
+      let toZ = fromZ;
+
+      if (closestMonster) {
+        toX = closestMonster.position[0];
+        toY = closestMonster.position[1] + 1.2;
+        toZ = closestMonster.position[2];
+      } else {
+        // Fallback forward in facing direction
+        const angle = groupRef.current.rotation.y;
+        toX = fromX + Math.sin(angle) * 10;
+        toY = fromY;
+        toZ = fromZ + Math.cos(angle) * 10;
+      }
       
-      console.log(`🔥 [VISUAL SYNC] Remote Player ${username} (${pClass}) menggunakan Ultimate Skill!`);
+      console.log(`🔥 [VISUAL SYNC] Remote Player ${username} (${pClass}) cast skill targeting (${toX.toFixed(1)}, ${toZ.toFixed(1)})`);
       
       if (pClass === "Warrior" && fighterSpellsRef?.current) {
         const fPool = fighterSpellsRef.current;
@@ -286,7 +338,7 @@ export const RemotePlayerInstance = ({
         const fs = fPool[fPtr];
         if (fs) {
           fs.active = true;
-          fs.x = fromX; fs.y = fromY - 1.1; fs.z = fromZ;
+          fs.x = toX; fs.y = toY - 1.1; fs.z = toZ;
           fs.startTime = performance.now();
           fs.color = "#ea580c"; // Fiery orange cyclone
           fs.isCyclone = true;
@@ -300,7 +352,7 @@ export const RemotePlayerInstance = ({
         const as = aPool[aPtr];
         if (as) {
           as.active = true;
-          as.x = fromX; as.y = fromY - 1.1; as.z = fromZ;
+          as.x = toX; as.y = toY - 1.1; as.z = toZ;
           as.startTime = performance.now();
           as.color = "#7e22ce";
           (as as any).isTeleport = true;
@@ -315,7 +367,7 @@ export const RemotePlayerInstance = ({
         if (ts) {
           ts.active = true;
           ts.isShield = true; // Sanctuary dome
-          ts.x = fromX; ts.y = fromY - 1.1; ts.z = fromZ;
+          ts.x = toX; ts.y = toY - 1.1; ts.z = toZ;
           ts.startTime = performance.now();
           ts.color = "#fbbf24";
           (ts as any).ownerId = id;
@@ -331,12 +383,12 @@ export const RemotePlayerInstance = ({
           if (ms) {
             ms.active = true;
             ms.isBullet = false; // falls from sky
-            ms.fromX = fromX + (Math.random() - 0.5) * 6;
-            ms.fromY = fromY + 10.0;
-            ms.fromZ = fromZ + (Math.random() - 0.5) * 6;
-            ms.toX = fromX + (Math.random() - 0.5) * 4;
-            ms.toY = fromY - 1.1;
-            ms.toZ = fromZ + (Math.random() - 0.5) * 4;
+            ms.fromX = toX + (Math.random() - 0.5) * 6;
+            ms.fromY = toY + 10.0;
+            ms.fromZ = toZ + (Math.random() - 0.5) * 6;
+            ms.toX = toX + (Math.random() - 0.5) * 4;
+            ms.toY = toY - 1.1;
+            ms.toZ = toZ + (Math.random() - 0.5) * 4;
             ms.startTime = performance.now();
             ms.color = "#ec4899"; // Arcane Pink meteor
             ms.isMeteor = true;
@@ -357,9 +409,9 @@ export const RemotePlayerInstance = ({
             s.fromX = fromX;
             s.fromY = fromY;
             s.fromZ = fromZ;
-            s.toX = fromX + Math.sin(angle) * 15.0;
-            s.toY = fromY;
-            s.toZ = fromZ + Math.cos(angle) * 15.0;
+            s.toX = toX + Math.sin(angle) * 15.0;
+            s.toY = toY;
+            s.toZ = toZ + Math.cos(angle) * 15.0;
             s.startTime = performance.now();
             s.color = "#ffd700"; // Golden storm bullets
             s.targetId = "";
