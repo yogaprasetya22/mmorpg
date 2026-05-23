@@ -68,7 +68,7 @@ const _camTarget  = new THREE.Vector3();
 const _camDir     = new THREE.Vector3();
 const _originVec  = new THREE.Vector3();
 const _fwdVec     = new THREE.Vector3();
-const _targetVec  = new THREE.Vector3();
+
 
 // ─── ECS BUFFERS (TypedArrays — same-frame, no GC) ───────────────────────────
 // Camera state
@@ -220,7 +220,21 @@ export const PlayerController = ({
       camPitch[0]  = Math.max(-0.4, Math.min(1.1, camPitch[0]));
     };
     const onMouseDown = (e: MouseEvent) => {
-      if (e.button === 0) isLeftClick[0] = 1;
+      if (e.button === 0) {
+        // Only clear target or trigger if clicked INSIDE the 3D Canvas itself (not on UI buttons / HUD)
+        const isCanvas = e.target && (e.target as HTMLElement)?.tagName?.toLowerCase() === 'canvas';
+        if (isCanvas) {
+          isLeftClick[0] = 1;
+          // Clear target if clicked on empty ground/space (not on a monster)
+          setTimeout(() => {
+            if (!(window as any).monsterClickedThisFrame) {
+              (window as any).clickedTargetId = null;
+              (window as any).hasAttackIntent = false;
+            }
+            (window as any).monsterClickedThisFrame = false;
+          }, 30);
+        }
+      }
       if (e.button === 2) isRightClick[0] = 1;
     };
     const onMouseUp = (e: MouseEvent) => {
@@ -228,6 +242,13 @@ export const PlayerController = ({
       if (e.button === 2) isRightClick[0] = 0;
     };
     const preventContext = (e: MouseEvent) => { if (e.button === 2) e.preventDefault(); };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        (window as any).clickedTargetId = null;
+        (window as any).pendingSkillExecution = false;
+      }
+    };
 
     // Zoom (mouse wheel)
     const onWheel = (e: WheelEvent) => {
@@ -250,6 +271,7 @@ export const PlayerController = ({
     document.addEventListener('mousemove',   onPointerLockMove);
     document.addEventListener('mousedown',   onMouseDown);
     document.addEventListener('mouseup',     onMouseUp);
+    document.addEventListener('keydown',     onKeyDown);
     document.addEventListener('contextmenu', preventContext);
     window.addEventListener('wheel', onWheel, { passive: false });
 
@@ -258,6 +280,7 @@ export const PlayerController = ({
       document.removeEventListener('mousemove',   onPointerLockMove);
       document.removeEventListener('mousedown',   onMouseDown);
       document.removeEventListener('mouseup',     onMouseUp);
+      document.removeEventListener('keydown',     onKeyDown);
       document.removeEventListener('contextmenu', preventContext);
       window.removeEventListener('wheel', onWheel);
     };
@@ -529,12 +552,31 @@ export const PlayerController = ({
 
       const now = performance.now();
 
-    // ── Find Lowest-HP Enemy Unit within Range ──
+    // ── Find target (manual clicked target prioritized, then auto-aim) ──
     hasTarget[0] = 0;
     let nearestTarget: UnitRuntimeData | null = null;
-    const grid = (window as any).battleGrid; 
-    
-    if (grid) {
+    const grid = (window as any).battleGrid;
+
+    // First prioritize manual clicked target
+    const clickedId = (window as any).clickedTargetId;
+    let clickedTarget: UnitRuntimeData | null = null;
+    if (clickedId) {
+      const units = _unitRegistry?.current || [];
+      const found = units.find(u => u.id === clickedId && u.type === 'enemy' && u.isActive && !u.isDying);
+      if (found) {
+        clickedTarget = found;
+      } else {
+        (window as any).clickedTargetId = null; // Clear if target is dead/inactive
+      }
+    }
+
+    if (clickedTarget) {
+      aimTargetX[0] = clickedTarget.position[0];
+      aimTargetY[0] = clickedTarget.position[1] + 1.2;
+      aimTargetZ[0] = clickedTarget.position[2];
+      hasTarget[0] = 1;
+      nearestTarget = clickedTarget;
+    } else if (grid) {
       const nearby = grid.queryRadius(_charPos.x, _charPos.z, AUTO_AIM_RADIUS);
       let closestDistSq = AUTO_AIM_RSQ;
 
@@ -561,7 +603,10 @@ export const PlayerController = ({
 
     const keys = getKeys();
     const isMovingInput = keys.forward || keys.backward || keys.leftward || keys.rightward;
-    const isAttackInput = isLeftClick[0] || keys.action1;
+    const isAttackInput = keys.action1 || (window as any).hasAttackIntent;
+    if ((window as any).hasAttackIntent) {
+      (window as any).hasAttackIntent = false;
+    }
 
     // ── Execute Attack Function (Delegated to Strategy Design Pattern in ClassCombatEngine) ──
     const executeAttack = (target: UnitRuntimeData | null) => {
@@ -641,35 +686,59 @@ export const PlayerController = ({
         }
         return;
       }
-      (window as any).lastSkillTime = now;
 
-      const ctx: CombatExecutionContext = {
-        charPos: _charPos,
-        originVec: _originVec,
-        camDir: _camDir,
-        combo: 0,
-        playerStats,
-        dealPlayerDamage,
-        spawnVFX,
-        camera,
-        simTimeRef,
-        mmSpellsRef,
-        mmSpellPtr,
-        fighterSpellsRef,
-        fighterSpellPtr,
-        assassinSpellsRef,
-        assassinSpellPtr,
-        tankSpellsRef,
-        tankSpellPtr,
-        spellsRef,
-        spellsPtr,
-        poolRef,
-        grid,
-        ecctrlRef,
-        cameraShake: (window as any).cameraShake,
-      };
+      // Check if we are facing the target first before starting skill animation / damage
+      const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
+      const fwd = new THREE.Vector3(0, 0, 1);
+      fwd.applyQuaternion(characterRef.current.quaternion);
+      if (characterRef.current.parent) {
+        fwd.applyQuaternion(characterRef.current.parent.quaternion);
+      }
+      const worldRot = Math.atan2(fwd.x, fwd.z);
+      let angleDiff = worldTargetAngle - worldRot;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
 
-      executeClassSkill(playerClass, nearestTarget as any, ctx);
+      if (Math.abs(angleDiff) < 0.6) {
+        (window as any).lastSkillTime = now;
+
+        const ctx: CombatExecutionContext = {
+          charPos: _charPos,
+          originVec: _originVec,
+          camDir: _camDir,
+          combo: 0,
+          playerStats,
+          dealPlayerDamage,
+          spawnVFX,
+          camera,
+          simTimeRef,
+          mmSpellsRef,
+          mmSpellPtr,
+          fighterSpellsRef,
+          fighterSpellPtr,
+          assassinSpellsRef,
+          assassinSpellPtr,
+          tankSpellsRef,
+          tankSpellPtr,
+          spellsRef,
+          spellsPtr,
+          poolRef,
+          grid,
+          ecctrlRef,
+          cameraShake: (window as any).cameraShake,
+        };
+
+        executeClassSkill(playerClass, nearestTarget as any, ctx);
+      } else {
+        // Must turn to face the target first
+        (window as any).pendingSkillExecution = true;
+        charState[0] = 3; // TURNING_TO_TARGET
+        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+        const toast = document.getElementById("facing-alignment-alert");
+        if (toast) {
+          toast.style.opacity = "1";
+        }
+      }
     }
 
     // Cooldown overlay DOM synchronizer
@@ -711,12 +780,37 @@ export const PlayerController = ({
           // 4. Otomatis Mengejar Musuh
           charState[0] = 2; // CHASING
         } else {
-          // 2. Combo Diam di Tempat (Reset timer jika serang lagi)
-          charState[0] = 1; // ATTACKING
-          attackTimer[0] = now;
-          autoFireTimer[0] = now;
-          ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
-          executeAttack(nearestTarget);
+          // Check if facing target first
+          const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
+          const fwd = new THREE.Vector3(0, 0, 1);
+          fwd.applyQuaternion(characterRef.current.quaternion);
+          if (characterRef.current.parent) {
+            fwd.applyQuaternion(characterRef.current.parent.quaternion);
+          }
+          const worldRot = Math.atan2(fwd.x, fwd.z);
+          let angleDiff = worldTargetAngle - worldRot;
+          while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+          while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+
+          if (Math.abs(angleDiff) < 0.6) {
+            // 2. Combo Diam di Tempat (Reset timer jika serang lagi)
+            charState[0] = 1; // ATTACKING
+            attackTimer[0] = now;
+            autoFireTimer[0] = now;
+            ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+            // Hide toast — attack is firing normally
+            const toastOk = document.getElementById("facing-alignment-alert");
+            if (toastOk) toastOk.style.opacity = "0";
+            executeAttack(nearestTarget);
+          } else {
+            // Need to rotate/turn to face target first
+            charState[0] = 3; // TURNING_TO_TARGET
+            ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+            const toast = document.getElementById("facing-alignment-alert");
+            if (toast) {
+              toast.style.opacity = "1";
+            }
+          }
         }
       } else {
         // Memukul angin
@@ -743,10 +837,14 @@ export const PlayerController = ({
         
         // Face target dynamically
         if (hasTarget[0]) {
-          _targetVec.set(aimTargetX[0], _charPos.y, aimTargetZ[0]);
-          if (characterRef.current.parent) characterRef.current.parent.worldToLocal(_targetVec);
-          const localTargetAngle = Math.atan2(_targetVec.x, _targetVec.z);
-          let diff = localTargetAngle - characterRef.current.rotation.y;
+          const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
+          const fwd = new THREE.Vector3(0, 0, 1);
+          fwd.applyQuaternion(characterRef.current.quaternion);
+          if (characterRef.current.parent) {
+            fwd.applyQuaternion(characterRef.current.parent.quaternion);
+          }
+          const worldRot = Math.atan2(fwd.x, fwd.z);
+          let diff = worldTargetAngle - worldRot;
           while (diff < -Math.PI) diff += Math.PI * 2;
           while (diff > Math.PI) diff -= Math.PI * 2;
           characterRef.current.rotation.y += diff * 15 * delta;
@@ -784,12 +882,36 @@ export const PlayerController = ({
         // While chasing, allow 50% more range area tolerance to immediately trigger melee attack swing without infinite chasing run lag
         const effectiveRangeSq = activeRangeSq * 1.5;
         if (distSq <= effectiveRangeSq) {
-          // Reached Target! Stop and Attack
-          charState[0] = 1; 
-          attackTimer[0] = now;
-          autoFireTimer[0] = now;
-          ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
-          executeAttack(nearestTarget);
+          // Reached Target! Check if facing target first
+          const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
+          const fwd = new THREE.Vector3(0, 0, 1);
+          fwd.applyQuaternion(characterRef.current.quaternion);
+          if (characterRef.current.parent) {
+            fwd.applyQuaternion(characterRef.current.parent.quaternion);
+          }
+          const worldRot = Math.atan2(fwd.x, fwd.z);
+          let angleDiff = worldTargetAngle - worldRot;
+          while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+          while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+
+          if (Math.abs(angleDiff) < 0.6) {
+            // Reached Target! Stop and Attack
+            charState[0] = 1;
+            attackTimer[0] = now;
+            autoFireTimer[0] = now;
+            ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+            const toastOk2 = document.getElementById("facing-alignment-alert");
+            if (toastOk2) toastOk2.style.opacity = "0";
+            executeAttack(nearestTarget);
+          } else {
+            // Reached target but not facing! Turn to face them first
+            charState[0] = 3; // TURNING_TO_TARGET
+            ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+            const toast = document.getElementById("facing-alignment-alert");
+            if (toast) {
+              toast.style.opacity = "1";
+            }
+          }
         } else {
           // Keep Chasing (Spoof Joystick Input to run to target)
           _chaseDir.set(dx, 0, dz).normalize();
@@ -820,6 +942,110 @@ export const PlayerController = ({
         // Target lost
         charState[0] = 0;
         ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+      }
+    } else if (charState[0] === 3) {
+      // == STATE: TURNING_TO_TARGET ==
+      if (isMovingInput) {
+        charState[0] = 0; // Cancel turning/attack if player moves manually
+        (window as any).pendingSkillExecution = false;
+        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+        const toast = document.getElementById("facing-alignment-alert");
+        if (toast) toast.style.opacity = "0";
+      } else if (hasTarget[0]) {
+        // Lock horizontal velocity
+        const vel = characterStatus.linvel;
+        ecctrlRef.current?.setLinVel({ x: 0, y: vel.y, z: 0 } as any);
+        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+        
+        // Rotate towards target
+        const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
+        const fwd = new THREE.Vector3(0, 0, 1);
+        fwd.applyQuaternion(characterRef.current.quaternion);
+        if (characterRef.current.parent) {
+          fwd.applyQuaternion(characterRef.current.parent.quaternion);
+        }
+        const worldRot = Math.atan2(fwd.x, fwd.z);
+        
+        let diff = worldTargetAngle - worldRot;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        
+        characterRef.current.rotation.y += diff * 18 * delta;
+
+        // Check if we are facing the target now
+        const fwdAfter = new THREE.Vector3(0, 0, 1);
+        fwdAfter.applyQuaternion(characterRef.current.quaternion);
+        if (characterRef.current.parent) {
+          fwdAfter.applyQuaternion(characterRef.current.parent.quaternion);
+        }
+        const worldRotAfter = Math.atan2(fwdAfter.x, fwdAfter.z);
+        let angleDiff = worldTargetAngle - worldRotAfter;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        
+        if (Math.abs(angleDiff) < 0.6) {
+          // Hide toast
+          const toast = document.getElementById("facing-alignment-alert");
+          if (toast) toast.style.opacity = "0";
+
+          // Check if we wanted to execute a skill
+          if ((window as any).pendingSkillExecution && nearestTarget) {
+            (window as any).pendingSkillExecution = false;
+            (window as any).lastSkillTime = performance.now();
+            
+            // Build the execution context
+            _originVec.set(_charPos.x, _charPos.y + 1.35, _charPos.z);
+            camera.getWorldDirection(_camDir);
+            _camDir.set(
+              aimTargetX[0] - _charPos.x,
+              aimTargetY[0] - (_charPos.y + 1.35),
+              aimTargetZ[0] - _charPos.z,
+            ).normalize();
+            _fwdVec.copy(_camDir).multiplyScalar(0.7);
+            _originVec.add(_fwdVec);
+            
+            const ctx: CombatExecutionContext = {
+              charPos: _charPos,
+              originVec: _originVec,
+              camDir: _camDir,
+              combo: 0,
+              playerStats,
+              dealPlayerDamage,
+              spawnVFX,
+              camera,
+              simTimeRef,
+              mmSpellsRef,
+              mmSpellPtr,
+              fighterSpellsRef,
+              fighterSpellPtr,
+              assassinSpellsRef,
+              assassinSpellPtr,
+              tankSpellsRef,
+              tankSpellPtr,
+              spellsRef,
+              spellsPtr,
+              poolRef,
+              grid,
+              ecctrlRef,
+              cameraShake: (window as any).cameraShake,
+            };
+            executeClassSkill(playerClass, nearestTarget as any, ctx);
+            charState[0] = 0; // Skill executes and goes to normal
+          } else {
+            // Normal attack
+            charState[0] = 1; // Transition to ATTACKING
+            attackTimer[0] = performance.now();
+            autoFireTimer[0] = performance.now();
+            executeAttack(nearestTarget);
+          }
+        }
+      } else {
+        // Target lost
+        charState[0] = 0;
+        (window as any).pendingSkillExecution = false;
+        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+        const toast = document.getElementById("facing-alignment-alert");
+        if (toast) toast.style.opacity = "0";
       }
     } 
 

@@ -378,6 +378,8 @@ export default function MultiplayerArena() {
     (payload: GameStatePayload) => {
       // Update refs (zero React re-renders for 3D rendering)
       connectedPlayersRef.current = payload.players;
+      // Server is authoritative — store raw payload directly.
+      // HP bar accuracy is handled in RemoteMonstersRenderer via one-directional display.
       worldMonstersRef.current = payload.monsters;
 
       // Extract local player real-time HP from WebSocket
@@ -429,7 +431,7 @@ export default function MultiplayerArena() {
             isDying: m.is_dead,
             hp: m.hp,
             maxHp: m.max_hp,
-            position: [visualPos ? visualPos.x : m.position.x, m.position.y, visualPos ? visualPos.z : m.position.z],
+            position: [visualPos ? visualPos.x : m.x, m.y, visualPos ? visualPos.z : m.z],
             level: m.type === "boss" ? 50 : 15,
             rarity: "common",
             class: "monster",
@@ -673,22 +675,22 @@ export default function MultiplayerArena() {
     if (targetMonster && damageQueue.current) {
       const dmg = damage || (Math.random() > 0.85 ? 5000 + Math.random() * 2000 : 2000 + Math.random() * 1000);
       const crit = isCrit !== undefined ? isCrit : dmg > 4500;
-      
+
       // Use real-time visual position if available to eliminate spawn delay and placement misalignment
       const visualPos = (window as any).monsterVisualPositions?.get(monsterId);
-      const posX = visualPos ? visualPos.x : targetMonster.position.x;
-      const posY = targetMonster.position.y + 0.8;
-      const posZ = visualPos ? visualPos.z : targetMonster.position.z;
+      const posX = visualPos ? visualPos.x : targetMonster.x;
+      const posY = targetMonster.y + 0.8;
+      const posZ = visualPos ? visualPos.z : targetMonster.z;
 
       damageQueue.current.push({
         value: Math.round(dmg),
         position: [posX, posY, posZ],
         isCrit: crit,
-        color: crit ? "#ff3b30" : "#ffcc00", // Crit gets glowing neon red/orange, normal gets golden yellow!
+        color: crit ? "#ff3b30" : "#ffcc00",
         timestamp: performance.now()
       });
 
-      // Trigger epic hit screenshake exactly like Seal M
+      // Trigger epic hit screenshake
       if (crit) {
         (window as any).triggerCameraShake?.(0.5);
       } else {
@@ -1282,7 +1284,11 @@ export default function MultiplayerArena() {
               {/* Render Server Authoritative Monsters */}
               <RemoteMonstersRenderer 
                 worldMonstersRef={worldMonstersRef} 
-                onAttack={handleAuthoritativeAttack}
+                onAttack={(monsterId) => {
+                  (window as any).monsterClickedThisFrame = true;
+                  (window as any).clickedTargetId = monsterId;
+                  (window as any).hasAttackIntent = true;
+                }}
                 connectedPlayersRef={connectedPlayersRef}
                 localPlayerId={selectedCharacter?.id}
                 gameConfig={gameConfig}
@@ -1335,6 +1341,11 @@ export default function MultiplayerArena() {
         {/* No-target alert toast */}
         <div id="no-target-alert" className="absolute top-[35%] left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-500/90 backdrop-blur-md border border-red-400/30 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl shadow-2xl pointer-events-none opacity-0 flex items-center gap-2" style={{transition:'opacity 0.25s ease-in-out'}}>
           <span className="animate-pulse">⚠️</span> BUTUH TARGET ENEMY UNTUK SKILL!
+        </div>
+
+        {/* Facing-alignment alert toast */}
+        <div id="facing-alignment-alert" className="absolute top-[35%] left-1/2 -translate-x-1/2 -translate-y-1/2 bg-amber-500/90 backdrop-blur-md border border-amber-400/30 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl shadow-2xl pointer-events-none opacity-0 flex items-center gap-2" style={{transition:'opacity 0.25s ease-in-out'}}>
+          <span className="animate-pulse">🔄</span> MENYELARASKAN HADAP TARGET...
         </div>
 
         {/* ── TOP-LEFT: Avatar + HP/MP/EXP ── */}

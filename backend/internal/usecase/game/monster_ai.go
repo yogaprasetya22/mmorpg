@@ -246,11 +246,6 @@ func (u *gameUsecase) processMonsterAI(m *domain.Monster, dt float32) {
 		if distFromHome > 18.0 {
 			fmt.Printf("⛓️ [LEASH] Monster %s berpaling karena mengejar terlalu jauh dari spawn (%.2f unit)!\n", m.Name, distFromHome)
 			m.TargetPlayerID = ""
-			m.HP = m.MaxHP
-			if healthComp, found := u.registry.GetComponent(domain.EntityID(m.ID), "Health"); found {
-				h := healthComp.(*domain.HealthComponent)
-				h.HP = m.HP
-			}
 			_ = f.Event(ctx, "return")
 			break
 		}
@@ -305,11 +300,6 @@ func (u *gameUsecase) processMonsterAI(m *domain.Monster, dt float32) {
 		if distFromHome > 18.0 {
 			fmt.Printf("⛓️ [LEASH] Monster %s berpaling karena bertarung terlalu jauh dari spawn (%.2f unit)!\n", m.Name, distFromHome)
 			m.TargetPlayerID = ""
-			m.HP = m.MaxHP
-			if healthComp, found := u.registry.GetComponent(domain.EntityID(m.ID), "Health"); found {
-				h := healthComp.(*domain.HealthComponent)
-				h.HP = m.HP
-			}
 			_ = f.Event(ctx, "return")
 			break
 		}
@@ -430,6 +420,11 @@ func (u *gameUsecase) processMonsterAI(m *domain.Monster, dt float32) {
 		} else {
 			// Spawn position reached safely
 			m.Position = m.SpawnPosition
+			m.HP = m.MaxHP
+			if healthComp, found := u.registry.GetComponent(domain.EntityID(m.ID), "Health"); found {
+				h := healthComp.(*domain.HealthComponent)
+				h.HP = m.HP
+			}
 			_ = f.Event(ctx, "idle")
 		}
 	}
@@ -623,11 +618,6 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 		if distFromHome > 18.0 {
 			fmt.Printf("⛓️ [LEASH-SNAP] Monster %s berpaling karena mengejar terlalu jauh dari spawn (%.2f unit)!\n", m.Name, distFromHome)
 			m.TargetPlayerID = ""
-			m.HP = m.MaxHP
-			if healthComp, found := u.registry.GetComponent(domain.EntityID(m.ID), "Health"); found {
-				h := healthComp.(*domain.HealthComponent)
-				h.HP = m.HP
-			}
 			_ = f.Event(ctx, "return")
 			break
 		}
@@ -676,11 +666,6 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 		if distFromHome > 18.0 {
 			fmt.Printf("⛓️ [LEASH-SNAP] Monster %s berpaling karena bertarung terlalu jauh dari spawn (%.2f unit)!\n", m.Name, distFromHome)
 			m.TargetPlayerID = ""
-			m.HP = m.MaxHP
-			if healthComp, found := u.registry.GetComponent(domain.EntityID(m.ID), "Health"); found {
-				h := healthComp.(*domain.HealthComponent)
-				h.HP = m.HP
-			}
 			_ = f.Event(ctx, "return")
 			break
 		}
@@ -774,6 +759,11 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 			m.Animation = "walk"
 		} else {
 			m.Position = m.SpawnPosition
+			m.HP = m.MaxHP
+			if healthComp, found := u.registry.GetComponent(domain.EntityID(m.ID), "Health"); found {
+				h := healthComp.(*domain.HealthComponent)
+				h.HP = m.HP
+			}
 			_ = f.Event(ctx, "idle")
 		}
 	}

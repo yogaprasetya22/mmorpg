@@ -85,9 +85,9 @@ export const Minimap: React.FC<MinimapProps> = ({
         const m = monsters[i];
         if (m.is_dead || monsterIdx >= maxMonsters) continue;
 
-        // Relative delta
-        const dx = m.position.x - px;
-        const dz = m.position.z - pz;
+        // Relative delta (flat x/z fields from new lean MonsterNetworkState)
+        const dx = m.x - px;
+        const dz = m.z - pz;
         const dist = Math.sqrt(dx * dx + dz * dz);
 
         if (dist <= MAP_RANGE) {

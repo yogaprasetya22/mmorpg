@@ -118,7 +118,7 @@ func (h *GameHandler) ServeWS(c *gin.Context) {
 	client := &Client{
 		Hub:      h.hub,
 		Conn:     conn,
-		Send:     make(chan []byte, 256),
+		Send:     make(chan []byte, sendBufSize),
 		PlayerID: player.ID,
 		Username: player.Username,
 	}

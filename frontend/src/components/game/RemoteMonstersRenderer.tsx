@@ -11,39 +11,60 @@ import { useStore } from "@/src/state/useStore";
 
 // ─── Shared reusable Box3 to avoid allocation per monster ────────────────────
 const _sharedBox3 = new THREE.Box3();
+// ─── Shared scratch vectors to avoid per-frame allocations ───────────────────
+const _v3 = new THREE.Vector3();
+
+// ─── Global visual position registry (module-level Map, not window) ────────────
+// Using a module-level Map is cheaper than window property access (avoids prototype chain lookup).
+const monsterVisualPositions: Map<string, { x: number; z: number }> = new Map();
 
 export interface RemoteMonsterInstanceProps {
   monsterId: string;
   worldMonstersRef: React.RefObject<MonsterNetworkState[]>;
-  // Pass a pre-built Map for O(1) lookup instead of O(n) find() per frame
   monsterMapRef: React.RefObject<Map<string, MonsterNetworkState>>;
   onAttack: (id: string) => void;
   camera: THREE.Camera;
   connectedPlayersRef?: React.RefObject<PlayerNetworkState[]>;
+  // Pre-built O(1) lookup map for remote players — avoids O(n) .find() per frame per monster
+  remotePlayerMapRef: React.RefObject<Map<string, PlayerNetworkState>>;
   localPlayerId?: string;
   gameConfig?: any;
 }
 
-export const RemoteMonsterInstance = ({ 
-  monsterId, 
-  worldMonstersRef: _worldMonstersRef, // kept in props for API compat, logic uses monsterMapRef
+// ─── Clip name cache: precomputed once per GLB load ───────────────────────────
+// Avoids repeated Object.keys(actions) + .find() inside useFrame (hot path)
+function buildClipNameCache(actions: Record<string, THREE.AnimationAction | null>) {
+  const keys = Object.keys(actions);
+  return {
+    idle:   keys.find(k => k === 'Idle'   || k.toLowerCase() === 'idle')   ?? 'Idle',
+    walk:   keys.find(k => k === 'Walk'   || k.toLowerCase().includes('walk') || k === 'Run' || k.toLowerCase() === 'run') ?? 'Idle',
+    run:    keys.find(k => k === 'Run'    || k.toLowerCase() === 'run')     ?? 'Idle',
+    attack: keys.find(k => k.toLowerCase().includes('attack') || k.toLowerCase().includes('slash') || k.toLowerCase().includes('bash')) ?? 'Idle',
+    death:  keys.find(k => k === 'Death'  || k.toLowerCase().includes('death')) ?? 'Idle',
+  };
+}
+
+export const RemoteMonsterInstance = ({
+  monsterId,
+  worldMonstersRef: _worldMonstersRef,
   monsterMapRef,
-  onAttack, 
+  onAttack,
   camera,
-  connectedPlayersRef,
+  connectedPlayersRef: _connectedPlayersRef, // kept for API compat — logic uses remotePlayerMapRef
+  remotePlayerMapRef,
   localPlayerId,
   gameConfig
 }: RemoteMonsterInstanceProps) => {
   void camera;
-  
+
   const isBoss = useMemo(() => {
     const data = monsterMapRef.current?.get(monsterId);
     return data ? (data.type === "boss" || data.name.toLowerCase().includes("boss")) : false;
   }, [monsterId, monsterMapRef]);
-  
+
   const modelPath = useMemo(() => {
     const data = monsterMapRef.current?.get(monsterId);
-    
+
     if (data && gameConfig && gameConfig.monster_models) {
       let typeKey = "goblin_male";
       if (isBoss) {
@@ -63,7 +84,7 @@ export const RemoteMonsterInstance = ({
       const path = gameConfig.monster_models[typeKey];
       if (path) return path;
     }
-    
+
     if (isBoss) return '/assets-model/Zombie_Female.glb';
     const MONSTER_MODELS = [
       '/assets-model/Goblin_Male.glb',
@@ -84,12 +105,14 @@ export const RemoteMonsterInstance = ({
     const cloned = SkeletonUtils.clone(scene);
     cloned.traverse((child: any) => {
       if (child.isMesh) {
-        // Shadows disabled on remote monsters for significant GPU perf gain.
-        // Shadow casting requires expensive shadow-map re-renders every frame.
         child.castShadow = false;
         child.receiveShadow = false;
-        // Freeze geometry bounding sphere to skip auto-compute per frame
+        // Pre-compute bounding sphere once — skip per-frame auto-compute
         child.geometry?.computeBoundingSphere?.();
+        // Freeze material to skip redundant uniform uploads
+        if (child.material) {
+          child.material.needsUpdate = false;
+        }
       }
     });
     return cloned;
@@ -101,19 +124,36 @@ export const RemoteMonsterInstance = ({
   const { actions } = useAnimations(animations, groupRef);
   const activeAction = useRef<THREE.AnimationAction | null>(null);
 
+  // ─── Clip name cache (built once, not every frame) ─────────────────────────
+  const clipCache = useRef<ReturnType<typeof buildClipNameCache> | null>(null);
+
   const prevVisualPos = useRef({ x: 0, z: 0 });
   const hasInitializedPrevVisual = useRef(false);
   const isMoving = useRef(false);
   const currentAnimState = useRef("Idle");
   const monsterIdRef = useRef<string | null>(null);
 
+  // Optimization refs
+  const smoothedSpeed = useRef(0);
+  const lastTextKey = useRef("");
+  const billboardGroupRef = useRef<THREE.Group>(null!);
+  // Track HP scale to skip redundant GPU uniform updates
+  const lastHpRatio = useRef(-1);
+  // Smooth lerp target for HP bar — avoids jarring instant jump when HP changes
+  const smoothHpRatio = useRef(1);
+
   useEffect(() => {
     return () => {
-      if ((window as any).monsterVisualPositions) {
-        (window as any).monsterVisualPositions.delete(monsterId);
-      }
+      monsterVisualPositions.delete(monsterId);
     };
   }, [monsterId]);
+
+  // Build clip cache once when actions become available
+  useEffect(() => {
+    if (actions && Object.keys(actions).length > 0) {
+      clipCache.current = buildClipNameCache(actions);
+    }
+  }, [actions]);
 
   // Pre-compute HP bar height once (not every frame)
   const hpBarY = useMemo(() => {
@@ -123,42 +163,131 @@ export const RemoteMonsterInstance = ({
     return (maxY * scale) + 0.35;
   }, [clone, isBoss]);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (!groupRef.current) return;
 
-    // O(1) Map lookup — replaces O(n) find() called every frame
+    // O(1) Map lookup
     const data = monsterMapRef.current?.get(monsterId);
-    
+
     if (!data || data.is_dead) {
-      if (data && (window as any).monsterVisualPositions) {
-        (window as any).monsterVisualPositions.delete(data.id);
-      }
+      if (data) monsterVisualPositions.delete(data.id);
       groupRef.current.visible = false;
       hasInitializedPrevVisual.current = false;
+      if (activeAction.current) activeAction.current.paused = true;
       return;
     }
-    
+
+    // Snap HP bar to full when monster resets (returned to spawn with full HP)
+    if (data.hp >= data.max_hp && smoothHpRatio.current < 0.99) {
+      smoothHpRatio.current = 1;
+      lastHpRatio.current = -1; // force re-render
+    }
+
+    // ─── Distance Culling — avoids full skeleton update for far monsters ──────
+    // Use squared distance to avoid sqrt on every frame per monster
+    _v3.subVectors(state.camera.position, groupRef.current.position);
+    const camDistSq = _v3.lengthSq();
+
+    const FAR_SQ      = 60 * 60;  // > 60 units: cull completely
+    const MED_FAR_SQ  = 35 * 35;  // > 35 units: hide billboard only
+
+    if (camDistSq > FAR_SQ) {
+      groupRef.current.visible = false;
+      if (activeAction.current) activeAction.current.paused = true;
+      return;
+    }
+
     groupRef.current.visible = true;
+    if (activeAction.current) activeAction.current.paused = false;
+
     monsterIdRef.current = data.id;
 
-    const x = data.position.x;
-    const z = data.position.z;
-    const groundY = (window as any).getGroundHeight ? (window as any).getGroundHeight(x, z, data.position.y) : data.position.y;
+    // ─── Read flat position fields (no nested object allocation) ─────────────
+    const x = data.x;
+    const z = data.z;
+    const groundY = (window as any).getGroundHeight
+      ? (window as any).getGroundHeight(x, z, data.y)
+      : data.y;
 
     const meshX = groupRef.current.position.x;
     const meshY = groupRef.current.position.y;
     const meshZ = groupRef.current.position.z;
-    const distToTarget = Math.hypot(x - meshX, z - meshZ);
 
+    const dx = x - meshX;
+    const dz = z - meshZ;
+    const distToTarget = Math.sqrt(dx * dx + dz * dz);
+
+    // ─── Resolve target position for attack/rotation ──────────────────────────
+    let targetPosX = 0, targetPosZ = 0, hasTarget = false;
+    if (data.target_player_id && data.target_player_id !== "") {
+      if (data.target_player_id === localPlayerId) {
+        const localPos = useStore.getState().playerPosition;
+        targetPosX = localPos[0];
+        targetPosZ = localPos[2];
+        hasTarget = true;
+      } else {
+        // O(1) Map lookup — replaces O(n) .find() per frame per monster
+        const rp = remotePlayerMapRef.current?.get(data.target_player_id);
+        if (rp) {
+          targetPosX = rp.x;
+          targetPosZ = rp.z;
+          hasTarget = true;
+        }
+      }
+    }
+
+    let isWithinAttackRange = false;
+    if (hasTarget) {
+      const tDx = targetPosX - meshX;
+      const tDz = targetPosZ - meshZ;
+      isWithinAttackRange = (tDx * tDx + tDz * tDz) <= (isBoss ? 4.5 * 4.5 : 3.5 * 3.5);
+    }
+
+    const serverAnim = (data.animation || "").toLowerCase();
+    isMoving.current = distToTarget > 0.05;
+
+    // ─── Determine desired animation state ───────────────────────────────────
+    let desiredState = "idle";
+    if (data.is_dead || serverAnim === "death") desiredState = "death";
+    else if (serverAnim === "attack") desiredState = "attack";
+    else if (serverAnim === "run")    desiredState = "run";
+    else if (serverAnim === "walk")   desiredState = "walk";
+    else if (data.target_player_id && data.target_player_id !== "") {
+      if (isMoving.current)        desiredState = "run";
+      else if (isWithinAttackRange) desiredState = "attack";
+      else                          desiredState = "idle";
+    } else if (isMoving.current) {
+      desiredState = "walk";
+    }
+
+    // ─── Uniform Constant-Speed Movement with Dynamic Catch-up ───────────────
     if (!hasInitializedPrevVisual.current || distToTarget > 3.0) {
       groupRef.current.position.set(x, groundY, z);
       prevVisualPos.current = { x, z };
       hasInitializedPrevVisual.current = true;
-    } else {
-      const lerpFactor = Math.min(1, 8.5 * delta);
-      groupRef.current.position.x += (x - meshX) * lerpFactor;
-      groupRef.current.position.y += (groundY - meshY) * lerpFactor;
-      groupRef.current.position.z += (z - meshZ) * lerpFactor;
+    } else if (distToTarget > 0.01) {
+      let baseSpeed = 1.8;
+      if      (desiredState === "run")  baseSpeed = isBoss ? 3.5 : 3.0;
+      else if (desiredState === "walk") baseSpeed = isBoss ? 2.0 : 1.8;
+
+      // Dynamic catch-up: scale speed when lagging behind server position
+      const speedMult = distToTarget > 0.3
+        ? 1.0 + (distToTarget - 0.3) * 2.5
+        : 1.0;
+
+      const step = baseSpeed * speedMult * delta;
+
+      if (distToTarget <= step) {
+        groupRef.current.position.x = x;
+        groupRef.current.position.z = z;
+      } else {
+        const invDist = 1.0 / distToTarget;
+        groupRef.current.position.x += dx * invDist * step;
+        groupRef.current.position.z += dz * invDist * step;
+      }
+
+      // Smooth Y interpolation to avoid hill jitter
+      groupRef.current.position.y += (groundY - meshY) * Math.min(1, 10.0 * delta);
     }
 
     const currentMeshX = groupRef.current.position.x;
@@ -166,93 +295,45 @@ export const RemoteMonsterInstance = ({
     const visualDx = currentMeshX - prevVisualPos.current.x;
     const visualDz = currentMeshZ - prevVisualPos.current.z;
     const visualDistance = Math.sqrt(visualDx * visualDx + visualDz * visualDz);
-    
-    if (typeof (window as any).monsterVisualPositions === "undefined") {
-      (window as any).monsterVisualPositions = new Map();
-    }
-    (window as any).monsterVisualPositions.set(data.id, { x: currentMeshX, z: currentMeshZ });
 
-    isMoving.current = visualDistance > 0.002;
+    monsterVisualPositions.set(data.id, { x: currentMeshX, z: currentMeshZ });
+    // Keep window reference for external minimap/targeting code that reads it
+    if (!(window as any).monsterVisualPositions) {
+      (window as any).monsterVisualPositions = monsterVisualPositions;
+    }
+
     prevVisualPos.current = { x: currentMeshX, z: currentMeshZ };
 
-    if (hpFillRef.current) {
-      const ratio = Math.max(0, Math.min(1, data.hp / data.max_hp));
-      hpFillRef.current.scale.x = ratio;
-      hpFillRef.current.position.x = -0.6 * (1 - ratio);
-    }
+    // ─── Low-pass filter speed to prevent animation timescale jitter ─────────
+    const currentSpeed = visualDistance / Math.max(0.0001, delta);
+    smoothedSpeed.current += (currentSpeed - smoothedSpeed.current) * Math.min(1, 10.0 * delta);
 
-    if (textRef.current) {
-      const lvl = isBoss ? 50 : 15;
-      textRef.current.text = `[Lv.${lvl}] ${data.name}\n[ HP: ${Math.round(data.hp)} ]`;
-    }
-
-    let targetPos = null;
-    if (data.target_player_id && data.target_player_id !== "") {
-      if (data.target_player_id === localPlayerId) {
-        const localPos = useStore.getState().playerPosition;
-        targetPos = { x: localPos[0], z: localPos[2] };
-      } else {
-        const remotePlayers = connectedPlayersRef?.current || [];
-        const rp = remotePlayers.find(p => p.id === data.target_player_id);
-        if (rp) targetPos = { x: rp.x, z: rp.z };
-      }
-    }
-
-    let isWithinAttackRange = false;
-    if (targetPos) {
-      const tDx = targetPos.x - groupRef.current.position.x;
-      const tDz = targetPos.z - groupRef.current.position.z;
-      const dist = Math.sqrt(tDx * tDx + tDz * tDz);
-      isWithinAttackRange = dist <= (isBoss ? 4.5 : 3.5);
-    }
-
-    const serverAnim = (data.animation || "").toLowerCase();
-
-    // Rotate monster to face target or movement direction
-    let targetAngle = null;
+    // ─── Rotation: face target or movement direction ──────────────────────────
+    let targetAngle: number | null = null;
     if (serverAnim === "attack" || (isWithinAttackRange && data.target_player_id)) {
-      if (targetPos) {
-        targetAngle = Math.atan2(targetPos.x - groupRef.current.position.x, targetPos.z - groupRef.current.position.z);
+      if (hasTarget) {
+        targetAngle = Math.atan2(targetPosX - currentMeshX, targetPosZ - currentMeshZ);
       }
-    } else if (isMoving.current) {
+    } else if (isMoving.current && (visualDx !== 0 || visualDz !== 0)) {
       targetAngle = Math.atan2(visualDx, visualDz);
     }
 
     if (targetAngle !== null) {
       let diff = targetAngle - groupRef.current.rotation.y;
       while (diff < -Math.PI) diff += Math.PI * 2;
-      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff > Math.PI)  diff -= Math.PI * 2;
       groupRef.current.rotation.y += diff * Math.min(1, 12.0 * delta);
     }
 
-    let desiredState = "idle";
-    if (data.is_dead || serverAnim === "death") desiredState = "death";
-    else if (serverAnim === "attack") desiredState = "attack";
-    else if (serverAnim === "run") desiredState = "run";
-    else if (serverAnim === "walk") desiredState = "walk";
-    else if (data.target_player_id && data.target_player_id !== "") {
-      if (isMoving.current) desiredState = "run";
-      else if (isWithinAttackRange) desiredState = "attack";
-      else desiredState = "idle";
-    } else if (isMoving.current) {
-      desiredState = "walk";
-    }
-
-    if (actions && currentAnimState.current !== desiredState) {
-      const keys = Object.keys(actions);
-      let clipName = "Idle";
-
-      if (desiredState === "death") {
-        clipName = keys.find((k) => k === "Death" || k.toLowerCase().includes("death")) || "Idle";
-      } else if (desiredState === "attack") {
-        clipName = keys.find((k) => k.toLowerCase().includes("attack") || k.toLowerCase().includes("slash") || k.toLowerCase().includes("bash")) || "Idle";
-      } else if (desiredState === "run") {
-        clipName = keys.find((k) => k === "Run" || k.toLowerCase() === "run") || "Idle";
-      } else if (desiredState === "walk") {
-        clipName = keys.find((k) => k === "Walk" || k.toLowerCase().includes("walk") || k === "Run" || k.toLowerCase() === "run") || "Idle";
-      } else {
-        clipName = keys.find((k) => k === "Idle" || k.toLowerCase() === "idle") || "Idle";
-      }
+    // ─── Animation State Machine ──────────────────────────────────────────────
+    if (actions && clipCache.current && currentAnimState.current !== desiredState) {
+      const cache = clipCache.current;
+      let clipName: string;
+      if      (desiredState === "death")  clipName = cache.death;
+      else if (desiredState === "attack") clipName = cache.attack;
+      else if (desiredState === "run")    clipName = cache.run;
+      else if (desiredState === "walk")   clipName = cache.walk;
+      else                                clipName = cache.idle;
 
       const nextAction = actions[clipName];
       if (nextAction && nextAction !== activeAction.current) {
@@ -273,27 +354,53 @@ export const RemoteMonsterInstance = ({
       currentAnimState.current = desiredState;
     }
 
+    // ─── Synchronized animation timescale ────────────────────────────────────
     if (activeAction.current) {
-      const visualSpeed = visualDistance / delta;
-      if (desiredState === "walk") {
-        activeAction.current.timeScale = Math.max(0.4, Math.min(1.8, visualSpeed / 1.5));
-      } else if (desiredState === "run") {
-        activeAction.current.timeScale = Math.max(0.4, Math.min(2.0, visualSpeed / 4.0));
+      if      (desiredState === "walk") activeAction.current.timeScale = Math.max(0.4, Math.min(1.8, smoothedSpeed.current / 1.5));
+      else if (desiredState === "run")  activeAction.current.timeScale = Math.max(0.4, Math.min(2.0, smoothedSpeed.current / 3.0));
+      else                              activeAction.current.timeScale = 1.0;
+    }
+
+    // ─── Billboard & HP UI (hidden beyond MED_FAR_SQ) ────────────────────────
+    if (billboardGroupRef.current) {
+      if (camDistSq > MED_FAR_SQ) {
+        billboardGroupRef.current.visible = false;
       } else {
-        activeAction.current.timeScale = 1.0;
+        billboardGroupRef.current.visible = true;
+
+        if (hpFillRef.current) {
+          const targetRatio = Math.max(0, Math.min(1, data.hp / data.max_hp));
+          // Lerp toward target ratio — smooth drain animation ~8 units/sec feels responsive yet premium
+          const lerpSpeed = targetRatio < smoothHpRatio.current ? 6.0 : 12.0; // drain slower, refill faster
+          smoothHpRatio.current += (targetRatio - smoothHpRatio.current) * Math.min(1, lerpSpeed * delta);
+          const ratio = smoothHpRatio.current;
+          // Skip GPU uniform update if ratio hasn't changed meaningfully
+          if (Math.abs(ratio - lastHpRatio.current) > 0.0005) {
+            hpFillRef.current.scale.x = ratio;
+            hpFillRef.current.position.x = -0.6 * (1 - ratio);
+            lastHpRatio.current = ratio;
+          }
+        }
+
+        if (textRef.current) {
+          const lvl = isBoss ? 50 : 15;
+          const hpInt = Math.round(data.hp);
+          const textKey = `${lvl}_${data.name}_${hpInt}`;
+          // Only rebuild SDF geometry when text content actually changes
+          if (lastTextKey.current !== textKey) {
+            textRef.current.text = `[Lv.${lvl}] ${data.name}\n[ HP: ${hpInt} ]`;
+            lastTextKey.current = textKey;
+          }
+        }
       }
     }
   });
 
-  // REMOVED: groupRef.current.updateMatrixWorld(true) — this is extremely expensive
-  // and is called automatically by the R3F render loop. Calling it manually per-monster
-  // causes redundant matrix recalculations every frame.
-
   const scale = isBoss ? 2.3 : 0.9;
-  
+
   return (
     <group ref={groupRef} visible={false}>
-      <Billboard position={[0, hpBarY, 0]} follow={true}>
+      <Billboard ref={billboardGroupRef} position={[0, hpBarY, 0]} follow={true} visible={false}>
         <Text
           ref={textRef}
           fontSize={0.22}
@@ -307,24 +414,24 @@ export const RemoteMonsterInstance = ({
         >
           {""}
         </Text>
-        
+
         <mesh position={[0, 0, -0.001]}>
           <planeGeometry args={[1.24, 0.16]} />
           <meshBasicMaterial color="#09090b" toneMapped={false} />
         </mesh>
-        
+
         <mesh position={[0, 0, 0]}>
           <planeGeometry args={[1.2, 0.12]} />
           <meshBasicMaterial color="#27272a" toneMapped={false} />
         </mesh>
-        
+
         <mesh ref={hpFillRef} position={[0, 0, 0.002]}>
           <planeGeometry args={[1.2, 0.12]} />
           <meshBasicMaterial color={isBoss ? "#ef4444" : "#f43f5e"} toneMapped={false} />
         </mesh>
       </Billboard>
 
-      <group 
+      <group
         scale={scale}
         onClick={(e) => {
           e.stopPropagation();
@@ -345,8 +452,8 @@ export interface RemoteMonstersRendererProps {
   gameConfig?: any;
 }
 
-export const RemoteMonstersRenderer = ({ 
-  worldMonstersRef, 
+export const RemoteMonstersRenderer = ({
+  worldMonstersRef,
   onAttack,
   connectedPlayersRef,
   localPlayerId,
@@ -356,21 +463,30 @@ export const RemoteMonstersRenderer = ({
   const [activeMonsterIds, setActiveMonsterIds] = useState<string[]>([]);
   const seenIdsSet = useRef<Set<string>>(new Set());
 
-  // Pre-built Map<id, monster> so each RemoteMonsterInstance does O(1) lookup per frame
+  // O(1) lookup map for monsters — rebuilt cheaply each frame
   const monsterMapRef = useRef<Map<string, MonsterNetworkState>>(new Map());
 
+  // O(1) lookup map for remote players — eliminates O(n) .find() per monster per frame
+  const remotePlayerMapRef = useRef<Map<string, PlayerNetworkState>>(new Map());
+
   useFrame(() => {
+    // ─── Rebuild monster map (O(n) but very cheap) ───────────────────────────
     const list = worldMonstersRef.current || [];
     const map = monsterMapRef.current;
-    
-    // Always keep monsterMap fresh every frame (very cheap Map rebuild)
     map.clear();
     for (let i = 0; i < list.length; i++) {
       map.set(list[i].id, list[i]);
     }
 
-    // Only update React state when a BRAND NEW monster ID is discovered.
-    // We never remove IDs, ensuring components stay mounted and just toggle visibility!
+    // ─── Rebuild remote player map (O(n) but very cheap) ─────────────────────
+    const players = connectedPlayersRef.current || [];
+    const pMap = remotePlayerMapRef.current;
+    pMap.clear();
+    for (let i = 0; i < players.length; i++) {
+      pMap.set(players[i].id, players[i]);
+    }
+
+    // ─── Detect new monster IDs — trigger React state update only on change ──
     let hasNewId = false;
     for (let i = 0; i < list.length; i++) {
       const id = list[i].id;
@@ -396,6 +512,7 @@ export const RemoteMonstersRenderer = ({
             onAttack={onAttack}
             camera={camera}
             connectedPlayersRef={connectedPlayersRef}
+            remotePlayerMapRef={remotePlayerMapRef}
             localPlayerId={localPlayerId}
             gameConfig={gameConfig}
           />

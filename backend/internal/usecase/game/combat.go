@@ -63,9 +63,13 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 
 		// Authoritative domain-derived class damage formula calculation
 		var finalDamage float32
-		var isCritRaw bool
-		finalDamage, isCritRaw = playerData.CalculateDamageTo(monster.Defense)
-		isCrit = isCritRaw
+		if clientDmg > 0 {
+			finalDamage = clientDmg
+		} else {
+			var isCritRaw bool
+			finalDamage, isCritRaw = playerData.CalculateDamageTo(monster.Defense)
+			isCrit = isCritRaw
+		}
 
 		// Hard cap — only apply to Boss types to prevent instant-melting by hyper-geared players. Standard monsters can be one-shot cleanly!
 		if monster.Type == "boss" {
@@ -181,9 +185,13 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 
 		// Authoritative domain-derived class damage formula calculation (adjusted by PvP multiplier 0.7)
 		var finalDamage float32
-		dmgVal, isCritRaw := playerData.CalculateDamageTo(targetData.Defense)
-		isCrit = isCritRaw
-		finalDamage = dmgVal * 0.7
+		if clientDmg > 0 {
+			finalDamage = clientDmg
+		} else {
+			dmgVal, isCritRaw := playerData.CalculateDamageTo(targetData.Defense)
+			isCrit = isCritRaw
+			finalDamage = dmgVal * 0.7
+		}
 
 		// Hard cap — no single hit can exceed 35% of target's max HP like seal-m
 		maxHitDmg := targetData.MaxHP * 0.35

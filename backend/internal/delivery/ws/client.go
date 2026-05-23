@@ -3,7 +3,6 @@ package ws
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -22,14 +21,15 @@ const (
 	// Send pings to peer with this period. Must be less than pongWait.
 	pingPeriod = (pongWait * 9) / 10
 
-	// Maximum message size allowed from peer.
-	maxMessageSize = 512
+	// Maximum incoming message size — 1KB is plenty for move/attack/skill actions.
+	// Previous 512 bytes could truncate some skill payloads.
+	maxMessageSize = 1024
 )
 
 var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	// Allow all origins for local testing
+	// Larger write buffer to amortize syscall overhead when sending ~2-4KB msgpack frames.
+	ReadBufferSize:  2048,
+	WriteBufferSize: 8192,
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
@@ -43,6 +43,7 @@ type Client struct {
 	Conn *websocket.Conn
 
 	// Buffered channel of outbound messages.
+	// sendBufSize (32) prevents WritePump goroutine starvation under 50-player load.
 	Send chan []byte
 
 	// Player context info
@@ -51,15 +52,15 @@ type Client struct {
 }
 
 type WSIncomingMessage struct {
-	Action    string  `json:"action"` // "move", "attack", "distribute_stat", "equip_item", "use_item", "cast_skill", "change_class"
-	X         float32 `json:"x"`
-	Y         float32 `json:"y"`
-	Z         float32 `json:"z"`
-	Rotation  float32 `json:"rotation"`
-	Animation string  `json:"animation"`
-	
-	TargetType string `json:"targetType"` // "monster", "player"
-	TargetID   string `json:"targetId"`
+	Action   string  `json:"action"` // "move", "attack", "distribute_stat", "equip_item", "use_item", "cast_skill", "change_class"
+	X        float32 `json:"x"`
+	Y        float32 `json:"y"`
+	Z        float32 `json:"z"`
+	Rotation float32 `json:"rotation"`
+	Animation string `json:"animation"`
+
+	TargetType string  `json:"targetType"` // "monster", "player"
+	TargetID   string  `json:"targetId"`
 	Damage     float32 `json:"damage"`
 	IsCrit     bool    `json:"isCrit"`
 
@@ -76,29 +77,23 @@ func (c *Client) ReadPump() {
 		c.Hub.Unregister <- c
 		c.Conn.Close()
 	}()
-	
+
 	c.Conn.SetReadLimit(maxMessageSize)
 	_ = c.Conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.Conn.SetPongHandler(func(string) error {
 		_ = c.Conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
-	
+
 	for {
 		messageType, message, err := c.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("error: %v", err)
+				fmt.Printf("⚠️ [WS] Unexpected close from %s: %v\n", c.Username, err)
 			}
 			break
 		}
-		
-		// Telemetry logger for non-move packets
-		rawPayload := string(message)
-		if !strings.Contains(rawPayload, `"action":"move"`) && messageType == websocket.TextMessage {
-			fmt.Printf("📬 [WS TELEMETRY TEXT] Dari %s: %s\n", c.Username, rawPayload)
-		}
-		
+
 		// Parse message action: supports both MessagePack binary and JSON text seamlessly
 		var msg WSIncomingMessage
 		var parseErr error
@@ -108,10 +103,14 @@ func (c *Client) ReadPump() {
 			parseErr = json.Unmarshal(message, &msg)
 		}
 		if parseErr != nil {
-			fmt.Printf("❌ [WS TELEMETRY ERROR] Gagal parse dari %s: %v | Raw: %s\n", c.Username, parseErr, rawPayload)
+			// Only log non-move parse errors to avoid flooding stdout at 20Hz
+			if !strings.Contains(string(message), `"action":"move"`) {
+				fmt.Printf("❌ [WS] Parse error from %s: %v\n", c.Username, parseErr)
+			}
 			continue
 		}
 
+		// Dispatch action — no logging on hot-path "move" actions
 		switch msg.Action {
 		case "move":
 			c.Hub.gameUsecase.UpdatePlayerMovement(c.PlayerID, msg.X, msg.Y, msg.Z, msg.Rotation, msg.Animation, msg.TargetID)
@@ -141,7 +140,7 @@ func (c *Client) WritePump() {
 		ticker.Stop()
 		c.Conn.Close()
 	}()
-	
+
 	for {
 		select {
 		case message, ok := <-c.Send:
@@ -151,14 +150,16 @@ func (c *Client) WritePump() {
 				return
 			}
 
-			// Coalesce: drain the channel and only send the absolute latest message
+			// Coalesce: if multiple frames queued, send ONLY the latest state.
+			// This is safe for game state (newer always supersedes older).
+			// Prevents WritePump from falling behind under burst conditions.
 			latestMessage := message
 			n := len(c.Send)
 			for i := 0; i < n; i++ {
 				latestMessage = <-c.Send
 			}
 
-			// Write as BinaryMessage since we marshal using MessagePack binary
+			// Write as BinaryMessage (MessagePack binary)
 			w, err := c.Conn.NextWriter(websocket.BinaryMessage)
 			if err != nil {
 				return

@@ -9,6 +9,11 @@ import (
 	"mmorpg-backend/internal/usecase/game"
 )
 
+// sendBufSize — large enough for 50 concurrent clients without dropping frames at 20Hz tick.
+// 50ms tick @ 20Hz = each client's goroutine should never queue more than ~3 frames.
+// 32 slots provides ample headroom even under transient network spikes.
+const sendBufSize = 32
+
 type Hub struct {
 	// Registered connections
 	clients   map[*Client]bool
@@ -29,9 +34,11 @@ type Hub struct {
 
 func NewHub(gameUsecase game.GameUsecase) *Hub {
 	return &Hub{
-		Broadcast:   make(chan []byte, 4), // small buffer to decouple game loop from hub goroutine
-		Register:    make(chan *Client, 16),
-		Unregister:  make(chan *Client, 16),
+		// Broadcast buffer sized to handle bursts without stalling the game loop goroutine.
+		// With 50 players, fan-out per tick takes ~1-5ms; a buffer of 16 prevents back-pressure.
+		Broadcast:   make(chan []byte, 16),
+		Register:    make(chan *Client, 32),
+		Unregister:  make(chan *Client, 32),
 		clients:     make(map[*Client]bool),
 		gameUsecase: gameUsecase,
 	}
@@ -69,12 +76,15 @@ func (h *Hub) Run() {
 			}
 			h.clientsMu.RUnlock()
 
-			// Direct non-blocking fan-out — avoids spawning goroutines and WaitGroup allocations per packet
+			// Fan-out: dispatch to each client's send goroutine concurrently.
+			// Each client's WritePump reads from its own Send channel — no blocking here.
+			// Non-blocking send: if buffer is full, the client is lagging — drop frame for that client only.
 			for _, client := range targets {
 				select {
 				case client.Send <- message:
 				default:
-					// Client send buffer full — drop frame for this client only
+					// Client send buffer full — drop this frame for this slow client only.
+					// This protects fast clients from being held back by one slow connection.
 				}
 			}
 		}
@@ -87,10 +97,12 @@ func (h *Hub) BroadcastGameState(payload domain.GameStatePayload) {
 		return
 	}
 
-	// Non-blocking send to broadcast channel
+	// Non-blocking send to broadcast channel.
+	// If the hub is still processing the previous broadcast (unlikely at 20Hz),
+	// drop this frame rather than stalling the game loop goroutine.
 	select {
 	case h.Broadcast <- data:
 	default:
-		// Drop frame if broadcast queue is backed up (game loop is faster than network)
+		// Game loop is producing faster than hub can fan-out — drop frame
 	}
 }

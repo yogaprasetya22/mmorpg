@@ -12,13 +12,20 @@ export interface PlayerNetworkState {
     gender?: string;
     username?: string;
     targetId?: string;
+    hp?: number;
+    maxHp?: number;
 }
 
+// Lean flat struct — matches the backend domain.MonsterNetworkState exactly.
+// Flat x/y/z avoids creating a nested position object during msgpack decode (GC pressure reduction).
 export interface MonsterNetworkState {
     id: string;
     name: string;
     type: string;
-    position: { x: number; y: number; z: number };
+    // Flat coordinates (not nested position object) — matches new lean backend payload
+    x: number;
+    y: number;
+    z: number;
     hp: number;
     max_hp: number;
     is_dead: boolean;
