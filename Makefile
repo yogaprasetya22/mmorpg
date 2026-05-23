@@ -14,8 +14,9 @@ PORT_FRONTEND = 3000
 BUN := $(shell command -v bun 2> /dev/null)
 RUN_FRONTEND_CMD = $(if $(BUN),bun run dev,npm run dev)
 TSC_FRONTEND_CMD = $(if $(BUN),bunx tsc --noEmit,npx tsc --noEmit)
+BUILD_FRONTEND_CMD = $(if $(BUN),bun run build,npm run build)
 
-.PHONY: all help kill kill-backend-port kill-frontend-port run run-backend run-frontend check check-backend check-frontend clean
+.PHONY: all help kill kill-backend-port kill-frontend-port run run-backend run-frontend seed-enemy check check-backend check-frontend clean build build-backend build-frontend
 
 # Default target displays the help menu
 all: help
@@ -28,10 +29,14 @@ help:
 	@echo "  make run            - Kill running ports and start BOTH services concurrently"
 	@echo "  make run-backend    - Kill port $(PORT_BACKEND) and start backend only"
 	@echo "  make run-frontend   - Kill port $(PORT_FRONTEND) and start frontend only"
+	@echo "  make seed-enemy     - Force wipe and fresh seed all 10 varied enemy configurations"
 	@echo "  make kill           - Terminate any running processes on ports $(PORT_BACKEND) & $(PORT_FRONTEND)"
 	@echo "  make check          - Run dual-engine compilation and type-safety check"
 	@echo "  make check-backend  - Compile and verify Go backend executable"
 	@echo "  make check-frontend - Run strict Next.js TypeScript typecheck"
+	@echo "  make build          - Compile both Go backend and Next.js frontend for production"
+	@echo "  make build-backend  - Compile Go backend binary"
+	@echo "  make build-frontend - Build Next.js frontend production bundle"
 	@echo "  make clean          - Clean compiled backend binary artifacts"
 	@echo "================================================================="
 
@@ -94,5 +99,24 @@ check: check-backend check-frontend
 
 clean:
 	@echo "🧹 Cleaning built server binaries..."
-	@rm -f backend/server
+	@rm -rf backend/build backend/server
 	@echo "✅ Workspace clean."
+
+seed-enemy:
+	@echo "🌱 Running Standalone Monster Seeder..."
+	@cd backend && go run cmd/seeder/main.go
+
+build-backend:
+	@echo "🏗️ Compiling Go Backend production binary..."
+	@mkdir -p backend/build
+	@cd backend && go build -v -o build/server cmd/server/main.go
+	@echo "✅ Go Backend build complete."
+
+build-frontend:
+	@echo "🏗️ Generating Next.js Frontend production build ($(BUILD_FRONTEND_CMD))..."
+	@cd frontend && $(BUILD_FRONTEND_CMD)
+	@echo "✅ Frontend Next.js build complete."
+
+build: build-backend build-frontend
+	@echo "🎉 Production build completed for both engines!"
+

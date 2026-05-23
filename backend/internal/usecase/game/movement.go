@@ -50,6 +50,14 @@ func (u *gameUsecase) UpdatePlayerMovement(playerID string, x, y, z, rotation fl
 		if healthComp, found := u.registry.GetComponent(domain.EntityID(playerID), "Health"); found {
 			h := healthComp.(*domain.HealthComponent)
 			pData.HP = h.HP
+
+			// Synchronize immediately to the real-time WebSocket state!
+			u.playersMu.Lock()
+			if pState != nil {
+				pState.HP = h.HP
+				pState.MaxHP = h.MaxHP
+			}
+			u.playersMu.Unlock()
 		}
 	}
 	u.activePlayersMu.Unlock()

@@ -17,25 +17,58 @@ This document defines the strict, high-fidelity engineering directives that **ev
 
 ## 🛠️ 2. Dual-Engine Verification Protocol
 
-After **every single modification, addition, or refactoring**, you MUST verify the compilation integrity of both engines before performing any Git actions.
-
-### Step A: Authoritative Go Backend Compilation
-Navigate to the `backend` workspace and run a complete compiler test to build a temporary executable. This ensures all struct schemas, middleware paths, GORM migration mappings, and HTTP handlers compile flawlessly:
+After **every single modification, addition, or refactoring**, and **always as the final step before concluding your turn**, you MUST run both the authoritative verification and production build commands:
 ```bash
-# Execute in: /home/yoga/Dokumen/game mmorpg/backend
-go build -o server cmd/server/main.go
+# 1. Verification checks (TypeScript & Backend compiler safety)
+make check
+
+# 2. Production build verification (Next.js production bundle & Go executable packaging)
+make build
 ```
 
-### Step B: Strict Next.js TypeScript Type-Check
-Navigate to the `frontend` workspace and trigger the TypeScript compiler in non-emitting validation mode to guarantee type-safety throughout the entire React Three Fiber, Zustand, and ECS pipeline:
-```bash
-# Execute in: /home/yoga/Dokumen/game mmorpg/frontend
-bunx tsc --noEmit
-```
+This ensures that the entire code compiles cleanly, has zero type regressions, and builds successfully into optimized production artifacts without any bundle or asset packing errors. All commands MUST pass with a green state (`Exit code: 0` / `Zero regression detected`) before concluding your turn.
 
 ---
 
-## 🌐 3. Live Server & Port Maintenance
+## ⚡ 3. High-Performance Front-End Standards
+
+To maintain a fluid **60 FPS** in complex 3D environments, all high-frequency calculations (e.g., Minimaps, floating health status, spatial tracking grids) MUST adhere to these performance patterns:
+* **Decouple from React Lifecycle**: Do not use standard React state updates (`useState`/`useContext`) inside high-frequency execution loops (such as the main WebSocket stream or `useFrame`). Doing so triggers cascading re-renders, causing severe frame drops.
+* **DOM Pooling & Ref caching**: Pool DOM elements lazily and manipulate them directly (via standard `ref.current.style` or manual DOM inserts) inside a single `requestAnimationFrame` loop.
+* **Global Exposure**: Export low-latency state variables to the global `window` object (e.g., `window.localPlayerPos`) during frame ticks so secondary high-speed overlays can query coordinate states with zero overhead.
+* **Player-Centric Shadow Mapping**: Directional lights must dynamically translate and center their shadow camera frustum directly on the local player's coordinate in real time. Downscale the shadow camera frustum bounds from `80m` to `30m` for razor-sharp shadows at a fraction of the GPU rendering cost.
+* **Adaptive Graphics Quality Scaling**: Monitor the rolling FPS rate inside a lightweight `useFrame` tracker. If performance falls below a critical threshold (e.g., 53 FPS) for more than 3 consecutive seconds (which occurs under multiplayer load or side-by-side browser viewports), programmatically disable screen-space Bloom post-processing and disable the shadow map entirely to guarantee a fluid **60 FPS**.
+
+---
+
+## ⚡ 4. Low-Latency Go WebSocket Engineering
+
+To maintain sub-millisecond network state propagation in multiplayer environments:
+* **Direct Synchronous Broadcasts**: Avoid spawning temporary Go goroutines or allocating `sync.WaitGroup` synchronization blocks on every broadcast tick to client collections.
+* **Non-Blocking Fan-Out**: Use direct, synchronous loops that perform a `select/default` send on buffered client channels. Since buffered channel writing is instantaneous (O(1)), this eliminates goroutine scheduling overhead, heap allocations, and garbage collection pauses.
+
+---
+
+## ⚡ 5. Authoritative Monster AI & State Control
+
+To maintain reliable server-authoritative combat behavior and prevent player exploits:
+* **Monster Respawning**: Monsters must always respawn back at their original `SpawnPosition` coordinate. Do not overwrite the `SpawnPosition` field with the coordinate of their death.
+* **Leash & Tethering Limits**: Monsters must have a strict leash distance (e.g., 18.0 units) from their original spawn point. If a monster exceeds this limit during chase or attack, the server must automatically clear their target (`TargetPlayerID = ""`), restore their health to full (`HP = MaxHP`), sync the updated health component to the ECS registry, and transition them back to the `"returning"` FSM state.
+
+---
+
+## 💾 6. Authoritative Database Seeding & Setup
+
+* **Idempotency Rule**: Seeding routines must be completely safe to execute repeatedly without causing duplicates. Wiping the old dataset before inserting fresh records is mandatory to maintain data cleanliness.
+* **Command Standardization**: All database seed scripts must be linked to target-oriented CLI triggers. Use the authoritative Makefile trigger to run database seed updates:
+  ```bash
+  # Clears and initializes strategic monster configurations
+  make seed-enemy
+  ```
+
+---
+
+## 🌐 7. Live Server & Port Maintenance
 
 * **Port Safety**: Do not leave stale server processes listening on port `8080` (Go GIN) or `3000` (Next.js). If you alter handlers, middlewares, or models:
   1. Find and cleanly terminate the old process using: `fuser -k 8080/tcp || true`
@@ -44,7 +77,7 @@ bunx tsc --noEmit
 
 ---
 
-## 🚀 4. Automated Git Delivery & Conventional Commits
+## 🚀 8. Automated Git Delivery & Conventional Commits
 
 Once the Go backend compiles with zero errors and the frontend TypeScript check passes with zero type-mismatches, you are authorized to stage, commit, and push changes.
 

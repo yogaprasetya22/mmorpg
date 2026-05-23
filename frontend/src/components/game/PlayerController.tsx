@@ -11,11 +11,13 @@
  * - No useState, no useRef for per-frame values (all in ECS)
  */
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useKeyboardControls, useAnimations, useGLTF } from '@react-three/drei';
 import BVHEcctrl, { useAnimationStore, characterStatus } from 'bvhecctrl';
 import * as THREE from 'three';
+import { SkeletonUtils } from 'three-stdlib';
+import { MeshoptDecoder } from 'meshoptimizer';
 import { useVFX } from './systems/VFXManager';
 import ProjectilePool, { ProjectilePoolHandle } from './systems/ProjectilePool';
 import { useStore } from '@/src/state/useStore';
@@ -165,7 +167,19 @@ export const PlayerController = ({
   const lastNearestTargetId = useRef<string>("");
 
   // ─── ASSET LOADING ────────────────────────────────────────────────────────
-  const { scene, animations } = useGLTF(modelPath);
+  const { scene, animations } = useGLTF(modelPath, true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const clone = useMemo(() => {
+    const cloned = SkeletonUtils.clone(scene);
+    cloned.traverse((child: any) => {
+      if (child.isMesh) {
+        // High fidelity shadows for local player character
+        child.castShadow = true;
+        child.receiveShadow = true;
+        child.geometry?.computeBoundingSphere?.();
+      }
+    });
+    return cloned;
+  }, [scene]);
   const { actions }           = useAnimations(animations, characterRef);
   const activeAction          = useRef<THREE.AnimationAction | null>(null);
 
@@ -252,11 +266,12 @@ export const PlayerController = ({
   const { spawnVFX } = useVFX();
   const [, getKeys]  = useKeyboardControls();
 
+  const isDead = playerStats && typeof playerStats.hp !== 'undefined' && playerStats.hp <= 0;
+
   // ─── SINGLE USEFRAME: Camera + Auto-Aim Combat (priority 1 = runs AFTER physics) ──
   useFrame((_, delta) => {
     // ─── CHECK DEATH BLOCK & RESURRECTION TELEPORT ───
     const currentHp = playerStats && typeof playerStats.hp !== 'undefined' ? playerStats.hp : 1000;
-    const isDead = playerStats && typeof playerStats.hp !== 'undefined' && playerStats.hp <= 0;
 
     // Resurrection Teleport on client side when HP resets to full
     if (lastHpRef.current <= 0 && currentHp > 0) {
@@ -271,11 +286,43 @@ export const PlayerController = ({
     }
     lastHpRef.current = currentHp;
 
+    // === CAMERA SYSTEM ===
+    _charPos.copy(characterStatus.position as THREE.Vector3);
+    (window as any).localPlayerPos = _charPos;
+    if (characterRef.current) {
+      const fwd = new THREE.Vector3(0, 0, 1);
+      fwd.applyQuaternion(characterRef.current.quaternion);
+      if (characterRef.current.parent) {
+        fwd.applyQuaternion(characterRef.current.parent.quaternion);
+      }
+      (window as any).localPlayerRotation = Math.atan2(fwd.x, fwd.z);
+    }
+
+    let groundH = _charPos.y;
+    if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
+      const raycastH = (window as any).getGroundHeight(_charPos.x, _charPos.z, -999);
+      if (raycastH !== -999) {
+        groundH = raycastH;
+      } else {
+        const activeEnv = useEditorStore.getState().environment;
+        const terrainConfig = useEditorStore.getState().terrainConfig;
+        const baseDistance = (activeEnv === "STORM" || activeEnv === "RAIN" || activeEnv === "THUNDER" || activeEnv === "CLEAR") ? 45.0 : 35.0;
+        groundH = getTerrainElevation(_charPos.x, _charPos.z, activeEnv, baseDistance, terrainConfig);
+      }
+    } else {
+      const activeEnv = useEditorStore.getState().environment;
+      const terrainConfig = useEditorStore.getState().terrainConfig;
+      const baseDistance = (activeEnv === "STORM" || activeEnv === "RAIN" || activeEnv === "THUNDER" || activeEnv === "CLEAR") ? 45.0 : 35.0;
+      groundH = getTerrainElevation(_charPos.x, _charPos.z, activeEnv, baseDistance, terrainConfig);
+    }
+
     if (isDead) {
-      // Lock horizontal velocity only — let gravity (Y) run freely
-      const vel = characterStatus.linvel;
-      ecctrlRef.current?.setLinVel({ x: 0, y: vel.y, z: 0 } as any);
-      ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+      // Force zero velocity and lock to ground to prevent gliding
+      if (ecctrlRef.current) {
+        ecctrlRef.current.resetLinVel();
+        ecctrlRef.current.setMovement?.({ joystick: { x: 0, y: 0 } });
+        ecctrlRef.current.group.position.y = groundH;
+      }
       
       charState[0] = 0; // Return to normal state
       
@@ -301,53 +348,25 @@ export const PlayerController = ({
           activeAction.current = idleAction;
         }
       }
-      return;
-    }
-
-    // Get dynamic attack range squared based on class
-    let activeRangeSq = 81.0; // Default Marksman / MM (9.0m)
-    if (playerClass === "Warrior") {
-      activeRangeSq = 12.25;    // Fighter (Melee 3.5 meters) - sync with backend monster attack range!
-    } else if (playerClass === "Thief") {
-      activeRangeSq = 10.89;    // Assassin (Melee 3.3 meters)
-    } else if (playerClass === "Priest") {
-      activeRangeSq = 14.44;    // Tank (Melee 3.8 meters)
-    } else if (playerClass === "Mage") {
-      activeRangeSq = 64.0;    // Mage (Ranged 8.0 meters)
-    } else if (playerClass === "Beginner") {
-      activeRangeSq = 81.0;    // Marksman / MM (Ranged 9.0 meters)
-    }
-
-    // === CAMERA SYSTEM ===
-    _charPos.copy(characterStatus.position as THREE.Vector3);
-    (window as any).localPlayerPos = _charPos;
-
-    // Failsafe: Snapping player back up if they fall below the sculpted ground level
-    const activeEnv = useEditorStore.getState().environment;
-    const terrainConfig = useEditorStore.getState().terrainConfig;
-    const baseDistance = (activeEnv === "STORM" || activeEnv === "RAIN" || activeEnv === "THUNDER" || activeEnv === "CLEAR") ? 45.0 : 35.0;
-    const mathElev = getTerrainElevation(_charPos.x, _charPos.z, activeEnv, baseDistance, terrainConfig);
-    const groundH = typeof window !== 'undefined' && (window as any).getGroundHeight
-      ? (window as any).getGroundHeight(_charPos.x, _charPos.z, mathElev)
-      : mathElev;
-
-    // Failsafe: Snapping player back up if they fall below the sculpted ground level
-    if (!isDead && _charPos.y < groundH - 12.0) {
-      if (ecctrlRef.current) {
-        // Give BVHEcctrl float spring enough clearance to settle (avoid re-clipping)
-        ecctrlRef.current.group.position.y = groundH + 5.0;
-        ecctrlRef.current.resetLinVel();
-        _charPos.y = groundH + 5.0;
-        console.warn("⚠️ Player fell through map! Snapped back to ground height:", groundH + 5.0);
-      }
-    } else if (!isDead && _charPos.y < groundH - 0.05) {
-      // Real-time anti-penetration: Push player up to terrain surface immediately if they clip
-      if (ecctrlRef.current) {
-        ecctrlRef.current.group.position.y = groundH;
-        _charPos.y = groundH;
-        if (ecctrlRef.current.setLinVel) {
-          const currentVel = characterStatus.linvel;
-          ecctrlRef.current.setLinVel(new THREE.Vector3(currentVel.x, Math.max(0, currentVel.y), currentVel.z));
+    } else {
+      // Failsafe: Snapping player back up if they fall below the sculpted ground level
+      if (_charPos.y < groundH - 12.0) {
+        if (ecctrlRef.current) {
+          // Give BVHEcctrl float spring enough clearance to settle (avoid re-clipping)
+          ecctrlRef.current.group.position.y = groundH + 5.0;
+          ecctrlRef.current.resetLinVel();
+          _charPos.y = groundH + 5.0;
+          console.warn("⚠️ Player fell through map! Snapped back to ground height:", groundH + 5.0);
+        }
+      } else if (_charPos.y < groundH - 0.05) {
+        // Real-time anti-penetration: Push player up to terrain surface immediately if they clip
+        if (ecctrlRef.current) {
+          ecctrlRef.current.group.position.y = groundH;
+          _charPos.y = groundH;
+          if (ecctrlRef.current.setLinVel) {
+            const currentVel = characterStatus.linvel;
+            ecctrlRef.current.setLinVel(new THREE.Vector3(currentVel.x, Math.max(0, currentVel.y), currentVel.z));
+          }
         }
       }
     }
@@ -416,7 +435,7 @@ export const PlayerController = ({
     _raycaster.set(_rayOrigin, _rayDir);
     _raycaster.far = camZoom[0];
 
-    const colliders = (window as any).globalColliders || [];
+    const colliders = ((window as any).globalColliders || []).filter((c: any) => !c.isInstancedMesh);
     const intersects = _raycaster.intersectObjects(colliders, false);
 
     if (intersects.length > 0) {
@@ -493,7 +512,22 @@ export const PlayerController = ({
     _lookAt.set(lookAtX[0], lookAtY[0], lookAtZ[0]);
     camera.lookAt(_lookAt);
 
-    const now = performance.now();
+    if (!isDead) {
+      // Get dynamic attack range squared based on class
+      let activeRangeSq = 81.0; // Default Marksman / MM (9.0m)
+      if (playerClass === "Warrior") {
+        activeRangeSq = 12.25;    // Fighter (Melee 3.5 meters) - sync with backend monster attack range!
+      } else if (playerClass === "Thief") {
+        activeRangeSq = 10.89;    // Assassin (Melee 3.3 meters)
+      } else if (playerClass === "Priest") {
+        activeRangeSq = 14.44;    // Tank (Melee 3.8 meters)
+      } else if (playerClass === "Mage") {
+        activeRangeSq = 64.0;    // Mage (Ranged 8.0 meters)
+      } else if (playerClass === "Beginner") {
+        activeRangeSq = 81.0;    // Marksman / MM (Ranged 9.0 meters)
+      }
+
+      const now = performance.now();
 
     // ── Find Lowest-HP Enemy Unit within Range ──
     hasTarget[0] = 0;
@@ -809,6 +843,7 @@ export const PlayerController = ({
       const resetLerpT = Math.min(1, 10 * delta);
       characterRef.current.rotation.y += (0 - characterRef.current.rotation.y) * resetLerpT;
     }
+    }
   }, 1); // priority 1: runs AFTER physics tick so characterStatus is fresh
 
   // ─── RENDER ──────────────────────────────────────────────────────────────
@@ -822,7 +857,7 @@ export const PlayerController = ({
 
       <BVHEcctrl
         ref={ecctrlRef}
-        paused={paused}
+        paused={paused || isDead}
         position={[0, 8, 0]}
         /* ── Collider ── */
         colliderCapsuleArgs={[0.4, 1.2, 4, 8]}
@@ -852,7 +887,7 @@ export const PlayerController = ({
         collisionPushBackThreshold={0.01}
       >
         <group ref={characterRef} dispose={null} position={[0, -1.3, 0]}>
-          <primitive object={scene} />
+          <primitive object={clone} />
         </group>
       </BVHEcctrl>
     </>

@@ -3,7 +3,6 @@ package game
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"sync"
 	"time"
@@ -91,42 +90,59 @@ func (u *gameUsecase) initMonsters() {
 	if err != nil || len(configs) == 0 {
 		fmt.Printf("⚠️ Gagal mengambil konfigurasi monster dari database (atau kosong): %v. Menggunakan fallback spawn!\n", err)
 		u.SpawnMonster("Wicked Zombie Queen", "boss", 0.0, 0.0, 10.0)
-		u.SpawnMonster("Jelly Slime 1", "slime", -10.0, 0.0, -10.0)
-		u.SpawnMonster("Scavenger Goblin 2", "goblin", 15.0, 0.0, -15.0)
-		u.SpawnMonster("Orc Vanguard 3", "orc", 10.0, 0.0, 20.0)
+		u.SpawnMonster("Jelly Slime", "slime", -25.0, 0.0, -25.0)
+		u.SpawnMonster("Wild Boar", "default", 25.0, 0.0, -25.0)
+		u.SpawnMonster("Scavenger Goblin", "goblin", -25.0, 0.0, 25.0)
+		u.SpawnMonster("Goblin Scout Archer", "goblin_archer", 25.0, 0.0, 25.0)
+		u.SpawnMonster("Orc Vanguard", "orc", 0.0, 0.0, -35.0)
+		u.SpawnMonster("Elite Goblin Commander", "goblin_chief", -35.0, 0.0, 0.0)
+		u.SpawnMonster("Raging Orc Berserker", "orc_berserker", 35.0, 0.0, 0.0)
+		u.SpawnMonster("Mystic Orc Shaman", "orc_shaman", 0.0, 0.0, 35.0)
+		u.SpawnMonster("Dark Skeleton Soldier", "skeleton", -15.0, 0.0, 15.0)
 		return
 	}
 
-	fmt.Printf("🌱 Menghidupkan spawner monster dinamis berdasarkan database GORM (%d tipe terdaftar)...\n", len(configs))
+	fmt.Printf("🌱 Menghidupkan 10 spawner monster dinamis bervariasi berdasarkan database GORM (%d tipe terdaftar)...\n", len(configs))
 
-	regularCount := 0
-	for _, cfg := range configs {
-		if cfg.Type == "boss" {
-			// Spawn Legendary Boss at center coordinates
-			u.SpawnMonster(cfg.Name, cfg.Type, 0.0, 0.0, 10.0)
-			fmt.Printf("👾 Spawned BOSS: %s di posisi center (0.0, 10.0)\n", cfg.Name)
-		} else {
-			// Spawn 2 to 3 regular instances for each database configuration type
-			numSpawns := 2
-			if cfg.Type == "slime" || cfg.Type == "default" {
-				numSpawns = 3
-			}
-
-			for i := 0; i < numSpawns; i++ {
-				regularCount++
-				angle := float64(rand.Intn(360)) * 3.14159 / 180.0
-				radius := float32(10 + rand.Intn(30)) // Spaced 10 to 40 units from center
-				x := float32(math.Cos(angle)) * radius
-				y := float32(0.0)
-				z := float32(math.Sin(angle)) * radius
-
-				name := fmt.Sprintf("%s %d", cfg.Name, i+1)
-				u.SpawnMonster(name, cfg.Type, x, y, z)
-			}
-		}
+	// Define 10 distinct coordinates spread across the world map
+	spawns := []struct {
+		mType string
+		x     float32
+		z     float32
+	}{
+		{"boss", 0.0, 10.0},
+		{"slime", -25.0, -25.0},
+		{"default", 25.0, -25.0},
+		{"goblin", -25.0, 25.0},
+		{"goblin_archer", 25.0, 25.0},
+		{"orc", 0.0, -35.0},
+		{"goblin_chief", -35.0, 0.0},
+		{"orc_berserker", 35.0, 0.0},
+		{"orc_shaman", 0.0, 35.0},
+		{"skeleton", -15.0, 15.0},
 	}
 
-	fmt.Printf("👾 Total %d monster reguler dan boss dinamis berhasil di-spawn berdasarkan database GORM!\n", regularCount)
+	// Create a fast lookup map for configs
+	configMap := make(map[string]domain.MonsterConfig)
+	for _, cfg := range configs {
+		configMap[cfg.Type] = cfg
+	}
+
+	spawnedCount := 0
+	for _, s := range spawns {
+		cfg, exists := configMap[s.mType]
+		if !exists {
+			name := fmt.Sprintf("Monster %s", s.mType)
+			u.SpawnMonster(name, s.mType, s.x, 0.0, s.z)
+			spawnedCount++
+			continue
+		}
+		u.SpawnMonster(cfg.Name, cfg.Type, s.x, 0.0, s.z)
+		spawnedCount++
+		fmt.Printf("👾 Spawned %s (%s) di posisi (%.1f, %.1f)\n", cfg.Name, cfg.Type, s.x, s.z)
+	}
+
+	fmt.Printf("👾 Total %d monster bervariasi berhasil di-spawn di titik yang berbeda!\n", spawnedCount)
 }
 
 func (u *gameUsecase) SpawnMonster(name string, mType string, x, y, z float32) string {
@@ -382,6 +398,8 @@ func (u *gameUsecase) RegisterPlayer(playerID string, username string) {
 		Class:     pData.Class,
 		Gender:    pData.Gender,
 		Username:  pData.Username,
+		HP:        pData.HP,
+		MaxHP:     pData.MaxHP,
 	}
 	u.players[playerID] = state
 

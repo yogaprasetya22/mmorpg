@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, Suspense } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF, useAnimations, Text } from "@react-three/drei";
 import * as THREE from 'three';
 import { SkeletonUtils } from 'three-stdlib';
+import { MeshoptDecoder } from 'meshoptimizer';
 import { PlayerNetworkState } from "@/src/hooks/useWebSocketGame";
 import { UnitRuntimeData } from "@/src/core/domain/unit.types";
 
@@ -55,7 +56,7 @@ export const RemotePlayerInstance = ({
     return '/assets-model/Knight_Golden_Male.glb';
   }, [cls, gender, gameConfig]);
 
-  const { scene, animations } = useGLTF(modelPath) as any;
+  const { scene, animations } = useGLTF(modelPath, true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
   const clone = useMemo(() => {
     const cloned = SkeletonUtils.clone(scene);
     cloned.traverse((child: any) => {
@@ -564,23 +565,25 @@ export const RemotePlayersRenderer = ({
   return (
     <group>
       {activeRemotePlayers.map((player) => (
-        <RemotePlayerInstance
-          key={player.id}
-          id={player.id}
-          username={player.username}
-          cls={player.class}
-          gender={player.gender}
-          connectedPlayersRef={connectedPlayersRef}
-          playerMapRef={playerMapRef}
-          camera={camera}
-          gameConfig={gameConfig}
-          mmSpellsRef={mmSpellsRef}
-          spellsRef={spellsRef}
-          fighterSpellsRef={fighterSpellsRef}
-          tankSpellsRef={tankSpellsRef}
-          assassinSpellsRef={assassinSpellsRef}
-          unitRegistry={unitRegistry}
-        />
+        <Suspense key={player.id} fallback={null}>
+          <RemotePlayerInstance
+            key={player.id}
+            id={player.id}
+            username={player.username}
+            cls={player.class}
+            gender={player.gender}
+            connectedPlayersRef={connectedPlayersRef}
+            playerMapRef={playerMapRef}
+            camera={camera}
+            gameConfig={gameConfig}
+            mmSpellsRef={mmSpellsRef}
+            spellsRef={spellsRef}
+            fighterSpellsRef={fighterSpellsRef}
+            tankSpellsRef={tankSpellsRef}
+            assassinSpellsRef={assassinSpellsRef}
+            unitRegistry={unitRegistry}
+          />
+        </Suspense>
       ))}
     </group>
   );

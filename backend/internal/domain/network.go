@@ -11,6 +11,8 @@ type PlayerNetworkState struct {
 	Gender    string  `json:"gender" msgpack:"gender"`
 	Username  string  `json:"username" msgpack:"username"`
 	TargetID  string  `json:"targetId" msgpack:"targetId"`
+	HP        float32 `json:"hp" msgpack:"hp"`
+	MaxHP     float32 `json:"maxHp" msgpack:"maxHp"`
 }
 
 type GameStatePayload struct {

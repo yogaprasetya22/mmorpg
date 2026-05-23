@@ -86,6 +86,71 @@ const SceneAnalyzer = () => {
   return null;
 };
 
+/**
+ * AdaptivePerformanceOptimizer - High-Fidelity Dynamic Graphics Scaling
+ * Monitors FPS in real-time. If performance drops below 53 FPS consistently
+ * (e.g., when running multiple side-by-side browser viewports), it dynamically
+ * disables shadow maps and screen-space Bloom post-processing to restore a stable 60 FPS.
+ */
+interface AdaptivePerformanceOptimizerProps {
+  settingsRef: React.RefObject<any>;
+  adaptivePotatoMode: boolean;
+  setAdaptivePotatoMode: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+const AdaptivePerformanceOptimizer = ({
+  settingsRef,
+  adaptivePotatoMode,
+  setAdaptivePotatoMode
+}: AdaptivePerformanceOptimizerProps) => {
+  const { gl } = useThree();
+  const lastTime = useRef(performance.now());
+  const frameCount = useRef(0);
+  const struggleSeconds = useRef(0);
+  const healthySeconds = useRef(0);
+
+  useFrame(() => {
+    const now = performance.now();
+    frameCount.current++;
+
+    if (now - lastTime.current >= 1000) {
+      const fps = (frameCount.current * 1000) / (now - lastTime.current);
+      frameCount.current = 0;
+      lastTime.current = now;
+
+      // Log frame diagnostics to settings for tuning
+      if (settingsRef.current) {
+        if (!settingsRef.current.telemetry) settingsRef.current.telemetry = {};
+        settingsRef.current.telemetry.fps = Math.round(fps);
+      }
+
+      if (fps < 53) {
+        struggleSeconds.current++;
+        healthySeconds.current = 0;
+
+        // After 3 seconds of struggling FPS, scale down graphics properties
+        if (struggleSeconds.current >= 3 && !adaptivePotatoMode) {
+          console.warn(`⚠️ Adaptive Graphics: Performance drop detected (~${Math.round(fps)} FPS). Dynamic scaling active: Disabling Bloom and Shadows.`);
+          setAdaptivePotatoMode(true);
+          gl.shadowMap.enabled = false;
+        }
+      } else if (fps >= 58) {
+        healthySeconds.current++;
+        struggleSeconds.current = 0;
+
+        // If performance has stabilized and is highly consistent for 8 seconds, restore higher-fidelity settings
+        if (healthySeconds.current >= 8 && adaptivePotatoMode && !settingsRef.current.potatoMode) {
+          console.log("✨ Adaptive Graphics: Performance stabilized. Restoring high-fidelity Bloom and Shadows.");
+          setAdaptivePotatoMode(false);
+          gl.shadowMap.enabled = true;
+        }
+      }
+    }
+  });
+
+  return null;
+};
+
 interface GameCanvasProps {
   isCinematic: boolean;
   setMapObstacles: (obs: MapObstacle[]) => void;
@@ -109,6 +174,7 @@ export const GameCanvas = React.memo(({
 }: GameCanvasProps) => {
   const [dpr, setDpr] = useState(1.0);
   const [envReady, setEnvReady] = useState(false); // Terrain BVH readiness gate
+  const [adaptivePotatoMode, setAdaptivePotatoMode] = useState(false);
   const isSettingsOpen = useStore(s => s.isSettingsOpen);
   const selectedMapId = useEditorStore(s => s.selectedMapId);
 
@@ -282,6 +348,11 @@ export const GameCanvas = React.memo(({
           className="select-none touch-none w-full h-full"
         >
           <SceneAnalyzer />
+          <AdaptivePerformanceOptimizer
+            settingsRef={settingsRef}
+            adaptivePotatoMode={adaptivePotatoMode}
+            setAdaptivePotatoMode={setAdaptivePotatoMode}
+          />
           <PerformanceMonitor onIncline={() => setDpr(Math.min(dpr + 0.05, 0.9))} onDecline={() => setDpr(Math.max(dpr - 0.05, 0.6))} />
 
           <AdaptiveEvents />
@@ -333,7 +404,7 @@ export const GameCanvas = React.memo(({
 
 
 
-          {!settingsRef.current.potatoMode && (
+          {!settingsRef.current.potatoMode && !adaptivePotatoMode && (
             <EffectComposer enableNormalPass={false} multisampling={0}>
               <Bloom luminanceThreshold={1.0} mipmapBlur intensity={0.5} radius={0.4} />
               <ToneMapping adaptive={false} />

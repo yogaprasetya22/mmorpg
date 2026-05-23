@@ -7,9 +7,10 @@ import { useWebSocketGame, PlayerNetworkState, MonsterNetworkState, GameStatePay
 import { PlayerController, keyboardMap } from "@/src/components/game/PlayerController";
 import { RemotePlayersRenderer } from "@/src/components/game/RemotePlayersRenderer";
 import { RemoteMonstersRenderer } from "@/src/components/game/RemoteMonstersRenderer";
+import { Minimap } from "@/src/components/game/Minimap";
 import { EnvironmentMultiGlobal } from "@/src/components/game/environment/EnvironmentMultiGlobal";
 import { ModularMap } from "@/src/components/game/environment/ModularMap";
-import { Sword, Shield, User, Key, Users, RefreshCw, Trophy, Zap, Sparkles, LogOut, Skull, Target, MessageSquare, Activity, X } from "lucide-react";
+import { Sword, Shield, User, Key, Users, RefreshCw, Trophy, Zap, Sparkles, LogOut, Skull, Target, Activity, X } from "lucide-react";
 import * as THREE from 'three';
 import { useEditorStore } from "@/src/state/useEditorStore";
 import { EffectComposer, Bloom, ToneMapping } from "@react-three/postprocessing";
@@ -40,7 +41,7 @@ export const CLASS_LABELS: Record<string, string> = {
   Thief: "Assassin"
 };
 
-const FPSCounterUpdater = ({ onFpsUpdate }: { onFpsUpdate: (fps: number) => void }) => {
+const FPSCounterUpdater = () => {
   const lastTime = useRef(performance.now());
   const frameCount = useRef(0);
 
@@ -49,13 +50,33 @@ const FPSCounterUpdater = ({ onFpsUpdate }: { onFpsUpdate: (fps: number) => void
     const now = performance.now();
     if (now >= lastTime.current + 1000) {
       const calculatedFps = Math.round((frameCount.current * 1000) / (now - lastTime.current));
-      onFpsUpdate(calculatedFps);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('fps-update', { detail: calculatedFps }));
+      }
       frameCount.current = 0;
       lastTime.current = now;
     }
   });
 
   return null;
+};
+
+const FPSBadge = () => {
+  const [fps, setFps] = useState(60);
+  useEffect(() => {
+    const handler = (e: Event) => {
+      setFps((e as CustomEvent).detail);
+    };
+    window.addEventListener('fps-update', handler);
+    return () => window.removeEventListener('fps-update', handler);
+  }, []);
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className={`w-2 h-2 rounded-full ${fps >= 55 ? "bg-emerald-400 animate-pulse" : fps >= 30 ? "bg-amber-400" : "bg-red-400"}`} />
+      <span className={`text-[10px] font-black ${fps >= 55 ? "text-emerald-400" : fps >= 30 ? "text-amber-400" : "text-red-400"}`}>{fps} FPS</span>
+    </div>
+  );
 };
 
 // --- ExposureBridge: sync toneMappingExposure inside Canvas (mirrors World-Editor VisualTuningBridge) ---
@@ -67,6 +88,35 @@ const ExposureBridge = ({ exposure }: { exposure: number }) => {
   return null;
 };
 
+// --- Models Preloader using React Suspense & GLTFLoader Cache ---
+const ModelsPreloader = ({ onReady }: { onReady: () => void }) => {
+  // Preload all character models
+  useGLTF('/assets-model/Chef_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  useGLTF('/assets-model/Chef_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  useGLTF('/assets-model/Knight_Golden_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  useGLTF('/assets-model/Knight_Golden_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  useGLTF('/assets-model/Wizard.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  useGLTF('/assets-model/Witch.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  useGLTF('/assets-model/Viking_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  useGLTF('/assets-model/Viking_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  useGLTF('/assets-model/Ninja_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  useGLTF('/assets-model/Ninja_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  useGLTF('/assets-model/Knight_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  useGLTF('/assets-model/Cowboy_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+
+  // Preload all monster models
+  useGLTF('/assets-model/Goblin_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  useGLTF('/assets-model/Goblin_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  useGLTF('/assets-model/Zombie_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  useGLTF('/assets-model/Zombie_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+
+  useEffect(() => {
+    onReady();
+  }, [onReady]);
+
+  return null;
+};
+
 // --- Camera Director for Epic Endings & Shake ---
 const CameraDirector = () => {
   return null;
@@ -75,13 +125,27 @@ const CameraDirector = () => {
 export default function MultiplayerArena() {
   const selectedMapId = useEditorStore(s => s.selectedMapId);
   const [envReady, setEnvReady] = useState(false);
+  const [envFinished, setEnvFinished] = useState(false);
+  const [modelsReady, setModelsReady] = useState(false);
+
+  useEffect(() => {
+    if (!envReady) {
+      setEnvFinished(false);
+      setModelsReady(false);
+    }
+  }, [envReady]);
+
+  useEffect(() => {
+    if (envFinished && modelsReady) {
+      setEnvReady(true);
+    }
+  }, [envFinished, modelsReady]);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [token, setToken] = useState("");
   const [characters, setCharacters] = useState<any[]>([]);
   const [selectedCharacter, setSelectedCharacter] = useState<any>(null);
   const [gameConfig, setGameConfig] = useState<any>(null);
-  const [fps, setFps] = useState(60);
   // DPR default 0.75: balances quality vs performance for low-spec laptops.
   // PerformanceMonitor will increase it dynamically if GPU can handle more.
   const [dpr, setDpr] = useState(0.75);
@@ -101,11 +165,20 @@ export default function MultiplayerArena() {
   const [editingMonster, setEditingMonster] = useState<any>(null);
   const [playerCount, setPlayerCount] = useState(1);
   const [aliveMonsterCount, setAliveMonsterCount] = useState(10);
+  const [chatInput, setChatInput] = useState("");
+  const [chatMessages, setChatMessages] = useState<{type: string; name?: string; msg: string}[]>([
+    { type: "system", msg: "Selamat datang di Arena! Basmi monster di sekitarmu." },
+    { type: "info", msg: "Tekan Q untuk skill, WASD bergerak, mouse untuk bidik." },
+  ]);
+  const [isAutoMode, setIsAutoMode] = useState(false);
+  const [showMiniActions, setShowMiniActions] = useState(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   
   // Pure mouse-drag looking system active (Pointer Lock removed as requested)
 
   // Local damage screenshake monitor
   const lastPlayerHp = useRef(0);
+  const playerStatsRef = useRef({ hp: -1, maxHp: -1 });
   useEffect(() => {
     if (playerStats) {
       if (lastPlayerHp.current > 0 && playerStats.hp < lastPlayerHp.current) {
@@ -307,6 +380,25 @@ export default function MultiplayerArena() {
       connectedPlayersRef.current = payload.players;
       worldMonstersRef.current = payload.monsters;
 
+      // Extract local player real-time HP from WebSocket
+      const me = payload.players.find(p => p.id === (selectedCharacter?.id || ""));
+      if (me && typeof (me as any).hp !== "undefined") {
+        const rawHP = (me as any).hp;
+        const rawMaxHP = (me as any).maxHp;
+        if (playerStatsRef.current.hp !== rawHP || playerStatsRef.current.maxHp !== rawMaxHP) {
+          playerStatsRef.current.hp = rawHP;
+          playerStatsRef.current.maxHp = rawMaxHP;
+          setPlayerStats((prev: any) => {
+            if (!prev) return { hp: rawHP, max_hp: rawMaxHP, level: selectedCharacter?.level || 1, gold: 0, mp: 50, max_mp: 50, username: selectedCharacter?.username || "Hero" };
+            return {
+              ...prev,
+              hp: rawHP,
+              max_hp: rawMaxHP,
+            };
+          });
+        }
+      }
+
       // Remote players list: only diff-check and re-render when player roster changes
       const remotes = payload.players.filter(p => p.id !== (selectedCharacter?.id || ""));
       const nextHash = remotes.map(p => `${p.id}-${p.class}-${p.gender}`).join(",");
@@ -367,6 +459,10 @@ export default function MultiplayerArena() {
         if (response.ok) {
           const data = await response.json();
           setPlayerStats(data.player);
+          if (data.player) {
+            playerStatsRef.current.hp = data.player.hp;
+            playerStatsRef.current.maxHp = data.player.max_hp;
+          }
         } else if (response.status === 401) {
           handleLogout();
         }
@@ -1108,14 +1204,17 @@ export default function MultiplayerArena() {
 
             <VFXProvider>
               <CameraDirector />
-              <FPSCounterUpdater onFpsUpdate={setFps} />
+              <FPSCounterUpdater />
+              {/* Models Preloader */}
+              <ModelsPreloader onReady={() => setModelsReady(true)} />
+
               {/* Environment Scene */}
               <EnvironmentMultiGlobal
                 settingsRef={settingsRef}
                 debug={false}
                 onReady={() => {
                   setTimeout(() => {
-                    setEnvReady(true);
+                    setEnvFinished(true);
                   }, 600);
                 }}
               />
@@ -1232,300 +1331,288 @@ export default function MultiplayerArena() {
 
       {/* MULTIPLAYER HUD OVERLAY */}
       <div className="absolute inset-0 pointer-events-none z-10 select-none">
-        
-        {/* CENTER SCREEN: No Target Warning Overlay Toast */}
-        <div 
-          id="no-target-alert"
-          className="absolute top-[35%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-500/90 backdrop-blur-md border border-red-400/30 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl shadow-2xl transition-all duration-300 pointer-events-none opacity-0 flex items-center gap-2"
-          style={{ transition: 'opacity 0.25s ease-in-out' }}
-        >
+
+        {/* No-target alert toast */}
+        <div id="no-target-alert" className="absolute top-[35%] left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-500/90 backdrop-blur-md border border-red-400/30 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl shadow-2xl pointer-events-none opacity-0 flex items-center gap-2" style={{transition:'opacity 0.25s ease-in-out'}}>
           <span className="animate-pulse">⚠️</span> BUTUH TARGET ENEMY UNTUK SKILL!
         </div>
 
-        {/* TOP-LEFT: Seal M Circular Avatar Profile & HP/MP Bars */}
-        <div className="absolute left-6 top-6 flex items-start gap-3 pointer-events-auto">
-          {/* Avatar frame (Click to toggle Status Modal) */}
-          <div 
-            className="relative cursor-pointer group hover:scale-105 active:scale-95 transition-all duration-200"
-            onClick={() => setShowStatsModal(true)}
-            title="Klik untuk membuka status karakter"
+        {/* ── TOP-LEFT: Avatar + HP/MP/EXP ── */}
+        <div className="absolute left-3 top-3 flex items-center gap-2.5 pointer-events-auto">
+          {/* Avatar ring */}
+          <div className="relative cursor-pointer" onClick={() => setShowStatsModal(true)}>
+            <div className="w-[62px] h-[62px] rounded-full bg-gradient-to-br from-emerald-400 via-cyan-500 to-indigo-600 p-[3px] shadow-[0_0_18px_rgba(16,185,129,0.45)]">
+              <div className="w-full h-full rounded-full bg-[#0d1117] flex items-center justify-center overflow-hidden">
+                <User className="w-7 h-7 text-cyan-300" />
+              </div>
+            </div>
+            {/* Level badge */}
+            <div className="absolute -bottom-1 -right-1 w-[22px] h-[22px] rounded-full bg-gradient-to-br from-amber-400 to-orange-500 border-2 border-[#0d1117] flex items-center justify-center text-[9px] font-black text-black shadow-lg">
+              {playerStats?.level ?? selectedCharacter?.level ?? 1}
+            </div>
+            {/* EXP arc border thin overlay */}
+            <div className="absolute inset-0 rounded-full border-2 border-emerald-400/20 pointer-events-none" />
+          </div>
+
+          {/* Name + CP + HP/MP bars */}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[13px] font-black text-white drop-shadow-md tracking-tight">
+                {playerStats?.username ?? selectedCharacter?.username ?? "Hero"}
+              </span>
+              <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[8px] font-black px-2 py-0.5 rounded-md tracking-wider">
+                CP {((playerStats?.level ?? 1) * 350 + 742).toLocaleString()}
+              </span>
+            </div>
+            {/* HP bar */}
+            <div className="w-48 h-[14px] rounded-full bg-black/70 border border-white/10 overflow-hidden relative shadow-inner">
+              <div
+                className="h-full bg-gradient-to-r from-green-600 via-emerald-400 to-green-500 rounded-full transition-all duration-300 shadow-[0_0_6px_rgba(16,185,129,0.5)]"
+                style={{width:`${Math.max(0,Math.min(100,((playerStats?.hp??selectedCharacter?.hp??100)/(playerStats?.max_hp??selectedCharacter?.max_hp??100))*100))}%`}}
+              />
+              <span className="absolute inset-0 flex items-center justify-center text-[8px] font-black text-white drop-shadow">
+                {Math.round(playerStats?.hp??100)} / {Math.round(playerStats?.max_hp??100)}
+              </span>
+            </div>
+            {/* MP bar */}
+            <div className="w-48 h-[10px] rounded-full bg-black/70 border border-white/10 overflow-hidden relative shadow-inner">
+              <div
+                className="h-full bg-gradient-to-r from-blue-600 via-sky-400 to-blue-500 rounded-full transition-all duration-300 shadow-[0_0_6px_rgba(59,130,246,0.4)]"
+                style={{width:`${Math.max(0,Math.min(100,((playerStats?.mp??selectedCharacter?.mp??50)/(playerStats?.max_mp??selectedCharacter?.max_mp??50))*100))}%`}}
+              />
+              <span className="absolute inset-0 flex items-center justify-center text-[7px] font-black text-white drop-shadow">
+                {Math.round(playerStats?.mp??50)} / {Math.round(playerStats?.max_mp??50)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── TOP-CENTER: Currency bar ── */}
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-black/55 backdrop-blur-xl border border-white/10 px-4 py-1.5 rounded-2xl shadow-xl pointer-events-auto">
+          <div className="flex items-center gap-1.5">
+            <span className="w-5 h-5 rounded-full bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center text-[9px] font-black text-black shadow">S</span>
+            <span className="text-[11px] font-black text-amber-400">{(playerStats?.gold??2048).toLocaleString()}</span>
+          </div>
+          <div className="w-px h-4 bg-white/10" />
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm">💎</span>
+            <span className="text-[11px] font-black text-pink-400">88</span>
+          </div>
+          <div className="w-px h-4 bg-white/10" />
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm">🔷</span>
+            <span className="text-[11px] font-black text-cyan-400">150</span>
+          </div>
+          <div className="w-px h-4 bg-white/10" />
+          <FPSBadge />
+        </div>
+
+        {/* ── TOP-RIGHT: Mini-map + Server info + Actions ── */}
+        <div className="absolute right-3 top-3 flex flex-col items-end gap-2 pointer-events-auto">
+          {/* Mini-map circle */}
+          {/* Mini-map circle */}
+          <Minimap
+            connectedPlayersRef={connectedPlayersRef}
+            worldMonstersRef={worldMonstersRef}
+            localPlayerId={selectedCharacter?.id || ""}
+            mapId={selectedMapId || "Starter Zone"}
+          />
+
+          {/* Server info pills */}
+          <div className="flex gap-1.5 mt-6">
+            <div className="bg-black/55 backdrop-blur-md border border-white/10 px-2.5 py-1 rounded-lg flex items-center gap-1">
+              <Users className="w-3 h-3 text-cyan-400" />
+              <span className="text-[9px] font-black text-white">{playerCount}</span>
+            </div>
+            <div className="bg-black/55 backdrop-blur-md border border-white/10 px-2.5 py-1 rounded-lg flex items-center gap-1">
+              <Skull className="w-3 h-3 text-red-400 animate-pulse" />
+              <span className="text-[9px] font-black text-white">{aliveMonsterCount}</span>
+            </div>
+          </div>
+
+          {/* Mini action burger */}
+          <button
+            onClick={() => setShowMiniActions(v=>!v)}
+            className="bg-black/55 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-xl text-[8px] font-black text-zinc-300 hover:text-white flex items-center gap-1.5 transition-all"
           >
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 p-0.5 border-2 border-white/20 shadow-2xl flex items-center justify-center group-hover:shadow-cyan-500/20 group-hover:border-cyan-400/40 transition-all">
-              <div className="w-full h-full rounded-full bg-zinc-950/80 flex items-center justify-center text-cyan-400">
-                <User className="w-8 h-8 text-indigo-300 group-hover:text-cyan-400 transition-colors" />
-              </div>
+            <span>☰</span> MENU
+          </button>
+          {showMiniActions && (
+            <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-2 duration-150">
+              <button onClick={handleSwitchCharacter} className="bg-cyan-500/15 border border-cyan-500/30 px-3 py-1.5 rounded-xl text-[8.5px] font-black text-cyan-400 flex items-center gap-1.5 transition-all hover:bg-cyan-500/25">
+                <Users className="w-3 h-3"/> Ganti Kelas
+              </button>
+              <button onClick={async()=>{const s=useEditorStore.getState();let l=s.mapList;if(!l.length){await s.fetchMapList();l=s.mapList;}if(l.length>1){const i=l.findIndex(m=>m.id===s.selectedMapId);setEnvReady(false);await s.setSelectedMapId(l[(i+1)%l.length].id);}else{setEnvReady(false);await s.loadFromDatabase();}}} className="bg-indigo-500/15 border border-indigo-500/30 px-3 py-1.5 rounded-xl text-[8.5px] font-black text-indigo-300 flex items-center gap-1.5 transition-all hover:bg-indigo-500/25">
+                <Sparkles className="w-3 h-3"/> Ganti Peta
+              </button>
+              <button onClick={()=>{fetchMonsterConfigs();setShowEnemyEditorModal(true);setShowMiniActions(false);}} className="bg-amber-500/15 border border-amber-500/30 px-3 py-1.5 rounded-xl text-[8.5px] font-black text-amber-400 flex items-center gap-1.5 transition-all hover:bg-amber-500/25">
+                <Skull className="w-3 h-3"/> Edit Monster
+              </button>
+              <button onClick={handleLogout} className="bg-red-500/15 border border-red-500/30 px-3 py-1.5 rounded-xl text-[8.5px] font-black text-red-400 flex items-center gap-1.5 transition-all hover:bg-red-500/25">
+                <LogOut className="w-3 h-3"/> Keluar
+              </button>
             </div>
-            {/* Round Level Badge */}
-            <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-amber-500 border border-white/20 flex items-center justify-center text-[10px] font-black text-black shadow-lg">
-              {playerStats?.level || selectedCharacter?.level || 1}
-            </div>
+          )}
+        </div>
+
+        {/* ── LEFT-CENTER: Quest Panel ── */}
+        <div className="absolute left-3 top-[48%] -translate-y-1/2 w-[200px] bg-black/50 backdrop-blur-xl border border-white/10 border-l-[3px] border-l-amber-400 rounded-r-2xl rounded-l-sm p-3 flex flex-col gap-2 shadow-2xl pointer-events-auto">
+          <div className="flex items-center gap-2 border-b border-white/5 pb-1.5">
+            <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="text-[9px] font-black text-zinc-200 uppercase tracking-widest">Misi Utama</span>
           </div>
-
-          {/* Stats, CP, HP/MP bars */}
-          <div className="flex flex-col gap-1 mt-0.5">
-            <div className="flex items-baseline gap-2">
-              <span className="text-sm font-black text-white italic tracking-tight drop-shadow-md">
-                {playerStats?.username || selectedCharacter?.username}
-              </span>
-              <span className="bg-gradient-to-r from-amber-500 to-yellow-400 text-black text-[8px] font-black uppercase px-2 py-0.5 rounded-md tracking-wider shadow shadow-amber-500/10">
-                CP {(playerStats?.level || 1) * 350 + 742}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] font-black text-white leading-tight">Taklukkan Lembah Badai</span>
+              <span className="text-[8.5px] text-zinc-400">Basmi monster di arena</span>
+            </div>
+            <div className="bg-black/40 border border-white/5 rounded-lg px-2 py-1 flex justify-between text-[8px] font-black">
+              <span className="text-zinc-500 uppercase tracking-wide">MONSTER</span>
+              <span className={aliveMonsterCount>0?"text-red-400 animate-pulse":"text-emerald-400"}>
+                {aliveMonsterCount>0?`${aliveMonsterCount} TERSISA`:"SELESAI ✓"}
               </span>
             </div>
-
-            {/* Custom twin bars */}
-            <div className="flex flex-col gap-1.5 w-44">
-              {/* HP Bar */}
-              <div className="w-full bg-black/75 border border-white/5 rounded h-3.5 overflow-hidden relative shadow-inner">
-                <div 
-                  className="bg-gradient-to-r from-green-500 via-emerald-400 to-green-500 h-full rounded transition-all duration-300 shadow-[0_0_8px_rgba(16,185,129,0.3)]" 
-                  style={{ width: `${Math.max(0, Math.min(100, ((playerStats?.hp ?? selectedCharacter?.hp ?? 100) / (playerStats?.max_hp ?? selectedCharacter?.max_hp ?? 100)) * 100))}%` }}
-                />
-                <span className="absolute inset-0 flex items-center justify-center text-[7.5px] font-black text-white uppercase tracking-widest leading-none drop-shadow">
-                  {Math.round(playerStats?.hp ?? selectedCharacter?.hp ?? 100)} / {Math.round(playerStats?.max_hp ?? selectedCharacter?.max_hp ?? 100)}
-                </span>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] font-black text-amber-300 leading-tight">Berburu Harta Karun</span>
+              <div className="flex justify-between text-[8px]">
+                <span className="text-zinc-500">Kumpulkan Gold</span>
+                <span className="text-amber-400 font-black">{Math.min(playerStats?.gold??0,500)}/500</span>
               </div>
-
-              {/* MP Bar */}
-              <div className="w-full bg-black/75 border border-white/5 rounded h-3 overflow-hidden relative shadow-inner">
-                <div 
-                  className="bg-gradient-to-r from-cyan-500 via-sky-400 to-blue-500 h-full rounded transition-all duration-300 shadow-[0_0_8px_rgba(59,130,246,0.3)]" 
-                  style={{ width: `${Math.max(0, Math.min(100, ((playerStats?.mp ?? selectedCharacter?.mp ?? 50) / (playerStats?.max_mp ?? selectedCharacter?.max_mp ?? 50)) * 100))}%` }}
-                />
-                <span className="absolute inset-0 flex items-center justify-center text-[7px] font-black text-white uppercase tracking-widest leading-none drop-shadow">
-                  {Math.round(playerStats?.mp ?? selectedCharacter?.mp ?? 50)} / {Math.round(playerStats?.max_mp ?? selectedCharacter?.max_mp ?? 50)}
-                </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] font-black text-cyan-300 leading-tight">Eksplorasi Wilayah</span>
+              <div className="flex justify-between text-[8px]">
+                <span className="text-zinc-500">Pemain Online</span>
+                <span className="text-cyan-400 font-black">{playerCount}/33</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* TOP-CENTER: Currencies Glass Pill Panel */}
-        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 flex items-center gap-3.5 pointer-events-auto bg-black/45 backdrop-blur-xl border border-white/10 px-5 py-2 rounded-2xl shadow-xl shadow-black/40">
-          {/* Gold */}
-          <div className="flex items-center gap-2">
-            <span className="w-5.5 h-5.5 rounded-full bg-gradient-to-br from-amber-400 to-yellow-600 border border-white/20 flex items-center justify-center font-black text-[9px] text-black shadow shadow-yellow-500/20">S</span>
-            <span className="text-[11px] font-black text-amber-400 tracking-wide drop-shadow-md">{playerStats?.gold ?? 2048}</span>
+        {/* ── BOTTOM-CENTER: Big HP + Fever bar ── */}
+        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[380px] flex flex-col gap-1 pointer-events-none">
+          {/* HP bar */}
+          <div className="relative w-full h-[18px] bg-black/75 rounded-full border border-white/10 overflow-hidden shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)]">
+            <div
+              className="absolute inset-y-0 left-0 bg-gradient-to-r from-green-700 via-emerald-400 to-green-500 rounded-full transition-all duration-500 shadow-[0_0_12px_rgba(16,185,129,0.5)]"
+              style={{width:`${Math.max(0,Math.min(100,((playerStats?.hp??100)/(playerStats?.max_hp??100))*100))}%`}}
+            />
+            <div className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-white drop-shadow">
+              {(((playerStats?.hp??100)/(playerStats?.max_hp??100))*100).toFixed(2)}%
+            </div>
           </div>
-          <div className="w-[1px] h-4.5 bg-white/10" />
-          {/* Pink Diamonds */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs">💎</span>
-            <span className="text-[11px] font-black text-pink-400 tracking-wide drop-shadow-md">88</span>
-          </div>
-          <div className="w-[1px] h-4.5 bg-white/10" />
-          {/* Blue Crystals */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs">🔷</span>
-            <span className="text-[11px] font-black text-cyan-400 tracking-wide drop-shadow-md">150</span>
+          {/* Fever/SP bar */}
+          <div className="relative w-full h-[11px] bg-black/70 rounded-full border border-white/10 overflow-hidden shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
+            <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-pink-600 via-rose-400 to-fuchsia-500 rounded-full shadow-[0_0_8px_rgba(236,72,153,0.6)]" style={{width:"65%"}} />
+            <div className="absolute inset-0 flex items-center justify-center gap-1 text-[7px] font-black text-white drop-shadow tracking-widest uppercase">
+              <span className="bg-pink-500/80 px-1.5 py-0.5 rounded-full text-[6px] font-black">FEVER</span>
+            </div>
           </div>
         </div>
 
-        {/* TOP-RIGHT: Live Connections & Navigation Actions */}
-        <div className="absolute right-6 top-6 flex flex-col items-end gap-2.5 pointer-events-auto">
-          {/* Server indicators */}
-          <div className="flex gap-2">
-            <div className="bg-black/50 backdrop-blur-md border border-white/5 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="text-[8px] font-black uppercase tracking-wider text-zinc-300">
-                Pemain: <span className="text-cyan-400">{playerCount}</span>
-              </span>
-            </div>
-
-            <div className="bg-black/50 backdrop-blur-md border border-white/5 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-              <Skull className="w-3.5 h-3.5 text-red-500 animate-pulse" />
-              <span className="text-[8px] font-black uppercase tracking-wider text-zinc-300">
-                Monsters: <span className="text-red-500">{aliveMonsterCount}</span>
-              </span>
-            </div>
-
-            <div className="bg-black/50 backdrop-blur-md border border-white/5 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-              <div className={`w-2 h-2 rounded-full ${fps >= 55 ? "bg-emerald-500 animate-pulse shadow-[0_0_6px_rgba(16,185,129,0.7)]" : fps >= 30 ? "bg-amber-500" : "bg-red-500"} mr-0.5`} />
-              <span className="text-[8px] font-black uppercase tracking-wider text-zinc-300">
-                FPS: <span className={fps >= 55 ? "text-emerald-400" : fps >= 30 ? "text-amber-400" : "text-red-400"}>{fps}</span>
-              </span>
-            </div>
+        {/* ── BOTTOM-LEFT: Chat ── */}
+        <div className="absolute left-3 bottom-16 w-[280px] flex flex-col gap-1 pointer-events-auto">
+          <div ref={chatScrollRef} className="max-h-[80px] overflow-y-auto flex flex-col gap-1 pr-1">
+            {chatMessages.map((m,i)=>(
+              <p key={i} className="text-[9px] leading-relaxed">
+                {m.type==="system" && <><span className="text-emerald-400 font-black mr-1">[Sistem]</span><span className="text-zinc-300">{m.msg}</span></>}
+                {m.type==="info" && <><span className="text-amber-400 font-black mr-1">[Info]</span><span className="text-zinc-300">{m.msg}</span></>}
+                {m.type==="player" && <><span className="text-indigo-400 font-black mr-1">[{m.name}]</span><span className="text-zinc-100">{m.msg}</span></>}
+              </p>
+            ))}
           </div>
-
-          {/* Action pills */}
-          <div className="flex gap-2 w-full">
-            <button
-              onClick={handleSwitchCharacter}
-              className="flex-1 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 py-2 rounded-xl text-cyan-400 flex items-center justify-center gap-1.5 text-[8.5px] font-black uppercase tracking-wider transition-all shadow-md shadow-cyan-500/5 active:scale-95"
-            >
-              <Users className="w-3.5 h-3.5" />
-              Ganti Kelas
-            </button>
-
-            <button
-              onClick={async () => {
-                const currentMapId = useEditorStore.getState().selectedMapId;
-                let currentMapList = useEditorStore.getState().mapList;
-                if (currentMapList.length === 0) {
-                  await useEditorStore.getState().fetchMapList();
-                  currentMapList = useEditorStore.getState().mapList;
-                }
-                if (currentMapList.length > 1) {
-                  const currentIndex = currentMapList.findIndex(m => m.id === currentMapId);
-                  const nextIndex = (currentIndex + 1) % currentMapList.length;
-                  const nextMap = currentMapList[nextIndex];
-                  setEnvReady(false);
-                  await useEditorStore.getState().setSelectedMapId(nextMap.id);
-                } else {
-                  setEnvReady(false);
-                  await useEditorStore.getState().loadFromDatabase();
+          {/* Input */}
+          <div className="flex gap-1.5">
+            <input
+              type="text"
+              value={chatInput}
+              onChange={e=>setChatInput(e.target.value)}
+              onKeyDown={e=>{
+                if(e.key==="Enter"&&chatInput.trim()){
+                  setChatMessages(p=>[...p,{type:"player",name:selectedCharacter?.username??"You",msg:chatInput.trim()}]);
+                  setChatInput("");
+                  setTimeout(()=>{if(chatScrollRef.current)chatScrollRef.current.scrollTop=chatScrollRef.current.scrollHeight;},50);
                 }
               }}
-              className="flex-1 bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 py-2 rounded-xl text-indigo-300 flex items-center justify-center gap-1.5 text-[8.5px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md shadow-indigo-500/10 animate-pulse"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              {selectedMapId ? selectedMapId.toUpperCase() : "ZONE"}
-            </button>
-
+              placeholder="Ketik pesan..."
+              className="flex-1 bg-black/55 border border-white/10 rounded-lg px-2.5 py-1 text-[9px] text-white placeholder-zinc-600 focus:outline-none focus:border-cyan-500/50 backdrop-blur-sm"
+            />
             <button
-              onClick={() => {
-                fetchMonsterConfigs();
-                setShowEnemyEditorModal(true);
+              onClick={()=>{
+                if(chatInput.trim()){
+                  setChatMessages(p=>[...p,{type:"player",name:selectedCharacter?.username??"You",msg:chatInput.trim()}]);
+                  setChatInput("");
+                }
               }}
-              className="flex-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 py-2 rounded-xl text-amber-400 flex items-center justify-center gap-1.5 text-[8.5px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md shadow-amber-500/10"
-            >
-              <Skull className="w-3.5 h-3.5" />
-              Edit Monster
-            </button>
-
-            <button
-              onClick={handleLogout}
-              className="flex-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 py-2 rounded-xl text-red-400 flex items-center justify-center gap-1.5 text-[8.5px] font-black uppercase tracking-wider transition-all active:scale-95"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              Keluar
-            </button>
+              className="bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-500/30 px-2.5 py-1 rounded-lg text-[9px] font-black text-cyan-300 transition-all"
+            >Enter</button>
           </div>
         </div>
 
-        {/* LEFT-CENTER: Seal M Quest Tracker Panel */}
-        <div className="absolute left-6 top-[22%] max-w-[220px] bg-black/40 backdrop-blur-xl border border-white/15 p-4 rounded-2xl flex flex-col gap-2 shadow-2xl pointer-events-auto border-l-4 border-l-amber-500 animate-in slide-in-from-left-4 duration-300">
-          <div className="flex items-center gap-2 border-b border-white/5 pb-2">
-            <div className="w-5 h-5 rounded-md bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
-              <Trophy className="w-3 h-3 text-amber-400" />
-            </div>
-            <span className="text-[9px] font-black tracking-widest text-zinc-300 uppercase">MISI UTAMA</span>
-          </div>
-          
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[11px] font-black text-white leading-tight">Taklukkan Lembah</span>
-            <span className="text-[9px] font-semibold text-zinc-400 leading-normal">
-              Basmi monster liar di Lembah Badai.
-            </span>
-          </div>
-
-          <div className="bg-zinc-950/40 border border-white/5 px-2.5 py-1.5 rounded-lg flex items-center justify-between text-[8px] font-black">
-            <span className="text-zinc-500 uppercase tracking-widest">MONSTER AKTIF</span>
-            <span className={aliveMonsterCount > 0 ? "text-red-400 animate-pulse" : "text-emerald-400"}>
-              {aliveMonsterCount > 0 ? `${aliveMonsterCount} TERSISA` : "SELESAI"}
-            </span>
-          </div>
-        </div>
-
-        {/* BOTTOM-LEFT: Translucent Chat Log Container */}
-        <div className="absolute left-6 bottom-8 max-w-[280px] w-full bg-black/40 backdrop-blur-xl border border-white/5 p-4 rounded-2xl flex flex-col gap-2 shadow-2xl pointer-events-auto">
-          <div className="flex items-center gap-1.5 border-b border-white/5 pb-1.5">
-            <MessageSquare className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-            <span className="text-[8px] font-black text-cyan-400 uppercase tracking-widest">OBROLAN ARENA</span>
-          </div>
-          
-          <div className="flex flex-col gap-1.5 max-h-[90px] overflow-y-auto pr-1">
-            <p className="text-[9px] leading-relaxed">
-              <span className="text-emerald-400 font-bold uppercase tracking-wider mr-1.5">[Sistem]</span>
-              <span className="text-zinc-300 font-medium">Selamat datang di Arena Multiplayer! Basmi monster di sekitar Anda.</span>
-            </p>
-            <p className="text-[9px] leading-relaxed">
-              <span className="text-indigo-400 font-bold uppercase tracking-wider mr-1.5">[Pemain]</span>
-              <span className="text-white font-bold mr-1">{playerStats?.username || selectedCharacter?.username}:</span>
-              <span className="text-zinc-200">inv pt boss dong, aku pake kelas {CLASS_LABELS[selectedCharacter.class]}!</span>
-            </p>
-            <p className="text-[9px] leading-relaxed">
-              <span className="text-amber-500 font-bold uppercase tracking-wider mr-1.5">[Info]</span>
-              <span className="text-zinc-300">Gunakan tombol Q untuk mengeluarkan skill andalan kelas Anda.</span>
-            </p>
-          </div>
-        </div>
-
-        {/* BOTTOM-RIGHT: Seal M Action Wheel Controller */}
+        {/* ── BOTTOM-RIGHT: Skill bar (4 slots) + main attack + AUTO ── */}
         {selectedCharacter && (
-          <div className="absolute right-8 bottom-8 flex items-end justify-end pointer-events-auto">
-            <div className="relative w-44 h-44 flex items-center justify-center">
-              
-              {/* Central Main Attack (Sword) Button - Large */}
+          <div className="absolute right-3 bottom-14 flex flex-col items-end gap-2 pointer-events-auto">
+            {/* Top row: 4 numbered skill slots */}
+            <div className="flex gap-1.5">
+              {[
+                {num:1,icon:<Sword className="w-5 h-5"/>,color:"from-amber-500 to-orange-600",glow:"rgba(245,158,11,0.5)",label:"ATK"},
+                {num:2,icon:<Zap className="w-5 h-5"/>,color:"from-cyan-500 to-blue-600",glow:"rgba(6,182,212,0.5)",label:"SKL"},
+                {num:3,icon:<Sparkles className="w-5 h-5"/>,color:"from-purple-500 to-indigo-600",glow:"rgba(168,85,247,0.5)",label:"PSV"},
+                {num:4,icon:<Shield className="w-5 h-5"/>,color:"from-emerald-500 to-teal-600",glow:"rgba(16,185,129,0.5)",label:"DEF"},
+              ].map(s=>(
+                <div key={s.num} className="relative flex flex-col items-center gap-0.5">
+                  <button className={`w-[52px] h-[52px] rounded-xl bg-gradient-to-br ${s.color} border border-white/20 flex items-center justify-center text-white active:scale-95 transition-all shadow-lg`}
+                    style={{boxShadow:`0 0 12px ${s.glow}`}}
+                    onClick={()=>{if(s.num===1){const e=new MouseEvent("mousedown",{button:0});document.dispatchEvent(e);setTimeout(()=>document.dispatchEvent(new MouseEvent("mouseup",{button:0})),50);}else if(s.num===2){document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyQ"}));}}}
+                  >
+                    {s.icon}
+                  </button>
+                  <span className="absolute top-0.5 left-1 text-[8px] font-black text-white/70">{s.num}</span>
+                  <span className="text-[7px] font-black text-zinc-400 uppercase tracking-wider">{s.label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Bottom row: AUTO + big skill button */}
+            <div className="flex items-end gap-2">
+              {/* AUTO battle */}
               <button
-                onClick={() => {
-                  // Simulate left click basic attack
-                  const event = new MouseEvent("mousedown", { button: 0 });
-                  document.dispatchEvent(event);
-                  setTimeout(() => {
-                    const upEvent = new MouseEvent("mouseup", { button: 0 });
-                    document.dispatchEvent(upEvent);
-                  }, 50);
-                }}
-                className="absolute bottom-1 right-1 w-20 h-20 rounded-full bg-gradient-to-br from-cyan-400 via-indigo-500 to-indigo-600 border border-white/20 active:scale-95 flex items-center justify-center text-white shadow-2xl hover:brightness-110 transition-all z-20 shadow-cyan-500/30 group"
+                onClick={()=>setIsAutoMode(v=>!v)}
+                className={`flex flex-col items-center justify-center w-[48px] h-[48px] rounded-full border-2 transition-all ${isAutoMode?"bg-emerald-500/30 border-emerald-400 shadow-[0_0_16px_rgba(16,185,129,0.6)]":"bg-black/50 border-white/20"}`}
               >
-                <div className="absolute inset-0.5 rounded-full bg-zinc-950/20 group-hover:scale-105 transition-transform" />
-                <Sword className="w-9 h-9 relative z-10 group-hover:rotate-12 transition-transform" />
-                
-                <span className="absolute bottom-1 bg-black/60 px-1 py-0.5 rounded-[4px] text-[7px] font-black uppercase tracking-wider text-cyan-300 border border-white/10 z-10">
-                  ATTACK
-                </span>
+                <span className={`text-[9px] font-black tracking-wider ${isAutoMode?"text-emerald-300 animate-pulse":"text-zinc-500"}`}>AUTO</span>
               </button>
 
-              {/* Orbital Q Skill Button */}
+              {/* Main attack big button */}
+              <button
+                onClick={()=>{const e=new MouseEvent("mousedown",{button:0});document.dispatchEvent(e);setTimeout(()=>document.dispatchEvent(new MouseEvent("mouseup",{button:0})),50);}}
+                className="relative w-[76px] h-[76px] rounded-full bg-gradient-to-br from-cyan-400 via-indigo-500 to-purple-600 border-2 border-white/25 active:scale-95 flex items-center justify-center text-white shadow-2xl transition-all hover:brightness-110 group"
+                style={{boxShadow:"0 0 28px rgba(99,102,241,0.6), inset 0 2px 4px rgba(255,255,255,0.15)"}}
+              >
+                <div className="absolute inset-1 rounded-full bg-black/20 group-hover:bg-black/10 transition-all" />
+                {selectedCharacter.class==="Warrior"&&<Sword className="w-9 h-9 relative z-10 group-hover:rotate-12 transition-transform"/>}
+                {selectedCharacter.class==="Mage"&&<Zap className="w-9 h-9 relative z-10"/>}
+                {selectedCharacter.class==="Priest"&&<Sparkles className="w-9 h-9 relative z-10"/>}
+                {selectedCharacter.class==="Thief"&&<Target className="w-9 h-9 relative z-10"/>}
+                {selectedCharacter.class==="Beginner"&&<Shield className="w-9 h-9 relative z-10"/>}
+                <span className="absolute bottom-1 text-[7px] font-black text-white/80 uppercase tracking-widest z-10">ATTACK</span>
+              </button>
+
+              {/* Q Skill */}
               <button
                 id="skill-button-active"
-                onClick={() => {
-                  const event = new KeyboardEvent("keydown", { code: "KeyQ" });
-                  document.dispatchEvent(event);
-                }}
-                className="absolute bottom-2 left-2 w-13 h-13 rounded-full bg-gradient-to-br from-orange-400 to-red-600 border border-white/15 active:scale-95 flex items-center justify-center text-white shadow-xl hover:brightness-105 transition-all z-10 shadow-orange-500/25 group"
+                onClick={()=>document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyQ"}))}
+                className="relative w-[56px] h-[56px] rounded-full bg-gradient-to-br from-orange-500 to-red-600 border-2 border-white/20 active:scale-95 flex items-center justify-center text-white shadow-xl transition-all hover:brightness-110 group"
+                style={{boxShadow:"0 0 16px rgba(249,115,22,0.5)"}}
               >
-                {selectedCharacter.class === "Warrior" && <RefreshCw className="w-5.5 h-5.5 animate-spin-slow text-orange-100" />}
-                {selectedCharacter.class === "Mage" && <Zap className="w-5.5 h-5.5 text-cyan-100" />}
-                {selectedCharacter.class === "Priest" && <Sparkles className="w-5.5 h-5.5 text-yellow-100" />}
-                {selectedCharacter.class === "Thief" && <Target className="w-5.5 h-5.5 text-purple-100 animate-pulse" />}
-                {selectedCharacter.class === "Beginner" && <Shield className="w-5.5 h-5.5 text-emerald-100" />}
-
-                {/* Cooldown Overlay */}
-                <div 
-                  id="skill-cooldown-overlay" 
-                  className="absolute inset-0 bg-black/85 backdrop-blur-[1.5px] rounded-full flex items-center justify-center text-[9px] font-black text-amber-500 uppercase tracking-widest transition-all duration-100 transform translate-y-[100%]"
-                >
-                  CD
-                </div>
-
-                <div className="absolute -top-1 -left-1 bg-zinc-950 border border-white/10 text-[7px] font-black px-1.5 py-0.5 rounded-full text-zinc-300 shadow">
-                  Q
-                </div>
-
-                <span className="absolute -bottom-1 bg-black/80 border border-white/5 px-1 py-0.5 rounded-[4px] text-[5.5px] font-black tracking-wider text-orange-300 z-10 whitespace-nowrap uppercase">
-                  {selectedCharacter.class === "Warrior" ? "PUTARAN BADAI" :
-                   selectedCharacter.class === "Mage" ? "HUJAN METEOR" :
-                   selectedCharacter.class === "Priest" ? "KUIL DEWATA" :
-                   selectedCharacter.class === "Thief" ? "LOMPATAN BAYANG" : "SERANGAN JAGO"}
-                </span>
+                <div id="skill-cooldown-overlay" className="absolute inset-0 bg-black/85 backdrop-blur-[1px] rounded-full flex items-center justify-center text-[9px] font-black text-amber-400 transition-all translate-y-[100%]">CD</div>
+                {selectedCharacter.class==="Warrior"&&<RefreshCw className="w-6 h-6 relative z-10"/>}
+                {selectedCharacter.class==="Mage"&&<Zap className="w-6 h-6 relative z-10"/>}
+                {selectedCharacter.class==="Priest"&&<Sparkles className="w-6 h-6 relative z-10"/>}
+                {selectedCharacter.class==="Thief"&&<Target className="w-6 h-6 relative z-10"/>}
+                {selectedCharacter.class==="Beginner"&&<Shield className="w-6 h-6 relative z-10"/>}
+                <div className="absolute -top-1 -left-1 bg-zinc-900 border border-white/10 text-[7px] font-black px-1.5 py-0.5 rounded-full text-zinc-300">Q</div>
               </button>
-
-              {/* Orbital Passive Skill Slot */}
-              <div className="absolute top-2 left-6 w-11 h-11 rounded-full bg-zinc-900 border border-indigo-500/30 flex flex-col items-center justify-center text-indigo-400 shadow-md">
-                <Sparkles className="w-5 h-5 animate-pulse" />
-                <span className="absolute -bottom-1 bg-black/85 border border-white/5 px-1.5 py-0.5 rounded-[4px] text-[5px] font-black tracking-wider text-indigo-300 uppercase whitespace-nowrap leading-none">
-                  {selectedCharacter.class === "Warrior" ? "Besi Baja" :
-                   selectedCharacter.class === "Mage" ? "Cahaya Sihir" :
-                   selectedCharacter.class === "Priest" ? "Rahmat Suci" :
-                   selectedCharacter.class === "Thief" ? "Belati Bayang" : "Adaptasi"}
-                </span>
-              </div>
-
-              {/* Orbital AUTO Battle Toggle Indicator */}
-              <div className="absolute top-8 right-10 w-9 h-9 rounded-full bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow shadow-emerald-500/5">
-                <span className="text-[6.5px] font-black uppercase tracking-wider animate-pulse">AUTO</span>
-              </div>
             </div>
           </div>
         )}
@@ -1926,8 +2013,9 @@ export default function MultiplayerArena() {
   );
 }
 
-// Preload GLB assets for other players and monsters to avoid frame drop on spawn
 const _preload = (path: string) => useGLTF.preload(path, true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+_preload('/assets-model/Chef_Male.glb');
+_preload('/assets-model/Chef_Female.glb');
 _preload('/assets-model/Knight_Golden_Male.glb');
 _preload('/assets-model/Viking_Male.glb');
 _preload('/assets-model/Wizard.glb');

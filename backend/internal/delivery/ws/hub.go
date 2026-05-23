@@ -69,20 +69,14 @@ func (h *Hub) Run() {
 			}
 			h.clientsMu.RUnlock()
 
-			// Fan-out to each client in parallel — one slow client can't block others
-			var wg sync.WaitGroup
+			// Direct non-blocking fan-out — avoids spawning goroutines and WaitGroup allocations per packet
 			for _, client := range targets {
-				wg.Add(1)
-				go func(c *Client) {
-					defer wg.Done()
-					select {
-					case c.Send <- message:
-					default:
-						// Client send buffer full — drop frame for this client only
-					}
-				}(client)
+				select {
+				case client.Send <- message:
+				default:
+					// Client send buffer full — drop frame for this client only
+				}
 			}
-			wg.Wait()
 		}
 	}
 }

@@ -38,6 +38,16 @@ interface WhimsicalDioramaProps {
 export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false, onReady }: WhimsicalDioramaProps) => {
     const weather = useStore(s => s.weather);
     const meshRef = useRef<THREE.Mesh>(null!);
+    const lightRef = useRef<THREE.DirectionalLight>(null);
+
+    useFrame(() => {
+        if (lightRef.current) {
+            const pos = useStore.getState().playerPosition;
+            lightRef.current.position.set(pos[0] + 15, 45, pos[2] + 15);
+            lightRef.current.target.position.set(pos[0], pos[1], pos[2]);
+            lightRef.current.target.updateMatrixWorld();
+        }
+    });
 
     // Load sculpt heights and config from editor store
     const sculptData = useEditorStore(s => s.sculptData);
@@ -173,19 +183,21 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
             <ambientLight intensity={ambientIntensity ?? (sky === 'night' ? 0.8 : 3.5)} color={sky === 'night' ? "#a5b4fc" : "#ffffff"} />
 
             <directionalLight
+                ref={lightRef}
                 position={sunPosition}
                 intensity={lightIntensity ?? (sky === 'night' ? 2.5 : 15.0)}
 
                 color={sky === 'night' ? "#a5b4fc" : "#ffffff"}
                 castShadow
-                shadow-mapSize={[1024, 1024]}
+                shadow-mapSize={[512, 512]}
+                shadow-bias={-0.0001}
 
-                shadow-camera-left={-200}
-                shadow-camera-right={200}
-                shadow-camera-top={200}
-                shadow-camera-bottom={-200}
+                shadow-camera-left={-30}
+                shadow-camera-right={30}
+                shadow-camera-top={30}
+                shadow-camera-bottom={-30}
                 shadow-camera-near={0.5}
-                shadow-camera-far={500}
+                shadow-camera-far={120}
             />
             <pointLight position={[0, 15, 0]} intensity={sky === 'night' ? 6.0 : 4.0} color={sky === 'night' ? "#ff5500" : "#ffaa00"} distance={250} />
 

@@ -705,9 +705,18 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
   const gameState  = useStore(s => s.gameState);
   const isSetup    = gameState === "SETUP";
   const { spawnVFX } = useVFX();
+  const lightRef = useRef<THREE.DirectionalLight>(null);
 
   useFrame(state => {
     PainterlyWaterMaterial.uniforms.time.value = state.clock.elapsedTime;
+
+    if (lightRef.current) {
+      const pos = useStore.getState().playerPosition;
+      lightRef.current.position.set(pos[0] + 15, 45, pos[2] + 15);
+      lightRef.current.target.position.set(pos[0], pos[1], pos[2]);
+      lightRef.current.target.updateMatrixWorld();
+    }
+
     if (isSetup || potatoMode) return;
     if (state.clock.elapsedTime % 0.25 < 0.025) {
       if (characterStatus && characterStatus.position) {
@@ -789,6 +798,7 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
       <ambientLight intensity={ambientIntensity ?? (sky === 'night' ? 0.2 : 0.8)} />
 
       <directionalLight
+        ref={lightRef}
         position={sunPosition}
         intensity={lightIntensity ?? (sky === 'night' ? 0.8 : 2.5)}
 
@@ -797,11 +807,11 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
         shadow-bias={-0.0001}
 
 
-        shadow-camera-far={200}
-        shadow-camera-left={-80}
-        shadow-camera-right={80}
-        shadow-camera-top={80}
-        shadow-camera-bottom={-80}
+        shadow-camera-far={120}
+        shadow-camera-left={-30}
+        shadow-camera-right={30}
+        shadow-camera-top={30}
+        shadow-camera-bottom={-30}
       />
 
       <Terrain 

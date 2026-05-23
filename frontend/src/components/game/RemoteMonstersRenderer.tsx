@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, Suspense } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF, useAnimations, Text, Billboard } from "@react-three/drei";
 import * as THREE from 'three';
 import { SkeletonUtils } from 'three-stdlib';
+import { MeshoptDecoder } from 'meshoptimizer';
 import { MonsterNetworkState, PlayerNetworkState } from "@/src/hooks/useWebSocketGame";
 import { useStore } from "@/src/state/useStore";
 
@@ -78,7 +79,7 @@ export const RemoteMonsterInstance = ({
     return MONSTER_MODELS[Math.abs(hash) % MONSTER_MODELS.length];
   }, [monsterId, isBoss, monsterMapRef, gameConfig]);
 
-  const { scene, animations } = useGLTF(modelPath) as any;
+  const { scene, animations } = useGLTF(modelPath, true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
   const clone = useMemo(() => {
     const cloned = SkeletonUtils.clone(scene);
     cloned.traverse((child: any) => {
@@ -205,9 +206,10 @@ export const RemoteMonsterInstance = ({
       isWithinAttackRange = dist <= (isBoss ? 4.5 : 3.5);
     }
 
-    let targetAngle = null;
     const serverAnim = (data.animation || "").toLowerCase();
 
+    // Rotate monster to face target or movement direction
+    let targetAngle = null;
     if (serverAnim === "attack" || (isWithinAttackRange && data.target_player_id)) {
       if (targetPos) {
         targetAngle = Math.atan2(targetPos.x - groupRef.current.position.x, targetPos.z - groupRef.current.position.z);
@@ -223,70 +225,69 @@ export const RemoteMonsterInstance = ({
       groupRef.current.rotation.y += diff * Math.min(1, 12.0 * delta);
     }
 
-    if (actions) {
+    let desiredState = "idle";
+    if (data.is_dead || serverAnim === "death") desiredState = "death";
+    else if (serverAnim === "attack") desiredState = "attack";
+    else if (serverAnim === "run") desiredState = "run";
+    else if (serverAnim === "walk") desiredState = "walk";
+    else if (data.target_player_id && data.target_player_id !== "") {
+      if (isMoving.current) desiredState = "run";
+      else if (isWithinAttackRange) desiredState = "attack";
+      else desiredState = "idle";
+    } else if (isMoving.current) {
+      desiredState = "walk";
+    }
+
+    if (actions && currentAnimState.current !== desiredState) {
       const keys = Object.keys(actions);
       let clipName = "Idle";
 
-      if (data.is_dead || serverAnim === "death") {
+      if (desiredState === "death") {
         clipName = keys.find((k) => k === "Death" || k.toLowerCase().includes("death")) || "Idle";
-      } else if (serverAnim === "attack") {
+      } else if (desiredState === "attack") {
         clipName = keys.find((k) => k.toLowerCase().includes("attack") || k.toLowerCase().includes("slash") || k.toLowerCase().includes("bash")) || "Idle";
-      } else if (serverAnim === "run") {
+      } else if (desiredState === "run") {
         clipName = keys.find((k) => k === "Run" || k.toLowerCase() === "run") || "Idle";
-      } else if (serverAnim === "walk") {
+      } else if (desiredState === "walk") {
         clipName = keys.find((k) => k === "Walk" || k.toLowerCase().includes("walk") || k === "Run" || k.toLowerCase() === "run") || "Idle";
       } else {
-        if (data.target_player_id && data.target_player_id !== "") {
-          if (isMoving.current) {
-            clipName = keys.find((k) => k === "Run" || k.toLowerCase() === "run") || "Idle";
-          } else if (isWithinAttackRange) {
-            clipName = keys.find((k) => k.toLowerCase().includes("attack") || k.toLowerCase().includes("slash") || k.toLowerCase().includes("bash")) || "Idle";
-          } else {
-            clipName = keys.find((k) => k === "Idle" || k.toLowerCase() === "idle") || "Idle";
-          }
-        } else if (isMoving.current) {
-          clipName = keys.find((k) => k === "Walk" || k.toLowerCase().includes("walk") || k === "Run" || k.toLowerCase() === "run") || "Idle";
-        } else {
-          clipName = keys.find((k) => k === "Idle" || k.toLowerCase() === "idle") || "Idle";
-        }
+        clipName = keys.find((k) => k === "Idle" || k.toLowerCase() === "idle") || "Idle";
       }
 
-      if (currentAnimState.current !== clipName) {
-        const nextAction = actions[clipName];
-        if (nextAction && nextAction !== activeAction.current) {
-          if (activeAction.current) {
-            nextAction.reset().play();
-            activeAction.current.crossFadeTo(nextAction, 0.15, true);
-          } else {
-            nextAction.reset().fadeIn(0.1).play();
-          }
-          if (clipName.toLowerCase().includes("death")) {
-            nextAction.setLoop(THREE.LoopOnce, 1);
-            nextAction.clampWhenFinished = true;
-          } else {
-            nextAction.setLoop(THREE.LoopRepeat, Infinity);
-          }
-          activeAction.current = nextAction;
-        }
-        currentAnimState.current = clipName;
-      }
-
-      if (activeAction.current) {
-        const visualSpeed = visualDistance / delta;
-        if (clipName === "Walk" || clipName.toLowerCase().includes("walk")) {
-          activeAction.current.timeScale = Math.max(0.4, Math.min(1.8, visualSpeed / 1.5));
-        } else if (clipName === "Run" || clipName.toLowerCase().includes("run")) {
-          activeAction.current.timeScale = Math.max(0.4, Math.min(2.0, visualSpeed / 4.0));
+      const nextAction = actions[clipName];
+      if (nextAction && nextAction !== activeAction.current) {
+        if (activeAction.current) {
+          nextAction.reset().play();
+          activeAction.current.crossFadeTo(nextAction, 0.15, true);
         } else {
-          activeAction.current.timeScale = 1.0;
+          nextAction.reset().fadeIn(0.1).play();
         }
+        if (clipName.toLowerCase().includes("death")) {
+          nextAction.setLoop(THREE.LoopOnce, 1);
+          nextAction.clampWhenFinished = true;
+        } else {
+          nextAction.setLoop(THREE.LoopRepeat, Infinity);
+        }
+        activeAction.current = nextAction;
       }
+      currentAnimState.current = desiredState;
     }
 
-    // REMOVED: groupRef.current.updateMatrixWorld(true) — this is extremely expensive
-    // and is called automatically by the R3F render loop. Calling it manually per-monster
-    // causes redundant matrix recalculations every frame.
+    if (activeAction.current) {
+      const visualSpeed = visualDistance / delta;
+      if (desiredState === "walk") {
+        activeAction.current.timeScale = Math.max(0.4, Math.min(1.8, visualSpeed / 1.5));
+      } else if (desiredState === "run") {
+        activeAction.current.timeScale = Math.max(0.4, Math.min(2.0, visualSpeed / 4.0));
+      } else {
+        activeAction.current.timeScale = 1.0;
+      }
+    }
   });
+
+  // REMOVED: groupRef.current.updateMatrixWorld(true) — this is extremely expensive
+  // and is called automatically by the R3F render loop. Calling it manually per-monster
+  // causes redundant matrix recalculations every frame.
 
   const scale = isBoss ? 2.3 : 0.9;
   
@@ -387,17 +388,18 @@ export const RemoteMonstersRenderer = ({
   return (
     <group>
       {activeMonsterIds.map((id) => (
-        <RemoteMonsterInstance
-          key={id}
-          monsterId={id}
-          worldMonstersRef={worldMonstersRef}
-          monsterMapRef={monsterMapRef}
-          onAttack={onAttack}
-          camera={camera}
-          connectedPlayersRef={connectedPlayersRef}
-          localPlayerId={localPlayerId}
-          gameConfig={gameConfig}
-        />
+        <Suspense key={id} fallback={null}>
+          <RemoteMonsterInstance
+            monsterId={id}
+            worldMonstersRef={worldMonstersRef}
+            monsterMapRef={monsterMapRef}
+            onAttack={onAttack}
+            camera={camera}
+            connectedPlayersRef={connectedPlayersRef}
+            localPlayerId={localPlayerId}
+            gameConfig={gameConfig}
+          />
+        </Suspense>
       ))}
     </group>
   );

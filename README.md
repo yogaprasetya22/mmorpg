@@ -100,6 +100,9 @@ Maintains individual stats of monster classes:
    * **Returning Home**: If a player runs too far (violating `leash_range`), the monster walks smoothly back to its spawn anchor at 85% speed, ignoring further threat until reset.
 3. **Persistent World Coordinates**: The server saves player positions on exit, meaning players return to their last exact coordinates upon logging back in.
 4. **Painterly Aesthetics**: The custom rendering pipeline uses painterly outline styling, soft shadows, and instanced ground shaders, creating a beautiful and premium stylized fantasy visual.
+5. **Deterministic GORM 10-Enemy Spawner & Seeder**: Replaced randomized monster spawns with a strategic, hard-coded layout of 10 distinct monster types at fixed coordinates. Integrated a standalone seeder tool in `backend/cmd/seeder/main.go` and mapped it to a clean `make seed-enemy` CLI workflow.
+6. **High-Performance Tactical Minimap**: A state-of-the-art `<Minimap />` component built with DOM pooling and a `requestAnimationFrame` render loop to track up to 35 monsters and 12 players at 60 FPS without React lifecycle re-rendering overhead.
+7. **Ultra-Low Latency HP & Death Sync**: Synchronizes player health authoritatively over 20Hz WebSocket updates. On death, characters have their physics capsule movements completely paused to eliminate sliding bugs, while the camera smoothly maintains focus on the fallen player.
 
 ---
 
@@ -108,6 +111,54 @@ Maintains individual stats of monster classes:
 
 ---
 
-## 🤖 5. AI Assistant Pair-Programming Guide
+## ⚙️ 5. Unified Command-Line (CLI) Interface
+
+The repository features an authoritative `Makefile` to simplify all development, verification, seeding, and production build tasks:
+
+### Development & Simulation
+```bash
+# Start both Go backend and Next.js frontend concurrently
+make run
+
+# Start only the authoritative Go backend
+make run-backend
+
+# Start only the React/Three Fiber frontend
+make run-frontend
+
+# Cleanly terminate any running processes on ports 8080 or 3000
+make kill
+```
+
+### Seeding & Data Setup
+```bash
+# Force wipe and freshly seed the 10 varied enemy configurations
+make seed-enemy
+```
+
+### Verification & Testing
+```bash
+# Execute dual-engine compilation and Next.js TypeScript type-safety check
+make check
+```
+
+### Production Builds
+```bash
+# Build both Go backend and Next.js frontend for production
+make build
+
+# Compile the Go backend binary into backend/build/server
+make build-backend
+
+# Generate the Next.js frontend production bundle
+make build-frontend
+
+# Remove all compiled binary artifacts
+make clean
+```
+
+---
+
+## 🤖 6. AI Assistant Pair-Programming Guide
 If you are developing this codebase alongside an AI assistant, ensure that the agent reads and strictly adheres to the authoritative compilation and deployment checks specified in:
 👉 **[AI Assistant Pairing Rules & Instructions (SKILL.md)](SKILL.md)**
