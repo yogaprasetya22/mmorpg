@@ -35,6 +35,7 @@ type WSIncomingMessage struct {
 	TargetID   string  `json:"targetId" msgpack:"targetId"`
 	Damage     float32 `json:"damage" msgpack:"damage"`
 	IsCrit     bool    `json:"isCrit" msgpack:"isCrit"`
+	SkillID    string  `json:"skillId" msgpack:"skillId"`
 }
 
 type PlayerNetworkState struct {
@@ -198,10 +199,13 @@ func main() {
 			if len(charList.Characters) > 0 {
 				charID = charList.Characters[0].ID
 			} else {
-				// Create a character
+				// Create a character with dynamic class spread
+				classes := []string{"Warrior", "Mage", "Priest", "Thief"}
+				selectedClass := classes[idx % len(classes)]
+
 				charPayload, _ := json.Marshal(map[string]interface{}{
 					"name":       fmt.Sprintf("char_%d_%d", timestamp, idx),
-					"class":      "Warrior",
+					"class":      selectedClass,
 					"gender":     "Male",
 					"hair_style": 1,
 					"hair_color": "#5A3E2D",
@@ -390,17 +394,31 @@ func main() {
 			centerZ := 0.0
 
 			var attackCounter int = 0
+			var animLockTicks int = 0
+			var currentAnim string = "Run"
 
 			for {
 				select {
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					// Circle movement path simulation
-					angle += 0.05
-					px := centerX + radius*math.Cos(angle)
-					pz := centerZ + radius*math.Sin(angle)
-					rotY := float32(-angle + math.Pi/2)
+					// Circle movement path simulation (only if not animation locked)
+					var px, pz float64
+					var rotY float32
+
+					if animLockTicks > 0 {
+						animLockTicks--
+						// Stay in current animation and position to simulate realistic animation locking
+						px = centerX + radius*math.Cos(angle)
+						pz = centerZ + radius*math.Sin(angle)
+						rotY = float32(-angle + math.Pi/2)
+					} else {
+						angle += 0.05
+						px = centerX + radius*math.Cos(angle)
+						pz = centerZ + radius*math.Sin(angle)
+						rotY = float32(-angle + math.Pi/2)
+						currentAnim = "Run"
+					}
 
 					// Send client movement
 					moveMsg := WSIncomingMessage{
@@ -409,7 +427,7 @@ func main() {
 						Y:         0.0,
 						Z:         float32(pz),
 						Rotation:  rotY,
-						Animation: "Run",
+						Animation: currentAnim,
 					}
 
 					data, err := json.Marshal(moveMsg)
@@ -425,7 +443,7 @@ func main() {
 
 					// Periodic attack
 					attackCounter++
-					if *enableAttack && attackCounter >= *attackRate {
+					if *enableAttack && attackCounter >= *attackRate && animLockTicks == 0 {
 						attackCounter = 0
 						monsterMutex.RLock()
 						targetID := ""
@@ -435,29 +453,69 @@ func main() {
 						monsterMutex.RUnlock()
 
 						if targetID != "" {
-							// Perform dynamic critical validation: 15% chance to crit
 							isCrit := rand.Float64() < 0.15
 							dmg := float32(100 + rand.Intn(100))
 							if isCrit {
-								dmg *= 2.5
+								dmg *= 1.5
 							}
 
-							attackMsg := WSIncomingMessage{
-								Action:     "attack",
-								TargetType: "monster",
-								TargetID:   targetID,
-								Damage:     dmg,
-								IsCrit:     isCrit,
-							}
+							// 30% chance to cast a class active skill, 70% chance standard attack
+							if rand.Float64() < 0.30 {
+								// Skill Cast Action
+								skillId := "strike"
+								if idx%2 == 0 {
+									skillId = "heal"
+								}
 
-							atkData, err := json.Marshal(attackMsg)
-							if err == nil {
+								currentAnim = "Skill"
+								animLockTicks = 12
+
+								// Immediately send movement packet with "Skill" animation
+								moveMsg.Animation = currentAnim
+								moveData, _ := json.Marshal(moveMsg)
 								_ = conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
-								err = conn.WriteMessage(websocket.TextMessage, atkData)
+								_ = conn.WriteMessage(websocket.TextMessage, moveData)
+
+								skillMsg := WSIncomingMessage{
+									Action:     "cast_skill",
+									TargetType: "monster",
+									TargetID:   targetID,
+									SkillID:    skillId,
+								}
+								skillData, err := json.Marshal(skillMsg)
 								if err == nil {
+									_ = conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
+									_ = conn.WriteMessage(websocket.TextMessage, skillData)
 									atomic.AddInt64(&metrics.MsgsSent, 1)
-									atomic.AddInt64(&metrics.AttackMsgsSent, 1)
-									atomic.AddInt64(&metrics.BytesSent, int64(len(atkData)))
+									atomic.AddInt64(&metrics.BytesSent, int64(len(skillData)))
+								}
+							} else {
+								// Standard Attack Action
+								currentAnim = "Attack"
+								animLockTicks = 8
+
+								// Immediately send movement packet with "Attack" animation
+								moveMsg.Animation = currentAnim
+								moveData, _ := json.Marshal(moveMsg)
+								_ = conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
+								_ = conn.WriteMessage(websocket.TextMessage, moveData)
+
+								attackMsg := WSIncomingMessage{
+									Action:     "attack",
+									TargetType: "monster",
+									TargetID:   targetID,
+									Damage:     dmg,
+									IsCrit:     isCrit,
+								}
+								atkData, err := json.Marshal(attackMsg)
+								if err == nil {
+									_ = conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
+									err = conn.WriteMessage(websocket.TextMessage, atkData)
+									if err == nil {
+										atomic.AddInt64(&metrics.MsgsSent, 1)
+										atomic.AddInt64(&metrics.AttackMsgsSent, 1)
+										atomic.AddInt64(&metrics.BytesSent, int64(len(atkData)))
+									}
 								}
 							}
 						}
