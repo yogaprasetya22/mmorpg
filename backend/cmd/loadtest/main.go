@@ -89,6 +89,7 @@ func main() {
 	numPlayers := flag.Int("players", 50, "Number of concurrent players to simulate")
 	hostUrl := flag.String("host", "http://localhost:8080", "Target server HTTP URL")
 	runDuration := flag.Duration("duration", 45*time.Second, "Test run duration")
+	enableAttack := flag.Bool("attack", true, "Enable simulated players to attack monsters")
 	flag.Parse()
 
 	u, err := url.Parse(*hostUrl)
@@ -105,6 +106,7 @@ func main() {
 
 	fmt.Printf("🎯 Host: %s (WS: %s://%s)\n", *hostUrl, wsScheme, wsHost)
 	fmt.Printf("👥 Players count: %d\n", *numPlayers)
+	fmt.Printf("⚔️  Attacking enabled: %v\n", *enableAttack)
 	fmt.Printf("⏳ Run duration: %s\n", *runDuration)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -420,7 +422,7 @@ func main() {
 
 					// Periodic attack (every 30 ticks = 1.5 seconds)
 					attackCounter++
-					if attackCounter >= 30 {
+					if *enableAttack && attackCounter >= 30 {
 						attackCounter = 0
 						monsterMutex.RLock()
 						targetID := ""

@@ -124,3 +124,7 @@ loadtest:
 	@echo "🔥 Starting Game Server Load/Stress Test (50 simulated players)..."
 	@cd backend && go run cmd/loadtest/main.go -players=50 -duration=45s
 
+loadtest-peaceful:
+	@echo "🔥 Starting Peaceful Game Server Load/Stress Test (50 simulated players, NO attack)..."
+	@cd backend && go run cmd/loadtest/main.go -players=50 -duration=45s -attack=false
+
