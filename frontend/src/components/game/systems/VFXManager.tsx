@@ -50,9 +50,12 @@ export function VFXProvider({ children }: { children: React.ReactNode }) {
     // Find next available slot or recycle oldest
     let idx = -1;
     const eff = effect.toLowerCase();
-    if (eff.includes('smoke') || eff.includes('mist') || eff.includes('dust')) {
+    
+    // Completely disable basic attack smoke/puff effects on player and enemy
+    if (eff.includes('muzzle') || eff.includes('magic') || eff.includes('hit') || eff.includes('spark')) {
       return;
     }
+
     for (let i = 0; i < MAX_PARTICLES; i++) {
       const checkIdx = (poolPtr.current + i) % MAX_PARTICLES;
       if (active[checkIdx] === 0) {

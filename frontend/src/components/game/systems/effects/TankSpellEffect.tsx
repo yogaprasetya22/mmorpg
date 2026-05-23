@@ -178,13 +178,10 @@ export function TankSpellEffect({
                     vfxOrder.current = (vfxOrder.current + 1) % pool.current.length;
                     p.x = s.x; p.y = 0.05; p.z = s.z; p.startTime = simTime; p.color = '#FFD700'; p.active = true; p.type = 'crack'; p.scale = 2.8 * rScale;
                     
-                    // Dust effect disabled
-                    /*
                     const p2 = pool.current[vfxOrder.current];
                     if (!p2.active) activeIndices.current.push(vfxOrder.current);
                     vfxOrder.current = (vfxOrder.current + 1) % pool.current.length;
                     p2.x = s.x; p2.y = 0.1; p2.z = s.z; p2.startTime = simTime; p2.color = '#aa8866'; p2.active = true; p2.type = 'dust'; p2.scale = 3.5 * rScale;
-                    */
                 }
             }
         }
