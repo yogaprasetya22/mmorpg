@@ -270,7 +270,8 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
                 an++;
             }
         }
-        // Dust trail saat marksman dash/roll
+        // Dust trail saat marksman dash/roll - DISABLED
+        /*
         if (u.isActive && u.unitClass === 'marksman' && u.isRolling) {
             if (Math.random() > 0.4) {
                 const vIdx = ringIdx.current;
@@ -281,6 +282,7 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
                 v.startTime = performance.now(); v.color = '#fff'; v.active = true; v.scale = 1.8; v.type = 'dust'; v.rot = Math.random()*7;
             }
         }
+        */
     }
 
     // Render golden star aura above local player when Eagle Eye ultimate is active!

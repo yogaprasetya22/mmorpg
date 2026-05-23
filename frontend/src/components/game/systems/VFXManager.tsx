@@ -50,6 +50,9 @@ export function VFXProvider({ children }: { children: React.ReactNode }) {
     // Find next available slot or recycle oldest
     let idx = -1;
     const eff = effect.toLowerCase();
+    if (eff.includes('smoke') || eff.includes('mist') || eff.includes('dust')) {
+      return;
+    }
     for (let i = 0; i < MAX_PARTICLES; i++) {
       const checkIdx = (poolPtr.current + i) % MAX_PARTICLES;
       if (active[checkIdx] === 0) {
