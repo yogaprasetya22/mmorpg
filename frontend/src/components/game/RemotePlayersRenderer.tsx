@@ -108,8 +108,8 @@ export const RemotePlayerInstance = ({
     const dzCam = state.camera.position.z - groupRef.current.position.z;
     const camDistSq = dxCam * dxCam + dyCam * dyCam + dzCam * dzCam;
 
-    const FAR_SQ = 60 * 60;      // > 60 units: cull completely
-    const MED_FAR_SQ = 40 * 40;  // > 40 units: hide name tag
+    const FAR_SQ = 60 * 60;     // > 60 units: cull completely
+    const MED_FAR_SQ = 40 * 40; // > 40 units: hide name tag
 
     if (camDistSq > FAR_SQ) {
       groupRef.current.visible = false;
@@ -290,11 +290,11 @@ export const RemotePlayerInstance = ({
           }
         }
 
-        // 2. Client-side spatial fallback (if server target info hasn't arrived yet)
+        // 2. Client-side spatial fallback using squared distance (avoids sqrt per unit)
         if (!closestMonster) {
-          let maxRange = 15.0; // wider range fallback for skill VFX
+          let maxRangeSq = 15.0 * 15.0;
           const uPos = groupRef.current.position;
-          let minDist = maxRange;
+          let minDistSq = maxRangeSq;
 
           for (let i = 0; i < units.length; i++) {
             const u = units[i];
@@ -302,9 +302,9 @@ export const RemotePlayerInstance = ({
               const dx = u.position[0] - uPos.x;
               const dy = u.position[1] - uPos.y;
               const dz = u.position[2] - uPos.z;
-              const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-              if (dist < minDist) {
-                minDist = dist;
+              const distSq = dx*dx + dy*dy + dz*dz;
+              if (distSq < minDistSq) {
+                minDistSq = distSq;
                 closestMonster = u;
               }
             }
@@ -444,17 +444,18 @@ export const RemotePlayerInstance = ({
           }
         }
         
-        // 2. Client-side spatial fallback (if server target info hasn't arrived yet)
+        // 2. Client-side spatial fallback using squared distance (avoids sqrt per unit)
         if (!closestMonster) {
           let maxRange = 10.0; // Default (10m)
           if (pClass === "Warrior") maxRange = 4.0;
           else if (pClass === "Thief") maxRange = 4.0;
-          else if (pClass === "Beginner") maxRange = 11.0; // Ranged Marksman MM fallback (9.0m attack range)
+          else if (pClass === "Beginner") maxRange = 11.0;
           else if (pClass === "Mage") maxRange = 10.0;
           else if (pClass === "Priest") maxRange = 4.5;
+          const maxRangeSq = maxRange * maxRange;
 
           const uPos = groupRef.current.position;
-          let minDist = maxRange;
+          let minDistSq = maxRangeSq;
           
           for (let i = 0; i < units.length; i++) {
             const u = units[i];
@@ -462,9 +463,9 @@ export const RemotePlayerInstance = ({
               const dx = u.position[0] - uPos.x;
               const dy = u.position[1] - uPos.y;
               const dz = u.position[2] - uPos.z;
-              const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-              if (dist < minDist) {
-                minDist = dist;
+              const distSq = dx*dx + dy*dy + dz*dz;
+              if (distSq < minDistSq) {
+                minDistSq = distSq;
                 closestMonster = u;
               }
             }
@@ -691,9 +692,11 @@ export const RemotePlayersRenderer = ({
 
     playerDistances.sort((a, b) => a.distSq - b.distSq);
 
-    // Limit maximum visible player models to 12 to preserve steady 60 FPS
+    // Adaptive cap: when loadtest saturates server with 40 bots, limit to 8 closest player skeletons
+    // Running heavy-monsters simultaneously leaves less GPU budget for player skeletons
+    const playerCap = players.length > 20 ? 8 : 12;
     const visibleSet = new Set<string>();
-    const limit = Math.min(playerDistances.length, 12);
+    const limit = Math.min(playerDistances.length, playerCap);
     for (let i = 0; i < limit; i++) {
       visibleSet.add(playerDistances[i].id);
     }

@@ -226,7 +226,8 @@ export const RemoteMonsterInstance = ({
 
     const dx = x - meshX;
     const dz = z - meshZ;
-    const distToTarget = Math.sqrt(dx * dx + dz * dz);
+    const distToTargetSq = dx * dx + dz * dz;
+    const distToTarget = Math.sqrt(distToTargetSq); // needed for step calc only
 
     // ─── Resolve target position for attack/rotation ──────────────────────────
     let targetPosX = 0, targetPosZ = 0, hasTarget = false;
@@ -306,7 +307,9 @@ export const RemoteMonsterInstance = ({
     const currentMeshZ = groupRef.current.position.z;
     const visualDx = currentMeshX - prevVisualPos.current[0];
     const visualDz = currentMeshZ - prevVisualPos.current[1];
-    const visualDistance = Math.sqrt(visualDx * visualDx + visualDz * visualDz);
+    // Use squared distance for speed estimate to avoid a sqrt — accurate enough for low-pass filter
+    const visualDistSq = visualDx * visualDx + visualDz * visualDz;
+    const visualDistance = visualDistSq > 0.000001 ? Math.sqrt(visualDistSq) : 0;
 
     monsterVisualPositions.set(data.id, { x: currentMeshX, z: currentMeshZ });
     // Keep window reference for external minimap/targeting code that reads it
@@ -526,8 +529,9 @@ export const RemoteMonstersRenderer = ({
 
       scratch.sort((a, b) => a.distSq - b.distSq);
 
-      // Adaptive cap: fewer visible models when scene is monster-dense to protect FPS
-      const densityCap = list.length > 40 ? 8 : 12;
+      // Adaptive cap: aggressively reduce skeleton updates under heavy load
+      // 80+ monsters: cap 5 (combined with 40 bots = very heavy), 40+: cap 8, otherwise 12
+      const densityCap = list.length > 60 ? 5 : list.length > 40 ? 8 : 12;
       const limit = Math.min(scratch.length, densityCap);
 
       // Reuse visibleMonsterIdsRef Set in-place — no new Set() allocation
@@ -538,17 +542,26 @@ export const RemoteMonstersRenderer = ({
       }
     }
 
-    // ─── Detect new monster IDs — trigger React state update only on change ──
-    let hasNewId = false;
+    // ─── Sync monster ID set — add new IDs, prune IDs no longer in server payload ──
+    // Without pruning, seenIdsSet grows forever with heavy-monsters causing component pool bloat
+    let changed = false;
+    const incomingIds = new Set<string>();
     for (let i = 0; i < list.length; i++) {
-      const id = list[i].id;
-      if (!seenIdsSet.current.has(id)) {
-        seenIdsSet.current.add(id);
-        hasNewId = true;
+      incomingIds.add(list[i].id);
+      if (!seenIdsSet.current.has(list[i].id)) {
+        seenIdsSet.current.add(list[i].id);
+        changed = true;
+      }
+    }
+    // Prune monsters that are no longer in the payload
+    for (const id of seenIdsSet.current) {
+      if (!incomingIds.has(id)) {
+        seenIdsSet.current.delete(id);
+        changed = true;
       }
     }
 
-    if (hasNewId) {
+    if (changed) {
       setActiveMonsterIds(Array.from(seenIdsSet.current));
     }
   });
