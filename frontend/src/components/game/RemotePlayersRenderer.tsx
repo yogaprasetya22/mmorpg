@@ -519,33 +519,35 @@ export const RemotePlayerInstance = ({
         bulletSpeed = isFinisher ? 80.0 : 100.0;
       }
       
-      // Fetch and setup next spell in the global pool (using global window pointer to avoid overlapping conflicts!)
-      const pool = mmSpellsRef.current;
-      if (typeof (window as any).globalRemoteSpellPtr === 'undefined') {
-        (window as any).globalRemoteSpellPtr = 0;
-      }
-      let ptr = (window as any).globalRemoteSpellPtr;
-      
-      const s = pool[ptr];
-      if (s) {
-        s.active = true;
-        s.isBullet = true;
-        s.fromX = fromX;
-        s.fromY = fromY;
-        s.fromZ = fromZ;
-        s.toX = toX;
-        s.toY = toY;
-        s.toZ = toZ;
-        s.startTime = performance.now();
-        s.color = color;
-        s.targetId = targetId;
-        (s as any).targetPoolIdx = targetPoolIdx;
-        (s as any).isSniper = false;
-        (s as any).isFinisher = isFinisher;
-        (s as any).bulletSpeed = bulletSpeed;
-        (s as any).playerClass = pClass;
+      // Fetch and setup next spell in the global pool ONLY for Beginner/Marksman class (prevents leaking MM bullets to melee classes!)
+      if (pClass === "Beginner") {
+        const pool = mmSpellsRef.current;
+        if (typeof (window as any).globalRemoteSpellPtr === 'undefined') {
+          (window as any).globalRemoteSpellPtr = 0;
+        }
+        let ptr = (window as any).globalRemoteSpellPtr;
         
-        (window as any).globalRemoteSpellPtr = (ptr + 1) % pool.length;
+        const s = pool[ptr];
+        if (s) {
+          s.active = true;
+          s.isBullet = true;
+          s.fromX = fromX;
+          s.fromY = fromY;
+          s.fromZ = fromZ;
+          s.toX = toX;
+          s.toY = toY;
+          s.toZ = toZ;
+          s.startTime = performance.now();
+          s.color = color;
+          s.targetId = targetId;
+          (s as any).targetPoolIdx = targetPoolIdx;
+          (s as any).isSniper = false;
+          (s as any).isFinisher = isFinisher;
+          (s as any).bulletSpeed = bulletSpeed;
+          (s as any).playerClass = pClass;
+          
+          (window as any).globalRemoteSpellPtr = (ptr + 1) % pool.length;
+        }
       }
 
       // Trigger premium class-specific visual layers
