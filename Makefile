@@ -67,6 +67,12 @@ run-backend: kill-backend-port
 	@echo "🚀 Booting Go Authoritative Backend..."
 	@cd backend && go run cmd/server/main.go
 
+# Runs the Go Backend with extra monsters
+run-backend-heavy-monsters: kill-backend-port
+	@echo "🔥 Starting Go Server with 80 extra simulated monsters..."
+	@cd backend && SPAWN_EXTRA_MONSTERS=80 go run cmd/server/main.go
+
+
 # Runs the Next.js/Three Fiber Frontend exclusively
 run-frontend: kill-frontend-port
 	@echo "🚀 Booting React/Three Fiber Frontend ($(RUN_FRONTEND_CMD))..."

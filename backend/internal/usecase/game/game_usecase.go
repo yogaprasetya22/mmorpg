@@ -3,8 +3,11 @@ package game
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
+	"os"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 
@@ -140,7 +143,31 @@ func (u *gameUsecase) initMonsters() {
 		}
 		u.SpawnMonster(cfg.Name, cfg.Type, s.x, 0.0, s.z)
 		spawnedCount++
-		fmt.Printf("👾 Spawned %s (%s) di posisi (%.1f, %.1f)\n", cfg.Name, cfg.Type, s.x, s.z)
+	}
+
+	// Spawn extra random monsters if requested by env var (for loadtesting monster density)
+	if extraEnv := os.Getenv("SPAWN_EXTRA_MONSTERS"); extraEnv != "" {
+		if count, err := strconv.Atoi(extraEnv); err == nil && count > 0 {
+			monsterNames := []string{"Jelly Slime", "Wild Boar", "Scavenger Goblin", "Dark Skeleton Soldier"}
+			monsterTypes := []string{"slime", "default", "goblin", "skeleton"}
+			for i := 0; i < count; i++ {
+				idx := rand.Intn(len(monsterNames))
+				// Random coordinate around [0, 0] within 35 units
+				angle := rand.Float64() * 2 * math.Pi
+				dist := 5.0 + rand.Float64()*30.0
+				rx := float32(dist * math.Cos(angle))
+				rz := float32(dist * math.Sin(angle))
+				u.SpawnMonster(
+					fmt.Sprintf("%s Extra #%d", monsterNames[idx], i+1),
+					monsterTypes[idx],
+					rx,
+					0.0,
+					rz,
+				)
+				spawnedCount++
+			}
+			fmt.Printf("👾 Spawned %d extra loadtest monsters around spawn area!\n", count)
+		}
 	}
 
 	fmt.Printf("👾 Total %d monster bervariasi berhasil di-spawn di titik yang berbeda!\n", spawnedCount)
