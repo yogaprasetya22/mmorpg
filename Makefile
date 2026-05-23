@@ -16,7 +16,7 @@ RUN_FRONTEND_CMD = $(if $(BUN),bun run dev,npm run dev)
 TSC_FRONTEND_CMD = $(if $(BUN),bunx tsc --noEmit,npx tsc --noEmit)
 BUILD_FRONTEND_CMD = $(if $(BUN),bun run build,npm run build)
 
-.PHONY: all help kill kill-backend-port kill-frontend-port run run-backend run-frontend seed-enemy check check-backend check-frontend clean build build-backend build-frontend
+.PHONY: all help kill kill-backend-port kill-frontend-port run run-backend run-frontend seed-enemy check check-backend check-frontend clean build build-backend build-frontend loadtest
 
 # Default target displays the help menu
 all: help
@@ -119,4 +119,8 @@ build-frontend:
 
 build: build-backend build-frontend
 	@echo "🎉 Production build completed for both engines!"
+
+loadtest:
+	@echo "🔥 Starting Game Server Load/Stress Test (50 simulated players)..."
+	@cd backend && go run cmd/loadtest/main.go -players=50 -duration=45s
 
