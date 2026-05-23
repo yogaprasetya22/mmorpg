@@ -154,12 +154,7 @@ export const RemoteMonsterInstance = ({
     };
   }, [monsterId]);
 
-  // Build clip cache once when actions become available
-  useEffect(() => {
-    if (actions && Object.keys(actions).length > 0) {
-      clipCache.current = buildClipNameCache(actions);
-    }
-  }, [actions]);
+
 
   // Pre-compute HP bar height once (not every frame)
   const hpBarY = useMemo(() => {
@@ -341,33 +336,39 @@ export const RemoteMonsterInstance = ({
       groupRef.current.rotation.y += diff * Math.min(1, 12.0 * delta);
     }
 
-    // ─── Animation State Machine ──────────────────────────────────────────────
-    if (actions && clipCache.current && currentAnimState.current !== desiredState) {
-      const cache = clipCache.current;
-      let clipName: string;
-      if      (desiredState === "death")  clipName = cache.death;
-      else if (desiredState === "attack") clipName = cache.attack;
-      else if (desiredState === "run")    clipName = cache.run;
-      else if (desiredState === "walk")   clipName = cache.walk;
-      else                                clipName = cache.idle;
-
-      const nextAction = actions[clipName];
-      if (nextAction && nextAction !== activeAction.current) {
-        if (activeAction.current) {
-          nextAction.reset().play();
-          activeAction.current.crossFadeTo(nextAction, 0.15, true);
-        } else {
-          nextAction.reset().fadeIn(0.1).play();
-        }
-        if (clipName.toLowerCase().includes("death")) {
-          nextAction.setLoop(THREE.LoopOnce, 1);
-          nextAction.clampWhenFinished = true;
-        } else {
-          nextAction.setLoop(THREE.LoopRepeat, Infinity);
-        }
-        activeAction.current = nextAction;
+    // ─── Animation State Machine (JIT clip name cache initialization) ──────────
+    if (actions && Object.keys(actions).length > 0) {
+      if (!clipCache.current) {
+        clipCache.current = buildClipNameCache(actions);
       }
-      currentAnimState.current = desiredState;
+
+      if (clipCache.current && currentAnimState.current !== desiredState) {
+        const cache = clipCache.current;
+        let clipName: string;
+        if      (desiredState === "death")  clipName = cache.death;
+        else if (desiredState === "attack") clipName = cache.attack;
+        else if (desiredState === "run")    clipName = cache.run;
+        else if (desiredState === "walk")   clipName = cache.walk;
+        else                                clipName = cache.idle;
+
+        const nextAction = actions[clipName];
+        if (nextAction && nextAction !== activeAction.current) {
+          if (activeAction.current) {
+            nextAction.reset().play();
+            activeAction.current.crossFadeTo(nextAction, 0.15, true);
+          } else {
+            nextAction.reset().fadeIn(0.1).play();
+          }
+          if (clipName.toLowerCase().includes("death")) {
+            nextAction.setLoop(THREE.LoopOnce, 1);
+            nextAction.clampWhenFinished = true;
+          } else {
+            nextAction.setLoop(THREE.LoopRepeat, Infinity);
+          }
+          activeAction.current = nextAction;
+        }
+        currentAnimState.current = desiredState;
+      }
     }
 
     // ─── Synchronized animation timescale ────────────────────────────────────
@@ -487,7 +488,7 @@ export const RemoteMonstersRenderer = ({
   const remotePlayerMapRef = useRef<Map<string, PlayerNetworkState>>(new Map());
 
   // ─── Throttle refs — avoid O(n log n) sort every frame ───────────────────
-  const lastSortTime = useRef(0);
+  const lastSortTime = useRef(-1);
   // Pre-allocated scratch array to avoid new array allocation every frame
   const scratchDistances = useRef<{ id: string; distSq: number }[]>([]);
 
@@ -553,12 +554,20 @@ export const RemoteMonstersRenderer = ({
         changed = true;
       }
     }
-    // Prune monsters that are no longer in the payload
-    for (const id of seenIdsSet.current) {
+    
+    // Collect keys to prune first to avoid mutating Set while iterating over it (safe in all JS engines)
+    const toPrune: string[] = [];
+    seenIdsSet.current.forEach(id => {
       if (!incomingIds.has(id)) {
-        seenIdsSet.current.delete(id);
-        changed = true;
+        toPrune.push(id);
       }
+    });
+
+    if (toPrune.length > 0) {
+      for (let i = 0; i < toPrune.length; i++) {
+        seenIdsSet.current.delete(toPrune[i]);
+      }
+      changed = true;
     }
 
     if (changed) {
