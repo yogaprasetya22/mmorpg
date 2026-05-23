@@ -14,8 +14,8 @@ const _sharedBox3 = new THREE.Box3();
 // ─── Shared scratch vectors to avoid per-frame allocations ───────────────────
 const _v3 = new THREE.Vector3();
 // ─── Module-level LOD thresholds (hoisted out of useFrame to avoid re-eval every frame) ─
-const MONSTER_FAR_SQ     = 45 * 45;  // > 45 units: cull completely
-const MONSTER_MED_FAR_SQ = 18 * 18;  // > 18 units: hide billboard + text
+const MONSTER_FAR_SQ     = 55 * 55;  // > 55 units: cull completely
+const MONSTER_MED_FAR_SQ = 35 * 35;  // > 35 units: hide billboard + text (much further distance!)
 
 
 // ─── Global visual position registry (module-level Map, not window) ────────────

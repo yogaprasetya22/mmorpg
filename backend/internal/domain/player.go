@@ -185,9 +185,8 @@ func (p *Player) CalculateDamageTo(targetDefense float32) (float32, bool) {
 		dmg = p.MagicAttack
 	}
 
-	// Critical roll
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	if r.Float32() < p.CriticalRate {
+	// Critical roll using global rand
+	if rand.Float32() < p.CriticalRate {
 		isCrit = true
 		dmg *= 1.5
 	}
@@ -197,7 +196,7 @@ func (p *Player) CalculateDamageTo(targetDefense float32) (float32, bool) {
 	dmg = dmg * damageMultiplier
 
 	// Add slight variance +/- 10%
-	variation := (r.Float32()*0.20 - 0.10) * dmg
+	variation := (rand.Float32()*0.20 - 0.10) * dmg
 	dmg = dmg + variation
 
 	if dmg < 1 {

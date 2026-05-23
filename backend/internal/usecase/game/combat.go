@@ -186,7 +186,7 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 		// Authoritative domain-derived class damage formula calculation (adjusted by PvP multiplier 0.7)
 		var finalDamage float32
 		if clientDmg > 0 {
-			finalDamage = clientDmg
+			finalDamage = clientDmg * 0.7
 		} else {
 			dmgVal, isCritRaw := playerData.CalculateDamageTo(targetData.Defense)
 			isCrit = isCritRaw

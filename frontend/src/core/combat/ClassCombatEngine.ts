@@ -63,7 +63,11 @@ const BaseAttackCalculator = (
 ) => {
   if (!ctx.dealPlayerDamage) return;
 
+  const playerClass = ctx.playerStats?.class || ctx.playerStats?.Class || "Warrior";
   let baseDamage = ctx.playerStats?.attack || 120;
+  if (playerClass === "Mage") {
+    baseDamage = ctx.playerStats?.magic_attack || 120;
+  }
   baseDamage = baseDamage * baseMultiplier;
 
   if (isEagleEyeActive) baseDamage *= 1.8;

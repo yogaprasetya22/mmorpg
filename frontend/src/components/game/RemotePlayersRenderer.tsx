@@ -108,8 +108,8 @@ export const RemotePlayerInstance = ({
     const dzCam = state.camera.position.z - groupRef.current.position.z;
     const camDistSq = dxCam * dxCam + dyCam * dyCam + dzCam * dzCam;
 
-    const FAR_SQ = 50 * 50;      // > 50 units: cull completely
-    const MED_FAR_SQ = 30 * 30;  // > 30 units: hide name tag
+    const FAR_SQ = 60 * 60;      // > 60 units: cull completely
+    const MED_FAR_SQ = 40 * 40;  // > 40 units: hide name tag
 
     if (camDistSq > FAR_SQ) {
       groupRef.current.visible = false;

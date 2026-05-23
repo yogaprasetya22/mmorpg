@@ -13,7 +13,6 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
-	"time"
 )
 
 // ─── Mirror dari domain/player.go ─────────────────────────────────────────────
@@ -59,15 +58,13 @@ func (p *Player) RecalculateStats() {
 
 // CalculateDamageTo — mirror dari domain/player.go
 func (p *Player) CalculateDamageTo(targetDefense float32) (float32, bool) {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-
 	isCrit := false
 	dmg := p.Attack
 	if p.Class == "Mage" {
 		dmg = p.MagicAttack
 	}
 
-	if r.Float32() < p.CriticalRate {
+	if rand.Float32() < p.CriticalRate {
 		isCrit = true
 		dmg *= 1.5
 	}
@@ -77,7 +74,7 @@ func (p *Player) CalculateDamageTo(targetDefense float32) (float32, bool) {
 	dmg = dmg * damageMultiplier
 
 	// Variance +/- 10%
-	variation := (r.Float32()*0.20 - 0.10) * dmg
+	variation := (rand.Float32()*0.20 - 0.10) * dmg
 	dmg = dmg + variation
 
 	if dmg < 1 {
@@ -162,8 +159,9 @@ func testMovementAccuracy() {
 		meshX += (targetX - meshX) * math.Min(1, lerpFactor*dt)
 		meshZ += (targetZ - meshZ) * math.Min(1, lerpFactor*dt)
 
-		// Expected position at renderTime (no delay)
-		expectedAngle := renderTime / tickRate * 0.05
+		// Expected position at renderTime - renderDelay (matching delayed interpolation playback target)
+		delayedTime := renderTime - renderDelay
+		expectedAngle := delayedTime / tickRate * 0.05
 		expectedX := radius * math.Cos(expectedAngle)
 		expectedZ := radius * math.Sin(expectedAngle)
 
