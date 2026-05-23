@@ -52,24 +52,24 @@ type Client struct {
 }
 
 type WSIncomingMessage struct {
-	Action   string  `json:"action"` // "move", "attack", "distribute_stat", "equip_item", "use_item", "cast_skill", "change_class"
-	X        float32 `json:"x"`
-	Y        float32 `json:"y"`
-	Z        float32 `json:"z"`
-	Rotation float32 `json:"rotation"`
-	Animation string `json:"animation"`
+	Action   string  `json:"action" msgpack:"action"` // "move", "attack", "distribute_stat", "equip_item", "use_item", "cast_skill", "change_class"
+	X        float32 `json:"x" msgpack:"x"`
+	Y        float32 `json:"y" msgpack:"y"`
+	Z        float32 `json:"z" msgpack:"z"`
+	Rotation float32 `json:"rotation" msgpack:"rotation"`
+	Animation string `json:"animation" msgpack:"animation"`
 
-	TargetType string  `json:"targetType"` // "monster", "player"
-	TargetID   string  `json:"targetId"`
-	Damage     float32 `json:"damage"`
-	IsCrit     bool    `json:"isCrit"`
+	TargetType string  `json:"targetType" msgpack:"targetType"` // "monster", "player"
+	TargetID   string  `json:"targetId" msgpack:"targetId"`
+	Damage     float32 `json:"damage" msgpack:"damage"`
+	IsCrit     bool    `json:"isCrit" msgpack:"isCrit"`
 
 	// RPG Attributes Payload
-	Stat         string `json:"stat"` // str, int, con, vit, wis, luk
-	Amount       int    `json:"amount"`
-	PlayerItemID string `json:"playerItemId"`
-	SkillID      string `json:"skillId"`
-	NewClass     string `json:"newClass"`
+	Stat         string `json:"stat" msgpack:"stat"` // str, int, con, vit, wis, luk
+	Amount       int    `json:"amount" msgpack:"amount"`
+	PlayerItemID string `json:"playerItemId" msgpack:"playerItemId"`
+	SkillID      string `json:"skillId" msgpack:"skillId"`
+	NewClass     string `json:"newClass" msgpack:"newClass"`
 }
 
 func (c *Client) ReadPump() {

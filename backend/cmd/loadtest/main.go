@@ -407,10 +407,10 @@ func main() {
 						Animation: "Run",
 					}
 
-					data, err := msgpack.Marshal(moveMsg)
+					data, err := json.Marshal(moveMsg)
 					if err == nil {
 						_ = conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
-						err = conn.WriteMessage(websocket.BinaryMessage, data)
+						err = conn.WriteMessage(websocket.TextMessage, data)
 						if err != nil {
 							return
 						}
@@ -445,10 +445,10 @@ func main() {
 								IsCrit:     isCrit,
 							}
 
-							atkData, err := msgpack.Marshal(attackMsg)
+							atkData, err := json.Marshal(attackMsg)
 							if err == nil {
 								_ = conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
-								err = conn.WriteMessage(websocket.BinaryMessage, atkData)
+								err = conn.WriteMessage(websocket.TextMessage, atkData)
 								if err == nil {
 									atomic.AddInt64(&metrics.MsgsSent, 1)
 									atomic.AddInt64(&metrics.AttackMsgsSent, 1)
