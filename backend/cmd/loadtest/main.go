@@ -381,8 +381,8 @@ func main() {
 			// Position simulation metrics
 			var angle float64 = rand.Float64() * 2 * math.Pi
 			radius := 10.0 + rand.Float64()*15.0
-			centerX := float64(idx * 5)
-			centerZ := float64(idx * 5)
+			centerX := 0.0
+			centerZ := 0.0
 
 			var attackCounter int = 0
 

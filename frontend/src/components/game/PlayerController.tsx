@@ -1080,9 +1080,9 @@ export const PlayerController = ({
       const horizontalSpeed = Math.sqrt(linvel.x * linvel.x + linvel.z * linvel.z);
       
       if (desired.includes("walk")) {
-        activeAction.current.timeScale = Math.max(0.4, Math.min(1.8, horizontalSpeed / 1.5));
+        activeAction.current.timeScale = Math.max(0.4, Math.min(1.2, horizontalSpeed / 3.0));
       } else if (desired.includes("run")) {
-        activeAction.current.timeScale = Math.max(0.4, Math.min(2.0, horizontalSpeed / 4.0));
+        activeAction.current.timeScale = Math.max(0.4, Math.min(1.4, horizontalSpeed / 5.5));
       } else {
         activeAction.current.timeScale = 1.0;
       }

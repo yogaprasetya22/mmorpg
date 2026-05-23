@@ -210,9 +210,12 @@ export const RemotePlayerInstance = ({
       }
     }
 
-    // Update text
+    // Update text only if changed to avoid expensive Troika dirty checking/re-layouts
     if (textRef.current && nameRef.current.visible) {
-      textRef.current.text = username || id.substring(0, 8);
+      const expectedText = username || id.substring(0, 8);
+      if (textRef.current.text !== expectedText) {
+        textRef.current.text = expectedText;
+      }
     }
     
     // Billboard name label: quaternion copy removed — nameRef is a group, not Billboard.
@@ -254,12 +257,11 @@ export const RemotePlayerInstance = ({
       currentAnimState.current = animation;
     }
 
-    // Adjust animation timescale dynamically to match visual velocity
     if (activeAction.current) {
       if (desired.includes("walk")) {
-        activeAction.current.timeScale = Math.max(0.4, Math.min(1.8, smoothedSpeed.current / 1.5));
+        activeAction.current.timeScale = Math.max(0.4, Math.min(1.2, smoothedSpeed.current / 3.0));
       } else if (desired.includes("run")) {
-        activeAction.current.timeScale = Math.max(0.4, Math.min(2.0, smoothedSpeed.current / 3.0));
+        activeAction.current.timeScale = Math.max(0.4, Math.min(1.4, smoothedSpeed.current / 5.5));
       } else {
         activeAction.current.timeScale = 1.0;
       }
