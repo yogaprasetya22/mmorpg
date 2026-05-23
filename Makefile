@@ -142,3 +142,13 @@ loadtest-fast-combat:
 	@echo "⚔️  Starting RAPID COMBAT Load/Stress Test (40 simulated players, attacking every 500ms, tight group)..."
 	@cd backend && go run cmd/loadtest/main.go -players=40 -duration=30s -attack=true -attack-rate=10 -radius=8.0
 
+accuracy-test:
+	@echo "🔬 Running Combat & Movement Accuracy Test Suite..."
+	@cd backend && go run cmd/accuracytest/main.go
+
+loadtest-massive-enemies:
+	@echo "👾 Running Massive Enemy Density Load Test (50 players, 80 extra monsters)..."
+	@echo "⚠️  Make sure backend is running with: make run-backend-heavy-monsters"
+	@cd backend && go run cmd/loadtest/main.go -players=50 -duration=45s -attack=true -radius=15.0
+
+

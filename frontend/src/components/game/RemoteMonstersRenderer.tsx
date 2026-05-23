@@ -13,6 +13,10 @@ import { useStore } from "@/src/state/useStore";
 const _sharedBox3 = new THREE.Box3();
 // ─── Shared scratch vectors to avoid per-frame allocations ───────────────────
 const _v3 = new THREE.Vector3();
+// ─── Module-level LOD thresholds (hoisted out of useFrame to avoid re-eval every frame) ─
+const MONSTER_FAR_SQ     = 45 * 45;  // > 45 units: cull completely
+const MONSTER_MED_FAR_SQ = 18 * 18;  // > 18 units: hide billboard + text
+
 
 // ─── Global visual position registry (module-level Map, not window) ────────────
 // Using a module-level Map is cheaper than window property access (avoids prototype chain lookup).
@@ -129,7 +133,7 @@ export const RemoteMonsterInstance = ({
   // ─── Clip name cache (built once, not every frame) ─────────────────────────
   const clipCache = useRef<ReturnType<typeof buildClipNameCache> | null>(null);
 
-  const prevVisualPos = useRef({ x: 0, z: 0 });
+  const prevVisualPos = useRef<Float32Array>(new Float32Array(2));
   const hasInitializedPrevVisual = useRef(false);
   const isMoving = useRef(false);
   const currentAnimState = useRef("Idle");
@@ -198,10 +202,7 @@ export const RemoteMonsterInstance = ({
     _v3.subVectors(state.camera.position, groupRef.current.position);
     const camDistSq = _v3.lengthSq();
 
-    const FAR_SQ      = 60 * 60;  // > 60 units: cull completely
-    const MED_FAR_SQ  = 35 * 35;  // > 35 units: hide billboard only
-
-    if (camDistSq > FAR_SQ) {
+    if (camDistSq > MONSTER_FAR_SQ) {
       groupRef.current.visible = false;
       if (activeAction.current) activeAction.current.paused = true;
       return;
@@ -273,7 +274,8 @@ export const RemoteMonsterInstance = ({
     // ─── Uniform Constant-Speed Movement with Dynamic Catch-up ───────────────
     if (!hasInitializedPrevVisual.current || distToTarget > 3.0) {
       groupRef.current.position.set(x, groundY, z);
-      prevVisualPos.current = { x, z };
+      prevVisualPos.current[0] = x;
+      prevVisualPos.current[1] = z;
       hasInitializedPrevVisual.current = true;
     } else if (distToTarget > 0.01) {
       let baseSpeed = 1.8;
@@ -302,8 +304,8 @@ export const RemoteMonsterInstance = ({
 
     const currentMeshX = groupRef.current.position.x;
     const currentMeshZ = groupRef.current.position.z;
-    const visualDx = currentMeshX - prevVisualPos.current.x;
-    const visualDz = currentMeshZ - prevVisualPos.current.z;
+    const visualDx = currentMeshX - prevVisualPos.current[0];
+    const visualDz = currentMeshZ - prevVisualPos.current[1];
     const visualDistance = Math.sqrt(visualDx * visualDx + visualDz * visualDz);
 
     monsterVisualPositions.set(data.id, { x: currentMeshX, z: currentMeshZ });
@@ -312,7 +314,8 @@ export const RemoteMonsterInstance = ({
       (window as any).monsterVisualPositions = monsterVisualPositions;
     }
 
-    prevVisualPos.current = { x: currentMeshX, z: currentMeshZ };
+    prevVisualPos.current[0] = currentMeshX;
+    prevVisualPos.current[1] = currentMeshZ;
 
     // ─── Low-pass filter speed to prevent animation timescale jitter ─────────
     const currentSpeed = visualDistance / Math.max(0.0001, delta);
@@ -373,7 +376,7 @@ export const RemoteMonsterInstance = ({
 
     // ─── Billboard & HP UI (hidden beyond MED_FAR_SQ) ────────────────────────
     if (billboardGroupRef.current) {
-      if (camDistSq > MED_FAR_SQ) {
+      if (camDistSq > MONSTER_MED_FAR_SQ) {
         billboardGroupRef.current.visible = false;
       } else {
         billboardGroupRef.current.visible = true;
@@ -480,6 +483,11 @@ export const RemoteMonstersRenderer = ({
   // O(1) lookup map for remote players — eliminates O(n) .find() per monster per frame
   const remotePlayerMapRef = useRef<Map<string, PlayerNetworkState>>(new Map());
 
+  // ─── Throttle refs — avoid O(n log n) sort every frame ───────────────────
+  const lastSortTime = useRef(0);
+  // Pre-allocated scratch array to avoid new array allocation every frame
+  const scratchDistances = useRef<{ id: string; distSq: number }[]>([]);
+
   useFrame((state) => {
     // ─── Rebuild monster map (O(n) but very cheap) ───────────────────────────
     const list = worldMonstersRef.current || [];
@@ -497,25 +505,38 @@ export const RemoteMonstersRenderer = ({
       pMap.set(players[i].id, players[i]);
     }
 
-    // Sort monsters by distance to camera
-    const camPos = state.camera.position;
-    const monsterDistances = list.map(m => {
-      const dx = m.x - camPos.x;
-      const dy = m.y - camPos.y;
-      const dz = m.z - camPos.z;
-      const distSq = dx * dx + dy * dy + dz * dz;
-      return { id: m.id, distSq };
-    });
+    // ─── Throttled distance sort (10Hz max) — prevents 60x sort per second ──
+    const now = state.clock.elapsedTime;
+    if (now - lastSortTime.current >= 0.10) {
+      lastSortTime.current = now;
 
-    monsterDistances.sort((a, b) => a.distSq - b.distSq);
+      const camPos = state.camera.position;
 
-    // Limit maximum visible monster models to 12 to preserve steady 60 FPS
-    const visibleSet = new Set<string>();
-    const limit = Math.min(monsterDistances.length, 12);
-    for (let i = 0; i < limit; i++) {
-      visibleSet.add(monsterDistances[i].id);
+      // Reuse scratch array — no heap allocation per frame
+      const scratch = scratchDistances.current;
+      scratch.length = 0;
+      for (let i = 0; i < list.length; i++) {
+        const m = list[i];
+        if (m.is_dead) continue;  // skip dead monsters from visibility budget
+        const dx = m.x - camPos.x;
+        const dy = m.y - camPos.y;
+        const dz = m.z - camPos.z;
+        scratch.push({ id: m.id, distSq: dx * dx + dy * dy + dz * dz });
+      }
+
+      scratch.sort((a, b) => a.distSq - b.distSq);
+
+      // Adaptive cap: fewer visible models when scene is monster-dense to protect FPS
+      const densityCap = list.length > 40 ? 8 : 12;
+      const limit = Math.min(scratch.length, densityCap);
+
+      // Reuse visibleMonsterIdsRef Set in-place — no new Set() allocation
+      const visibleSet = visibleMonsterIdsRef.current;
+      visibleSet.clear();
+      for (let i = 0; i < limit; i++) {
+        visibleSet.add(scratch[i].id);
+      }
     }
-    visibleMonsterIdsRef.current = visibleSet;
 
     // ─── Detect new monster IDs — trigger React state update only on change ──
     let hasNewId = false;
