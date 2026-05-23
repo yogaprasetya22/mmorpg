@@ -16,28 +16,43 @@ RUN_FRONTEND_CMD = $(if $(BUN),bun run dev,npm run dev)
 TSC_FRONTEND_CMD = $(if $(BUN),bunx tsc --noEmit,npx tsc --noEmit)
 BUILD_FRONTEND_CMD = $(if $(BUN),bun run build,npm run build)
 
-.PHONY: all help kill kill-backend-port kill-frontend-port run run-backend run-frontend seed-enemy check check-backend check-frontend clean build build-backend build-frontend loadtest
+.PHONY: all help kill kill-backend-port kill-frontend-port run run-backend run-backend-heavy-monsters run-frontend seed-enemy check check-backend check-frontend clean build build-backend build-frontend loadtest loadtest-peaceful loadtest-extreme loadtest-fast-combat loadtest-massive-enemies accuracy-test
 
 # Default target displays the help menu
 all: help
 
 help:
 	@echo "================================================================="
-	@echo "                    MMORPG GAME RUNNER MODULE                    "
+	@echo "                   🎮  MMORPG DUAL-ENGINE MATRIX  🎮              "
 	@echo "================================================================="
-	@echo "Available commands:"
-	@echo "  make run            - Kill running ports and start BOTH services concurrently"
-	@echo "  make run-backend    - Kill port $(PORT_BACKEND) and start backend only"
-	@echo "  make run-frontend   - Kill port $(PORT_FRONTEND) and start frontend only"
-	@echo "  make seed-enemy     - Force wipe and fresh seed all 10 varied enemy configurations"
-	@echo "  make kill           - Terminate any running processes on ports $(PORT_BACKEND) & $(PORT_FRONTEND)"
-	@echo "  make check          - Run dual-engine compilation and type-safety check"
-	@echo "  make check-backend  - Compile and verify Go backend executable"
-	@echo "  make check-frontend - Run strict Next.js TypeScript typecheck"
-	@echo "  make build          - Compile both Go backend and Next.js frontend for production"
-	@echo "  make build-backend  - Compile Go backend binary"
-	@echo "  make build-frontend - Build Next.js frontend production bundle"
-	@echo "  make clean          - Clean compiled backend binary artifacts"
+	@echo "⚙️  CORE ENGINE SERVICES:"
+	@echo "  make run                       - Kill running ports and start BOTH services concurrently"
+	@echo "  make run-backend               - Kill port $(PORT_BACKEND) and start backend only"
+	@echo "  make run-backend-heavy-monsters- Kill port $(PORT_BACKEND) and start backend with 80 extra monsters"
+	@echo "  make run-frontend              - Kill port $(PORT_FRONTEND) and start frontend only"
+	@echo "  make kill                      - Terminate any running processes on ports $(PORT_BACKEND) & $(PORT_FRONTEND)"
+	@echo ""
+	@echo "💾 DATABASE & CONFIG SEEDERS:"
+	@echo "  make seed-enemy                - Force wipe and fresh seed all 10 varied enemy configurations"
+	@echo ""
+	@echo "🧪 QUALITY ASSURANCE & DIAGNOSTICS:"
+	@echo "  make check                     - Run dual-engine compilation and type-safety check"
+	@echo "  make check-backend             - Compile and verify Go backend executable"
+	@echo "  make check-frontend            - Run strict Next.js TypeScript typecheck"
+	@echo "  make accuracy-test             - Run authoritative combat & movement drift tests"
+	@echo ""
+	@echo "💥 PERFORMANCE & STRESS TESTING SCENARIOS:"
+	@echo "  make loadtest                  - Run standard combat test (50 players, 1.5s attack rate)"
+	@echo "  make loadtest-peaceful         - Run peaceful movement test (50 players, NO attack)"
+	@echo "  make loadtest-extreme          - Run extreme player stress test (120 players, NO attack)"
+	@echo "  make loadtest-fast-combat      - Run rapid attack VFX stress test (40 players, 500ms attack rate)"
+	@echo "  make loadtest-massive-enemies  - Run massive enemy density test (50 players, 80 monsters)"
+	@echo ""
+	@echo "📦 PRODUCTION BUILD & DEPLOYMENT:"
+	@echo "  make build                     - Compile both Go backend and Next.js frontend for production"
+	@echo "  make build-backend             - Compile Go backend binary"
+	@echo "  make build-frontend            - Build Next.js frontend production bundle"
+	@echo "  make clean                     - Clean compiled backend binary artifacts"
 	@echo "================================================================="
 
 # Clean ports target using multiple layers of process signal dispatching (fuser & lsof + kill)
