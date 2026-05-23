@@ -81,7 +81,7 @@ export const RemotePlayerInstance = ({
   const prevVisualPos = useRef<{ x: number, z: number } | null>(null);
   const smoothedSpeed = useRef(0);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (!groupRef.current) return;
     
     // O(1) Map lookup — avoids O(n) find() per frame
@@ -91,8 +91,24 @@ export const RemotePlayerInstance = ({
       groupRef.current.visible = false;
       return;
     }
-    
+
+    // ─── Distance Culling — avoids full skeleton/animation ticks for far players ──────
+    const dxCam = state.camera.position.x - groupRef.current.position.x;
+    const dyCam = state.camera.position.y - groupRef.current.position.y;
+    const dzCam = state.camera.position.z - groupRef.current.position.z;
+    const camDistSq = dxCam * dxCam + dyCam * dyCam + dzCam * dzCam;
+
+    const FAR_SQ = 50 * 50;      // > 50 units: cull completely
+    const MED_FAR_SQ = 30 * 30;  // > 30 units: hide name tag
+
+    if (camDistSq > FAR_SQ) {
+      groupRef.current.visible = false;
+      if (activeAction.current) activeAction.current.paused = true;
+      return;
+    }
+
     groupRef.current.visible = true;
+    if (activeAction.current) activeAction.current.paused = false;
 
     if (prevVisualPos.current === null) {
       prevVisualPos.current = { x: groupRef.current.position.x, z: groupRef.current.position.z };
@@ -175,8 +191,17 @@ export const RemotePlayerInstance = ({
     while (diff > Math.PI) diff -= Math.PI * 2;
     groupRef.current.rotation.y += diff * Math.min(1, 24.0 * delta);
 
+    // Billboard name label or hide if too far
+    if (nameRef.current) {
+      if (camDistSq > MED_FAR_SQ) {
+        nameRef.current.visible = false;
+      } else {
+        nameRef.current.visible = true;
+      }
+    }
+
     // Update text
-    if (textRef.current) {
+    if (textRef.current && nameRef.current.visible) {
       textRef.current.text = username || id.substring(0, 8);
     }
     
