@@ -122,6 +122,100 @@ const CameraDirector = () => {
   return null;
 };
 
+// --- Performance & Diagnostics Monitor for R3F ---
+function PerformanceDiagnostics({
+  connectedPlayersRef,
+  worldMonstersRef
+}: {
+  connectedPlayersRef: React.RefObject<PlayerNetworkState[]>;
+  worldMonstersRef: React.RefObject<MonsterNetworkState[]>;
+}) {
+  const { gl } = useThree();
+  const lastUpdate = useRef(0);
+  const frameTimes = useRef<number[]>([]);
+  const lastFrameTime = useRef(performance.now());
+
+  useFrame(() => {
+    const now = performance.now();
+    const delta = now - lastFrameTime.current;
+    lastFrameTime.current = now;
+
+    frameTimes.current.push(delta);
+    if (frameTimes.current.length > 30) frameTimes.current.shift();
+
+    if (now - lastUpdate.current < 500) return; // Update every 500ms
+    lastUpdate.current = now;
+
+    const avgDelta = frameTimes.current.reduce((a, b) => a + b, 0) / frameTimes.current.length;
+    const fps = Math.round(1000 / avgDelta) || 60;
+
+    const drawCalls = gl.info.render.calls;
+    const triangles = gl.info.render.triangles;
+    const geometries = gl.info.memory.geometries;
+    const textures = gl.info.memory.textures;
+
+    const playersCount = connectedPlayersRef.current?.length || 0;
+    const monstersCount = worldMonstersRef.current?.length || 0;
+
+    // Update DOM directly for zero React overhead
+    const elFps = document.getElementById("diag-fps");
+    const elDraw = document.getElementById("diag-draw");
+    const elTri = document.getElementById("diag-tri");
+    const elGeo = document.getElementById("diag-geo");
+    const elTex = document.getElementById("diag-tex");
+    const elMonsters = document.getElementById("diag-monsters");
+    const elPlayers = document.getElementById("diag-players");
+    const elStatus = document.getElementById("diag-status");
+
+    if (elFps) {
+      elFps.innerText = `${fps} FPS`;
+      if (fps < 30) {
+        elFps.className = "text-red-500 font-black animate-pulse";
+      } else if (fps < 50) {
+        elFps.className = "text-amber-500 font-black";
+      } else {
+        elFps.className = "text-emerald-400 font-black";
+      }
+    }
+    if (elDraw) {
+      elDraw.innerText = drawCalls.toString();
+      elDraw.className = drawCalls > 350 ? "text-red-500 font-black" : (drawCalls > 180 ? "text-amber-500 font-black" : "text-emerald-400 font-black");
+    }
+    if (elTri) {
+      const triK = Math.round(triangles / 1000);
+      elTri.innerText = `${triK}K`;
+      elTri.className = triangles > 300000 ? "text-red-500 font-black" : (triangles > 150000 ? "text-amber-500 font-black" : "text-emerald-400 font-black");
+    }
+    if (elGeo) elGeo.innerText = geometries.toString();
+    if (elTex) elTex.innerText = textures.toString();
+    if (elMonsters) elMonsters.innerText = monstersCount.toString();
+    if (elPlayers) elPlayers.innerText = playersCount.toString();
+
+    if (elStatus) {
+      if (fps < 45) {
+        if (drawCalls > 350) {
+          elStatus.innerText = "CPU: DRAW CALLS TERLALU TINGGI";
+          elStatus.className = "text-red-400 font-black uppercase text-[7px] tracking-wide animate-pulse";
+        } else if (triangles > 400000) {
+          elStatus.innerText = "GPU: POLIGON/TRI TERLALU BANYAK";
+          elStatus.className = "text-red-400 font-black uppercase text-[7px] tracking-wide animate-pulse";
+        } else if (monstersCount > 80) {
+          elStatus.innerText = "JS: TERLALU BANYAK ENTITY AKTIF";
+          elStatus.className = "text-amber-400 font-black uppercase text-[7px] tracking-wide";
+        } else {
+          elStatus.innerText = "PERFORMA TURUN (LOAD TINGGI)";
+          elStatus.className = "text-amber-400 font-black uppercase text-[7px] tracking-wide";
+        }
+      } else {
+        elStatus.innerText = "PERFORMA STABIL & SEHAT";
+        elStatus.className = "text-emerald-400 font-black uppercase text-[7px] tracking-wide";
+      }
+    }
+  });
+
+  return null;
+}
+
 export default function MultiplayerArena() {
   const selectedMapId = useEditorStore(s => s.selectedMapId);
   const [envReady, setEnvReady] = useState(false);
@@ -1201,6 +1295,7 @@ export default function MultiplayerArena() {
             className="w-full h-full"
           >
             <Stats className="!absolute !bottom-4 !right-2 !top-auto !left-auto !z-[2000]" />
+            <PerformanceDiagnostics connectedPlayersRef={connectedPlayersRef} worldMonstersRef={worldMonstersRef} />
             {/* Aggressively scale DPR: floor 0.5 for low-spec, ceiling 0.8 */}
             <PerformanceMonitor onIncline={() => setDpr(Math.min(dpr + 0.05, 0.8))} onDecline={() => setDpr(Math.max(dpr - 0.05, 0.5))} />
             <AdaptiveEvents />
@@ -1401,6 +1496,52 @@ export default function MultiplayerArena() {
             </div>
           </div>
         </div>
+        {/* ── TOP-LEFT: Diagnostics HUD Panel (Collapsible, real-time performance diagnostics) ── */}
+        {selectedCharacter && (
+          <div className="absolute left-3 top-[86px] w-[202px] bg-[#090d16]/75 backdrop-blur-xl border border-white/10 rounded-2xl p-3 flex flex-col gap-1.5 shadow-2xl pointer-events-auto transition-all duration-300 z-30">
+            <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+              <span className="text-[9.5px] font-black text-cyan-400 uppercase tracking-widest flex items-center gap-1">
+                <Activity className="w-3.5 h-3.5 animate-pulse text-cyan-400" />
+                DIAGNOSTIK LAG
+              </span>
+              <span className="text-[7.5px] font-black bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded-md uppercase">SYSTEM</span>
+            </div>
+            <div className="flex flex-col gap-1 text-[8.5px] font-bold text-zinc-400">
+              <div className="flex justify-between items-center">
+                <span>Kecepatan Render:</span>
+                <span id="diag-fps" className="text-emerald-400 font-black">-- FPS</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Draw Calls (CPU):</span>
+                <span id="diag-draw" className="text-zinc-200">--</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Poligon/Triangles (GPU):</span>
+                <span id="diag-tri" className="text-zinc-200">--</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Geometri Memori:</span>
+                <span id="diag-geo" className="text-zinc-200">--</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Tekstur VRAM:</span>
+                <span id="diag-tex" className="text-zinc-200">--</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Aktif Bot (Player):</span>
+                <span id="diag-players" className="text-zinc-200">--</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Aktif Monster:</span>
+                <span id="diag-monsters" className="text-zinc-200">--</span>
+              </div>
+            </div>
+            <div className="border-t border-white/5 pt-1.5 flex flex-col gap-0.5">
+              <span className="text-[7px] font-black text-zinc-500 uppercase tracking-wider">Status & Analisis Bottleneck:</span>
+              <span id="diag-status" className="text-emerald-400 font-black uppercase text-[7.5px]">Mengumpulkan Data...</span>
+            </div>
+          </div>
+        )}
 
         {/* ── TOP-CENTER: Currency bar ── */}
         <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-black/55 backdrop-blur-xl border border-white/10 px-4 py-1.5 rounded-2xl shadow-xl pointer-events-auto">
