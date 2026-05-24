@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { KeyboardControls, useGLTF, StatsGl, PerformanceMonitor, AdaptiveEvents, AdaptiveDpr } from "@react-three/drei";
+import { KeyboardControls, useGLTF, Stats, PerformanceMonitor, AdaptiveEvents, AdaptiveDpr } from "@react-three/drei";
 import { useWebSocketGame, PlayerNetworkState, MonsterNetworkState, GameStatePayload } from "@/src/hooks/useWebSocketGame";
 import { PlayerController, keyboardMap } from "@/src/components/game/PlayerController";
 import { RemotePlayersRenderer } from "@/src/components/game/RemotePlayersRenderer";
@@ -1200,7 +1200,7 @@ export default function MultiplayerArena() {
             }}
             className="w-full h-full"
           >
-            <StatsGl className="!absolute !top-24 !left-2 !right-auto !bottom-auto !z-[2000]" />
+            <Stats className="!absolute !bottom-4 !right-2 !top-auto !left-auto !z-[2000]" />
             {/* Aggressively scale DPR: floor 0.5 for low-spec, ceiling 0.8 */}
             <PerformanceMonitor onIncline={() => setDpr(Math.min(dpr + 0.05, 0.8))} onDecline={() => setDpr(Math.max(dpr - 0.05, 0.5))} />
             <AdaptiveEvents />
