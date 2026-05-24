@@ -230,7 +230,7 @@ export const GameCanvas = React.memo(({
     "Performance Tool": folder({
       showPerf: { value: false, label: "Show R3F-Perf" },
       perfPosition: {
-        value: "top-right",
+        value: "bottom-right",
         options: ["top-right", "top-left", "bottom-right", "bottom-left"],
         label: "Monitor Position"
       },
@@ -360,7 +360,7 @@ export const GameCanvas = React.memo(({
 
           {(showPerf || isEditor) && (
             <Perf
-              position={isEditor ? "bottom-right" : perfPosition}
+              position={perfPosition as any}
               minimal={minimal}
               showGraph={!minimal}
               deepAnalyze={deepAnalyze}
