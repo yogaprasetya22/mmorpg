@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { decode } from "@msgpack/msgpack";
+import { encode, decode } from "@msgpack/msgpack";
 
 export interface PlayerNetworkState {
     id: string;
@@ -109,33 +109,37 @@ export const useWebSocketGame = (
         lastX.current = state.x;
         lastZ.current = state.z;
 
-        wsRef.current.send(JSON.stringify({
+        // Encode object to raw binary byte array (MessagePack)
+        const binaryData = encode({
             action: "move",
             ...state
-        }));
+        });
+        wsRef.current.send(binaryData);
     };
 
     // Send authoritative player combat actions (attack target)
     const sendPlayerAttack = (targetType: "monster" | "player", targetId: string, damage?: number, isCrit?: boolean) => {
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({
+            const binaryData = encode({
                 action: "attack",
                 targetType,
                 targetId,
                 damage,
                 isCrit
-            }));
+            });
+            wsRef.current.send(binaryData);
         }
     };
 
     // Send authoritative player attribute allocation request to Go backend
     const sendDistributeStat = (stat: string, amount: number) => {
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({
+            const binaryData = encode({
                 action: "distribute_stat",
                 stat,
                 amount
-            }));
+            });
+            wsRef.current.send(binaryData);
         }
     };
 
