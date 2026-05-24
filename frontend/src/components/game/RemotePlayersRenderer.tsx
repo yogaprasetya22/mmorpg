@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, Suspense } from "react";
+import { useState, useMemo, useRef, Suspense } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF, useAnimations, Text } from "@react-three/drei";
 import * as THREE from 'three';
@@ -76,8 +76,10 @@ export const RemotePlayerInstance = ({
   const nameRef = useRef<THREE.Group>(null!);
   const textRef = useRef<any>(null);
   const { actions } = useAnimations(animations, groupRef);
+  const [isVisible, setIsVisible] = useState(false);
+  const wasVisible = useRef(false);
   const activeAction = useRef<THREE.AnimationAction | null>(null);
-  
+
   const currentAnimState = useRef("Idle");
   const stateBufferRef = useRef<{ x: number, y: number, z: number, rotation: number, timestamp: number }[]>([]);
   const prevVisualPos = useRef<{ x: number, z: number } | null>(null);
@@ -91,30 +93,44 @@ export const RemotePlayerInstance = ({
     
     if (!data) {
       groupRef.current.visible = false;
+      if (wasVisible.current) {
+        wasVisible.current = false;
+        setIsVisible(false);
+      }
       return;
     }
 
     // ─── Density Culling — limit maximum rendered player count when gathered ──────
     const isDensityCulled = visiblePlayerIdsRef.current && !visiblePlayerIdsRef.current.has(id);
-    if (isDensityCulled) {
-      groupRef.current.visible = false;
-      if (activeAction.current) activeAction.current.paused = true;
-      return;
-    }
 
     // ─── Distance Culling — avoids full skeleton/animation ticks for far players ──────
-    const dxCam = state.camera.position.x - groupRef.current.position.x;
-    const dyCam = state.camera.position.y - groupRef.current.position.y;
-    const dzCam = state.camera.position.z - groupRef.current.position.z;
+    const dxCam = state.camera.position.x - data.x;
+    const dyCam = state.camera.position.y - data.y;
+    const dzCam = state.camera.position.z - data.z;
     const camDistSq = dxCam * dxCam + dyCam * dyCam + dzCam * dzCam;
 
     const FAR_SQ = 60 * 60;     // > 60 units: cull completely
     const MED_FAR_SQ = 40 * 40; // > 40 units: hide name tag
 
-    if (camDistSq > FAR_SQ) {
+    const isCurrentlyVisible = !isDensityCulled && camDistSq <= FAR_SQ;
+
+    // Snapping position and rotation if culled to keep state synchronized
+    if (!isCurrentlyVisible) {
+      groupRef.current.position.set(data.x, data.y, data.z);
+      groupRef.current.rotation.y = data.rotation;
       groupRef.current.visible = false;
       if (activeAction.current) activeAction.current.paused = true;
+
+      if (wasVisible.current) {
+        wasVisible.current = false;
+        setIsVisible(false);
+      }
       return;
+    }
+
+    if (!wasVisible.current) {
+      wasVisible.current = true;
+      setIsVisible(true);
     }
 
     groupRef.current.visible = true;
@@ -627,23 +643,27 @@ export const RemotePlayerInstance = ({
 
   return (
     <group ref={groupRef} visible={false}>
-      <group scale={1.0} position={[0, -1.3, 0]}>
-        <primitive object={clone} />
-      </group>
-      <group ref={nameRef} position={[0, 1.75, 0]}>
-        <Text
-          ref={textRef}
-          fontSize={0.22}
-          anchorX="center"
-          anchorY="bottom"
-          outlineWidth={0.03}
-          outlineColor="#000000"
-          color="#06b6d4"
-          depthOffset={-5}
-        >
-          {""}
-        </Text>
-      </group>
+      {isVisible && (
+        <>
+          <group scale={1.0} position={[0, -1.3, 0]}>
+            <primitive object={clone} />
+          </group>
+          <group ref={nameRef} position={[0, 1.75, 0]}>
+            <Text
+              ref={textRef}
+              fontSize={0.22}
+              anchorX="center"
+              anchorY="bottom"
+              outlineWidth={0.03}
+              outlineColor="#000000"
+              color="#06b6d4"
+              depthOffset={-5}
+            >
+              {""}
+            </Text>
+          </group>
+        </>
+      )}
     </group>
   );
 };

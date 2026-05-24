@@ -130,6 +130,9 @@ export const RemoteMonsterInstance = ({
   const { actions } = useAnimations(animations, groupRef);
   const activeAction = useRef<THREE.AnimationAction | null>(null);
 
+  const [isVisible, setIsVisible] = useState(false);
+  const wasVisible = useRef(false);
+
   // ─── Clip name cache (built once, not every frame) ─────────────────────────
   const clipCache = useRef<ReturnType<typeof buildClipNameCache> | null>(null);
 
@@ -175,16 +178,44 @@ export const RemoteMonsterInstance = ({
       groupRef.current.visible = false;
       hasInitializedPrevVisual.current = false;
       if (activeAction.current) activeAction.current.paused = true;
+      if (wasVisible.current) {
+        wasVisible.current = false;
+        setIsVisible(false);
+      }
       return;
     }
 
     // ─── Density Culling — limit maximum rendered monster count when gathered ──────
     const isDensityCulled = visibleMonsterIdsRef && visibleMonsterIdsRef.current && !visibleMonsterIdsRef.current.has(monsterId);
-    if (isDensityCulled) {
+
+    // ─── Distance Culling — avoids full skeleton update for far monsters ──────
+    // Compare distance to server coordinates directly for consistency
+    _v3.set(data.x, data.y, data.z);
+    _v3.sub(state.camera.position);
+    const camDistSq = _v3.lengthSq();
+
+    const isCurrentlyVisible = !isDensityCulled && camDistSq <= MONSTER_FAR_SQ;
+
+    // Snap position and rotation if culled to keep state synchronized
+    if (!isCurrentlyVisible) {
+      groupRef.current.position.set(data.x, data.y, data.z);
       groupRef.current.visible = false;
       if (activeAction.current) activeAction.current.paused = true;
+
+      if (wasVisible.current) {
+        wasVisible.current = false;
+        setIsVisible(false);
+      }
       return;
     }
+
+    if (!wasVisible.current) {
+      wasVisible.current = true;
+      setIsVisible(true);
+    }
+
+    groupRef.current.visible = true;
+    if (activeAction.current) activeAction.current.paused = false;
 
     // Snap HP bar to full when monster resets (returned to spawn with full HP)
     if (data.hp >= data.max_hp && smoothHpRatio.current < 0.99) {
@@ -192,28 +223,13 @@ export const RemoteMonsterInstance = ({
       lastHpRatio.current = -1; // force re-render
     }
 
-    // ─── Distance Culling — avoids full skeleton update for far monsters ──────
-    // Use squared distance to avoid sqrt on every frame per monster
-    _v3.subVectors(state.camera.position, groupRef.current.position);
-    const camDistSq = _v3.lengthSq();
-
-    if (camDistSq > MONSTER_FAR_SQ) {
-      groupRef.current.visible = false;
-      if (activeAction.current) activeAction.current.paused = true;
-      return;
-    }
-
-    groupRef.current.visible = true;
-    if (activeAction.current) activeAction.current.paused = false;
-
     monsterIdRef.current = data.id;
 
     // ─── Read flat position fields (no nested object allocation) ─────────────
     const x = data.x;
     const z = data.z;
-    const groundY = (window as any).getGroundHeight
-      ? (window as any).getGroundHeight(x, z, data.y)
-      : data.y;
+    // O(1) Server Authoritative Ground Height: bypasses slow BVH raycasting completely!
+    const groundY = data.y;
 
     const meshX = groupRef.current.position.x;
     const meshY = groupRef.current.position.y;
@@ -417,46 +433,50 @@ export const RemoteMonsterInstance = ({
 
   return (
     <group ref={groupRef} visible={false}>
-      <Billboard ref={billboardGroupRef} position={[0, hpBarY, 0]} follow={true} visible={false}>
-        <Text
-          ref={textRef}
-          fontSize={0.22}
-          position={[0, 0.25, 0]}
-          anchorX="center"
-          anchorY="bottom"
-          outlineWidth={0.035}
-          outlineColor="#000000"
-          color={isBoss ? "#ef4444" : "#f97316"}
-          depthOffset={-5}
-        >
-          {""}
-        </Text>
+      {isVisible && (
+        <>
+          <Billboard ref={billboardGroupRef} position={[0, hpBarY, 0]} follow={true} visible={false}>
+            <Text
+              ref={textRef}
+              fontSize={0.22}
+              position={[0, 0.25, 0]}
+              anchorX="center"
+              anchorY="bottom"
+              outlineWidth={0.035}
+              outlineColor="#000000"
+              color={isBoss ? "#ef4444" : "#f97316"}
+              depthOffset={-5}
+            >
+              {""}
+            </Text>
 
-        <mesh position={[0, 0, -0.001]}>
-          <planeGeometry args={[1.24, 0.16]} />
-          <meshBasicMaterial color="#09090b" toneMapped={false} />
-        </mesh>
+            <mesh position={[0, 0, -0.001]}>
+              <planeGeometry args={[1.24, 0.16]} />
+              <meshBasicMaterial color="#09090b" toneMapped={false} />
+            </mesh>
 
-        <mesh position={[0, 0, 0]}>
-          <planeGeometry args={[1.2, 0.12]} />
-          <meshBasicMaterial color="#27272a" toneMapped={false} />
-        </mesh>
+            <mesh position={[0, 0, 0]}>
+              <planeGeometry args={[1.2, 0.12]} />
+              <meshBasicMaterial color="#27272a" toneMapped={false} />
+            </mesh>
 
-        <mesh ref={hpFillRef} position={[0, 0, 0.002]}>
-          <planeGeometry args={[1.2, 0.12]} />
-          <meshBasicMaterial color={isBoss ? "#ef4444" : "#f43f5e"} toneMapped={false} />
-        </mesh>
-      </Billboard>
+            <mesh ref={hpFillRef} position={[0, 0, 0.002]}>
+              <planeGeometry args={[1.2, 0.12]} />
+              <meshBasicMaterial color={isBoss ? "#ef4444" : "#f43f5e"} toneMapped={false} />
+            </mesh>
+          </Billboard>
 
-      <group
-        scale={scale}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (monsterIdRef.current) onAttack(monsterIdRef.current);
-        }}
-      >
-        <primitive object={clone} />
-      </group>
+          <group
+            scale={scale}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (monsterIdRef.current) onAttack(monsterIdRef.current);
+            }}
+          >
+            <primitive object={clone} />
+          </group>
+        </>
+      )}
     </group>
   );
 };
