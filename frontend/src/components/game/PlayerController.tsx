@@ -189,25 +189,13 @@ export const PlayerController = ({
     hasCamInit[0] = 0; // Force camera snap on game state change (Play/Setup)
   }, [gameState]);
 
-  // ─── ANIMATION SYNC (outside useFrame, driven by bvhecctrl store) ─────────
-
-  const animationStatus = useAnimationStore((s) => s.animationStatus);
-  useEffect(() => {
-    // If in ATTACKING state, do not apply idle/walk animations (handled in useFrame)
-    if (charState[0] === 1) return; 
-
-    const animName   = ecctrlAnimationSet[animationStatus] ?? animationSet.idle;
-    const nextAction = actions[animName];
-    if (!nextAction || nextAction === activeAction.current) return;
-
-    if (activeAction.current) {
-      nextAction.reset().play();
-      activeAction.current.crossFadeTo(nextAction, 0.2, true);
-    } else {
-      nextAction.reset().fadeIn(0.1).play();
-    }
-    activeAction.current = nextAction;
-  }, [animationStatus, actions]);
+  // ─── ANIMATION SYNC — Frame-Loop Synchronizer ─────────────────────────────
+  // OPTIMIZATION: The old approach used a useEffect subscribed to useAnimationStore.
+  // This added 1-2 frame scheduling latency (~16-33ms) — especially visible on JUMP.
+  // Fix: Poll useAnimationStore.getState() directly inside useFrame so the animation
+  // transition fires on the EXACT same frame that physics detects the jump start.
+  // prevAnimStatus tracks the last seen status so we only crossfade on actual changes.
+  const prevAnimStatus = useRef<string>("");
 
   // ─── DOM EVENT LISTENERS (write to ECS buffers, not React state) ──────────
   useEffect(() => {
@@ -754,18 +742,25 @@ export const PlayerController = ({
       }
     }
 
-    // ── Passive System Ticks ──
+    // ── Passive System Ticks (runs every 3s but decoupled from render loop) ──
+    // FIX: spawnVFX caused a React state update INSIDE useFrame which generated a mini-stutter.
+    // Solution: set a flag inside useFrame, then process it via setTimeout(0) to defer state mutation.
     if (typeof (window as any).lastPassiveTick === 'undefined') {
       (window as any).lastPassiveTick = 0;
     }
     if (now - (window as any).lastPassiveTick > 3000) {
       (window as any).lastPassiveTick = now;
-
-      if (playerClass === "Priest") {
-        spawnVFX([_charPos.x, _charPos.y + 1.2, _charPos.z], "magic", "#10b981"); // Grace healing sparkle
-      } else if (playerClass === "Warrior" && aimTargetX[0]) {
-        spawnVFX([_charPos.x, _charPos.y + 1.2, _charPos.z], "magic", "#f97316"); // Iron Will shield shield spark
-      }
+      // Defer VFX spawn to next idle tick — do NOT call spawnVFX inside useFrame
+      const snapPos: [number, number, number] = [_charPos.x, _charPos.y + 1.2, _charPos.z];
+      const snapClass = playerClass;
+      const snapHasTarget = !!aimTargetX[0];
+      setTimeout(() => {
+        if (snapClass === "Priest") {
+          spawnVFX(snapPos, "magic", "#10b981");
+        } else if (snapClass === "Warrior" && snapHasTarget) {
+          spawnVFX(snapPos, "magic", "#f97316");
+        }
+      }, 0);
     }
 
     // Check Input triggers
@@ -1051,20 +1046,47 @@ export const PlayerController = ({
 
     if (charState[0] === 0) {
       // == STATE: NORMAL ==
-      // Revert animation if stuck in shoot or melee
+
+      // ─── FRAME-LOOP ANIMATION SYNCHRONIZER ───
+      // Poll animation store directly (no useEffect, no React scheduling latency).
+      // This catches state changes on the SAME frame physics transitions happen.
+      const currentAnimStatus = useAnimationStore.getState().animationStatus;
+      if (currentAnimStatus !== prevAnimStatus.current) {
+        prevAnimStatus.current = currentAnimStatus;
+
+        const animName   = ecctrlAnimationSet[currentAnimStatus] ?? animationSet.idle;
+        const nextAction = actions[animName];
+
+        if (nextAction && nextAction !== activeAction.current) {
+          const isJump = animName.toLowerCase().includes('jump');
+          // Ultra-fast transition for jump (0.04s) so it feels instant;
+          // standard crossfade (0.12s) for walk/run/idle to remain smooth.
+          const crossfadeDuration = isJump ? 0.04 : 0.12;
+
+          nextAction.reset().play();
+          if (activeAction.current) {
+            activeAction.current.crossFadeTo(nextAction, crossfadeDuration, true);
+          } else {
+            nextAction.fadeIn(crossfadeDuration);
+          }
+          activeAction.current = nextAction;
+        }
+      }
+
+      // Revert animation if stuck in shoot or melee attack pose
       const isStuckAttack = activeAction.current === actions[animationSet.shoot] ||
                             (actions['SwordSlash'] && activeAction.current === actions['SwordSlash']) ||
                             (actions['1H_Melee_Attack_Chop'] && activeAction.current === actions['1H_Melee_Attack_Chop']);
       if (isStuckAttack) {
-         const animName = ecctrlAnimationSet[characterStatus.animationStatus] ?? animationSet.idle;
-         const nextAction = actions[animName];
-         if (nextAction && nextAction !== activeAction.current) {
-            nextAction.reset().fadeIn(0.1).play();
-            if (activeAction.current) activeAction.current.crossFadeTo(nextAction, 0.2, true);
-            activeAction.current = nextAction;
-         }
+        const animName   = ecctrlAnimationSet[currentAnimStatus ?? useAnimationStore.getState().animationStatus] ?? animationSet.idle;
+        const nextAction = actions[animName];
+        if (nextAction && nextAction !== activeAction.current) {
+          nextAction.reset().fadeIn(0.1).play();
+          if (activeAction.current) activeAction.current.crossFadeTo(nextAction, 0.12, true);
+          activeAction.current = nextAction;
+        }
       }
-      
+
       // Revert local rotation offset
       const resetLerpT = Math.min(1, 10 * delta);
       characterRef.current.rotation.y += (0 - characterRef.current.rotation.y) * resetLerpT;
@@ -1072,13 +1094,12 @@ export const PlayerController = ({
 
     // Adjust animation timescale dynamically to match actual physics velocity
     if (activeAction.current) {
-      const animStatus = useAnimationStore.getState().animationStatus;
-      const animName = ecctrlAnimationSet[animStatus] ?? animationSet.idle;
-      const desired = animName.toLowerCase();
-      
+      // Reuse prevAnimStatus.current — already synced from the frame-loop synchronizer above (zero extra getState() call)
+      const desired = (ecctrlAnimationSet[prevAnimStatus.current] ?? animationSet.idle).toLowerCase();
+
       const linvel = characterStatus.linvel;
       const horizontalSpeed = Math.sqrt(linvel.x * linvel.x + linvel.z * linvel.z);
-      
+
       if (desired.includes("walk")) {
         activeAction.current.timeScale = Math.max(0.4, Math.min(1.2, horizontalSpeed / 3.0));
       } else if (desired.includes("run")) {

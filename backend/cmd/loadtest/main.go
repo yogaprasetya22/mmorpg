@@ -20,6 +20,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/vmihailenco/msgpack/v5"
+	"github.com/xtaci/kcp-go/v5"
 )
 
 // Define local matching structures for WebSocket protocol
@@ -36,6 +37,18 @@ type WSIncomingMessage struct {
 	Damage     float32 `json:"damage" msgpack:"damage"`
 	IsCrit     bool    `json:"isCrit" msgpack:"isCrit"`
 	SkillID    string  `json:"skillId" msgpack:"skillId"`
+}
+
+type KCPIncomingMessage struct {
+	Action      string  `msgpack:"action"`
+	Token       string  `msgpack:"token"`
+	CharacterID string  `msgpack:"character_id"`
+	X           float64 `msgpack:"x"`
+	Y           float64 `msgpack:"y"`
+	Z           float64 `msgpack:"z"`
+	Rotation    float64 `msgpack:"rotation"`
+	Animation   string  `msgpack:"animation"`
+	TargetID    string  `msgpack:"targetId"`
 }
 
 type PlayerNetworkState struct {
@@ -93,6 +106,8 @@ func main() {
 	enableAttack := flag.Bool("attack", true, "Enable simulated players to attack monsters")
 	attackRate := flag.Int("attack-rate", 30, "Ticks between attacks (1 tick = 50ms)")
 	radiusVal := flag.Float64("radius", 15.0, "Radius spread of player circle movement around spawn")
+	useKcp := flag.Bool("kcp", false, "Use UDP/KCP instead of WebSocket for movement sync")
+	kcpAddr := flag.String("kcp-addr", "localhost:9999", "KCP UDP server address")
 	flag.Parse()
 
 	u, err := url.Parse(*hostUrl)
@@ -112,6 +127,7 @@ func main() {
 	fmt.Printf("⚔️  Attacking enabled: %v (rate: every %d ticks)\n", *enableAttack, *attackRate)
 	fmt.Printf("⭕ Radius spread: %.1f units\n", *radiusVal)
 	fmt.Printf("⏳ Run duration: %s\n", *runDuration)
+	fmt.Printf("⚡ KCP Enabled: %v (Target: %s)\n", *useKcp, *kcpAddr)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -342,6 +358,29 @@ func main() {
 				atomic.AddInt64(&metrics.ConnsSuccess, -1)
 			}()
 
+			// Initialize UDP/KCP connection if enabled
+			var kcpSess *kcp.UDPSession
+			if *useKcp {
+				sess, err := kcp.DialWithOptions(*kcpAddr, nil, 10, 3)
+				if err != nil {
+					fmt.Printf("⚠️ [KCP] Gagal menghubungkan player %s ke KCP: %v\n", name, err)
+					return
+				}
+				kcpSess = sess
+				kcpSess.SetNoDelay(1, 10, 2, 1)
+				kcpSess.SetWindowSize(128, 128)
+				defer kcpSess.Close()
+
+				// Send auth packet immediately over KCP
+				authMsg := KCPIncomingMessage{
+					Action:      "auth",
+					Token:       token,
+					CharacterID: charID,
+				}
+				authBytes, _ := msgpack.Marshal(authMsg)
+				_, _ = kcpSess.Write(authBytes)
+			}
+
 			// Keep track of active monsters parsed from incoming GameState messages
 			var monsterMutex sync.RWMutex
 			var monsterIDs []string
@@ -430,15 +469,37 @@ func main() {
 						Animation: currentAnim,
 					}
 
-					data, err := json.Marshal(moveMsg)
-					if err == nil {
-						_ = conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
-						err = conn.WriteMessage(websocket.TextMessage, data)
-						if err != nil {
-							return
+					if *useKcp && kcpSess != nil {
+						// Send high-speed movement over UDP/KCP using MessagePack binary
+						kcpMoveMsg := KCPIncomingMessage{
+							Action:    "move",
+							X:         px,
+							Y:         0.0,
+							Z:         pz,
+							Rotation:  float64(rotY),
+							Animation: currentAnim,
 						}
-						atomic.AddInt64(&metrics.MsgsSent, 1)
-						atomic.AddInt64(&metrics.BytesSent, int64(len(data)))
+						data, err := msgpack.Marshal(kcpMoveMsg)
+						if err == nil {
+							_, err = kcpSess.Write(data)
+							if err != nil {
+								return
+							}
+							atomic.AddInt64(&metrics.MsgsSent, 1)
+							atomic.AddInt64(&metrics.BytesSent, int64(len(data)))
+						}
+					} else {
+						// Fallback: Send standard movement over WebSocket (TCP)
+						data, err := json.Marshal(moveMsg)
+						if err == nil {
+							_ = conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
+							err = conn.WriteMessage(websocket.TextMessage, data)
+							if err != nil {
+								return
+							}
+							atomic.AddInt64(&metrics.MsgsSent, 1)
+							atomic.AddInt64(&metrics.BytesSent, int64(len(data)))
+						}
 					}
 
 					// Periodic attack
@@ -472,9 +533,22 @@ func main() {
 
 								// Immediately send movement packet with "Skill" animation
 								moveMsg.Animation = currentAnim
-								moveData, _ := json.Marshal(moveMsg)
-								_ = conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
-								_ = conn.WriteMessage(websocket.TextMessage, moveData)
+								if *useKcp && kcpSess != nil {
+									kcpMoveMsg := KCPIncomingMessage{
+										Action:    "move",
+										X:         px,
+										Y:         0.0,
+										Z:         pz,
+										Rotation:  float64(rotY),
+										Animation: currentAnim,
+									}
+									moveData, _ := msgpack.Marshal(kcpMoveMsg)
+									_, _ = kcpSess.Write(moveData)
+								} else {
+									moveData, _ := json.Marshal(moveMsg)
+									_ = conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
+									_ = conn.WriteMessage(websocket.TextMessage, moveData)
+								}
 
 								skillMsg := WSIncomingMessage{
 									Action:     "cast_skill",
@@ -496,9 +570,22 @@ func main() {
 
 								// Immediately send movement packet with "Attack" animation
 								moveMsg.Animation = currentAnim
-								moveData, _ := json.Marshal(moveMsg)
-								_ = conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
-								_ = conn.WriteMessage(websocket.TextMessage, moveData)
+								if *useKcp && kcpSess != nil {
+									kcpMoveMsg := KCPIncomingMessage{
+										Action:    "move",
+										X:         px,
+										Y:         0.0,
+										Z:         pz,
+										Rotation:  float64(rotY),
+										Animation: currentAnim,
+									}
+									moveData, _ := msgpack.Marshal(kcpMoveMsg)
+									_, _ = kcpSess.Write(moveData)
+								} else {
+									moveData, _ := json.Marshal(moveMsg)
+									_ = conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
+									_ = conn.WriteMessage(websocket.TextMessage, moveData)
+								}
 
 								attackMsg := WSIncomingMessage{
 									Action:     "attack",

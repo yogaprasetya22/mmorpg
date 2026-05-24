@@ -595,10 +595,7 @@ func (u *gameUsecase) DistributeStatPoints(playerID string, stat string, amount 
 	playerData.RecalculateStats()
 	u.activePlayersMu.Unlock()
 
-	// Update GORM Postgres DB asynchronously
-	go func(p *domain.Player) {
-		_ = u.playerRepo.Update(p)
-	}(playerData)
+	// Sync HP boundaries to ECS registry
 
 	// Sync HP boundaries to ECS registry
 	if healthComp, found := u.registry.GetComponent(domain.EntityID(playerID), "Health"); found {
@@ -648,10 +645,7 @@ func (u *gameUsecase) EquipPlayerItem(playerID string, playerItemID string) {
 	playerData.RecalculateStats()
 	u.activePlayersMu.Unlock()
 
-	// Sync to DB
-	go func(p *domain.Player) {
-		_ = u.playerRepo.Update(p)
-	}(playerData)
+	// GORM update postponed to periodic autosave
 
 	fmt.Printf("🛡️ Player %s equipped %s into slot %s.\n", playerData.Username, targetItem.Name, slotType)
 }
@@ -706,10 +700,7 @@ func (u *gameUsecase) UseConsumable(playerID string, playerItemID string) {
 
 	u.activePlayersMu.Unlock()
 
-	// Sync DB
-	go func(p *domain.Player) {
-		_ = u.playerRepo.Update(p)
-	}(playerData)
+	// Update Health in ECS Registry
 
 	// Update Health in ECS Registry
 	if healthComp, found := u.registry.GetComponent(domain.EntityID(playerID), "Health"); found {
@@ -778,10 +769,7 @@ func (u *gameUsecase) CastPlayerSkill(playerID string, skillID string, targetID 
 		}
 		u.activePlayersMu.Unlock()
 
-		// Save DB
-		go func(p *domain.Player) {
-			_ = u.playerRepo.Update(p)
-		}(playerData)
+		// Sync HP to ECS
 
 		// Sync HP to ECS
 		if healthComp, found := u.registry.GetComponent(domain.EntityID(playerID), "Health"); found {
@@ -891,11 +879,6 @@ func (u *gameUsecase) CastPlayerSkill(playerID string, skillID string, targetID 
 		}
 		u.activePlayersMu.Unlock()
 
-		// Save record in DB
-		go func(p *domain.Player) {
-			_ = u.playerRepo.Update(p)
-		}(playerData)
-
 		// Sync player HP boundary to ECS registry
 		if pHcomp, found := u.registry.GetComponent(domain.EntityID(playerID), "Health"); found {
 			h := pHcomp.(*domain.HealthComponent)
@@ -903,10 +886,7 @@ func (u *gameUsecase) CastPlayerSkill(playerID string, skillID string, targetID 
 			h.MaxHP = playerData.MaxHP
 		}
 	} else {
-		// Save MP consumption
-		go func(p *domain.Player) {
-			_ = u.playerRepo.Update(p)
-		}(playerData)
+		// MP consumed in memory, saved in periodic autosave
 	}
 
 	u.monstersMu.Unlock()
@@ -966,10 +946,7 @@ func (u *gameUsecase) ChangeClass(playerID string, newClass string) {
 	}
 	u.playersMu.Unlock()
 
-	// Save to DB
-	go func(p *domain.Player) {
-		_ = u.playerRepo.Update(p)
-	}(playerData)
+	// Sync to ECS
 
 	// Sync to ECS
 	if healthComp, found := u.registry.GetComponent(domain.EntityID(playerID), "Health"); found {

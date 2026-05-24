@@ -104,3 +104,37 @@ git push origin main
 
 > [!IMPORTANT]
 > **COMPILATION & SINK CHECK ARE NON-NEGOTIABLE.** Skipping any phase of this dual validation and deployment workflow is a violation of the development protocol.
+
+---
+
+## ⚡ 9. Anti-Lag & GC Performance Guard Rails (CRITICAL)
+
+Untuk mencegah kembalinya masalah **Garbage Collection (GC) lag spikes** (drop FPS mendadak dari 60 ke 15 FPS selama 1 frame yang dipicu oleh engine pembeku V8 Javascript), aturan ketat performa di bawah ini **TIDAK BOLEH DIUBAH/DILANGGAR**:
+
+### 🚫 Pantangan Keras di Render Loop (`useFrame`)
+1. **Dilarang Alokasi Objek Baru**:
+   * Jangan pernah menulis `new THREE.Vector3()`, `new THREE.Box3()`, atau instansiasi objek apa pun di dalam hook `useFrame()` atau fungsi yang dipanggil di dalamnya setiap frame.
+   * Gunakan objek modular/global scratch yang telah dideklarasikan di luar component (seperti `_v3` atau `_sharedBox3`), atau gunakan `useMemo` sekali saja di level atas.
+2. **Dilarang melakukan Array Spread, Filter, atau Map**:
+   * Menghindari operasi spread `[...array]`, `.filter()`, dan `.map()` di dalam frame loop. Operasi ini membuat array baru di memory heap secara instan 60 kali per detik.
+   * Gunakan array scratch yang dialokasikan di `useRef`, bersihkan dengan `.length = 0`, lalu isi ulang menggunakan manual loop (`for`).
+3. **Dilarang memicu React State Re-render Berlebihan**:
+   * Jangan memanggil `useState` (`setX()`) dari dalam loop `useFrame` secara langsung. Gunakan direct ref manipulation (`ref.current.position.set()`, dsb) untuk update visual mesh.
+   * Sinkronisasi data ID monster hanya diperbolehkan menulis ke state (`setActiveMonsterIds`) jika dan hanya jika data roster benar-benar berubah (`changed == true`).
+
+### ⏱️ Throttling dan Pembatasan Frekuensi (LOD & Adaptive Cap)
+1. **LOD Jarak & Culling**:
+   * Jaga threshold jarak lod (`MONSTER_FAR_SQ` & `MONSTER_MED_FAR_SQ`) di file renderer. Di atas batas ini, mesh wajib di-cull (`visible = false`) dan animasinya di-pause (`activeAction.current.paused = true`).
+   * Jangan menghapus adaptive cap density yang membatasi render monster terdekat (cap 5/8/12) di situasi keramaian tinggi.
+2. **Penyortiran Teratur**:
+   * Operasi penyortiran jarak monster (`scratch.sort()`) sangat berat. Wajib di-throttle di frekuensi maksimal **10Hz** (`now - lastSortTime.current >= 0.10`) menggunakan penanda waktu dari `state.clock.elapsedTime`.
+3. **Object Pooling Terhadap Sorting Scratch**:
+   * Ketika melakukan sorting jarak, dilarang melakukan `.push({ id, distSq })` objek baru. Wajib memanfaatkan system pooling (`_sortObjPool`) untuk me-reuse penampung objek koordinat.
+
+### 🌐 Jaringan dan Background HTTP Polling
+1. **Metode requestIdleCallback**:
+   * Seluruh background HTTP fetch yang berulang (seperti update profil XP/Gold/Level di `ArenaClient.tsx`) wajib dijadwalkan menggunakan `requestIdleCallback` dengan toleransi idle budget minimal `>5ms`.
+   * **Jangan pernah** menggantinya kembali menggunakan sinkronisasi `setInterval` mentah, karena hal tersebut akan memotong thread utama rendering di tengah jalan dan memicu micro-stuttering.
+2. **Ambang Batas Lag Spike**:
+   * Ambang deteksi lag spike performa diatur pada batas minimal **50ms**. Mengembalikan batas ini ke 33.33ms akan merekam derau micro-stuttering kecil yang tidak relevan dengan kenyamanan bermain user.
+

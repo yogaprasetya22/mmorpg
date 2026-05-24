@@ -130,9 +130,6 @@ export const RemoteMonsterInstance = ({
   const { actions } = useAnimations(animations, groupRef);
   const activeAction = useRef<THREE.AnimationAction | null>(null);
 
-  const [isVisible, setIsVisible] = useState(false);
-  const wasVisible = useRef(false);
-
   // ─── Clip name cache (built once, not every frame) ─────────────────────────
   const clipCache = useRef<ReturnType<typeof buildClipNameCache> | null>(null);
 
@@ -178,10 +175,6 @@ export const RemoteMonsterInstance = ({
       groupRef.current.visible = false;
       hasInitializedPrevVisual.current = false;
       if (activeAction.current) activeAction.current.paused = true;
-      if (wasVisible.current) {
-        wasVisible.current = false;
-        setIsVisible(false);
-      }
       return;
     }
 
@@ -201,17 +194,7 @@ export const RemoteMonsterInstance = ({
       groupRef.current.position.set(data.x, data.y, data.z);
       groupRef.current.visible = false;
       if (activeAction.current) activeAction.current.paused = true;
-
-      if (wasVisible.current) {
-        wasVisible.current = false;
-        setIsVisible(false);
-      }
       return;
-    }
-
-    if (!wasVisible.current) {
-      wasVisible.current = true;
-      setIsVisible(true);
     }
 
     groupRef.current.visible = true;
@@ -433,50 +416,46 @@ export const RemoteMonsterInstance = ({
 
   return (
     <group ref={groupRef} visible={false}>
-      {isVisible && (
-        <>
-          <Billboard ref={billboardGroupRef} position={[0, hpBarY, 0]} follow={true} visible={false}>
-            <Text
-              ref={textRef}
-              fontSize={0.22}
-              position={[0, 0.25, 0]}
-              anchorX="center"
-              anchorY="bottom"
-              outlineWidth={0.035}
-              outlineColor="#000000"
-              color={isBoss ? "#ef4444" : "#f97316"}
-              depthOffset={-5}
-            >
-              {""}
-            </Text>
+      <Billboard ref={billboardGroupRef} position={[0, hpBarY, 0]} follow={true} visible={false}>
+        <Text
+          ref={textRef}
+          fontSize={0.22}
+          position={[0, 0.25, 0]}
+          anchorX="center"
+          anchorY="bottom"
+          outlineWidth={0.035}
+          outlineColor="#000000"
+          color={isBoss ? "#ef4444" : "#f97316"}
+          depthOffset={-5}
+        >
+          {""}
+        </Text>
 
-            <mesh position={[0, 0, -0.001]}>
-              <planeGeometry args={[1.24, 0.16]} />
-              <meshBasicMaterial color="#09090b" toneMapped={false} />
-            </mesh>
+        <mesh position={[0, 0, -0.001]}>
+          <planeGeometry args={[1.24, 0.16]} />
+          <meshBasicMaterial color="#09090b" toneMapped={false} />
+        </mesh>
 
-            <mesh position={[0, 0, 0]}>
-              <planeGeometry args={[1.2, 0.12]} />
-              <meshBasicMaterial color="#27272a" toneMapped={false} />
-            </mesh>
+        <mesh position={[0, 0, 0]}>
+          <planeGeometry args={[1.2, 0.12]} />
+          <meshBasicMaterial color="#27272a" toneMapped={false} />
+        </mesh>
 
-            <mesh ref={hpFillRef} position={[0, 0, 0.002]}>
-              <planeGeometry args={[1.2, 0.12]} />
-              <meshBasicMaterial color={isBoss ? "#ef4444" : "#f43f5e"} toneMapped={false} />
-            </mesh>
-          </Billboard>
+        <mesh ref={hpFillRef} position={[0, 0, 0.002]}>
+          <planeGeometry args={[1.2, 0.12]} />
+          <meshBasicMaterial color={isBoss ? "#ef4444" : "#f43f5e"} toneMapped={false} />
+        </mesh>
+      </Billboard>
 
-          <group
-            scale={scale}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (monsterIdRef.current) onAttack(monsterIdRef.current);
-            }}
-          >
-            <primitive object={clone} />
-          </group>
-        </>
-      )}
+      <group
+        scale={scale}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (monsterIdRef.current) onAttack(monsterIdRef.current);
+        }}
+      >
+        <primitive object={clone} />
+      </group>
     </group>
   );
 };
@@ -509,8 +488,17 @@ export const RemoteMonstersRenderer = ({
 
   // ─── Throttle refs — avoid O(n log n) sort every frame ───────────────────
   const lastSortTime = useRef(-1);
-  // Pre-allocated scratch array to avoid new array allocation every frame
+  // Pre-allocated scratch array AND object pool — zero heap allocs in sort hot-path
   const scratchDistances = useRef<{ id: string; distSq: number }[]>([]);
+  // Object pool: reuse {id, distSq} entries instead of `new {}` every sort tick
+  const _sortObjPool = useRef<{ id: string; distSq: number }[]>([]);
+
+  // ─── Per-frame Set & array pre-allocs (moved out of useFrame body) ───────
+  // incomingIds and toPrune are reused in-place every frame — no new allocation
+  const _incomingIdsSet = useRef<Set<string>>(new Set());
+  const _toPruneArr = useRef<string[]>([]);
+  // Pre-allocated output array for activeMonsterIds — filled via loop, not Array.from()
+  const _activeMonsterIdsArr = useRef<string[]>([]);
 
   useFrame((state) => {
     // ─── Rebuild monster map (O(n) but very cheap) ───────────────────────────
@@ -536,16 +524,29 @@ export const RemoteMonstersRenderer = ({
 
       const camPos = state.camera.position;
 
-      // Reuse scratch array — no heap allocation per frame
+      // Reuse scratch array AND object pool — zero new objects on sort hot-path
       const scratch = scratchDistances.current;
+      const pool = _sortObjPool.current;
       scratch.length = 0;
+      let poolIdx = 0;
       for (let i = 0; i < list.length; i++) {
         const m = list[i];
         if (m.is_dead) continue;  // skip dead monsters from visibility budget
         const dx = m.x - camPos.x;
         const dy = m.y - camPos.y;
         const dz = m.z - camPos.z;
-        scratch.push({ id: m.id, distSq: dx * dx + dy * dy + dz * dz });
+        const distSq = dx * dx + dy * dy + dz * dz;
+        // Reuse pooled object if available, otherwise allocate once and it stays in pool
+        if (poolIdx < pool.length) {
+          pool[poolIdx].id = m.id;
+          pool[poolIdx].distSq = distSq;
+          scratch.push(pool[poolIdx]);
+        } else {
+          const entry = { id: m.id, distSq };
+          pool.push(entry);
+          scratch.push(entry);
+        }
+        poolIdx++;
       }
 
       scratch.sort((a, b) => a.distSq - b.distSq);
@@ -565,8 +566,10 @@ export const RemoteMonstersRenderer = ({
 
     // ─── Sync monster ID set — add new IDs, prune IDs no longer in server payload ──
     // Without pruning, seenIdsSet grows forever with heavy-monsters causing component pool bloat
+    // PERF: incomingIds Set and toPrune array are pre-allocated refs — zero heap alloc per frame
     let changed = false;
-    const incomingIds = new Set<string>();
+    const incomingIds = _incomingIdsSet.current;
+    incomingIds.clear();
     for (let i = 0; i < list.length; i++) {
       incomingIds.add(list[i].id);
       if (!seenIdsSet.current.has(list[i].id)) {
@@ -574,9 +577,10 @@ export const RemoteMonstersRenderer = ({
         changed = true;
       }
     }
-    
-    // Collect keys to prune first to avoid mutating Set while iterating over it (safe in all JS engines)
-    const toPrune: string[] = [];
+
+    // Collect keys to prune first to avoid mutating Set while iterating over it
+    const toPrune = _toPruneArr.current;
+    toPrune.length = 0;
     seenIdsSet.current.forEach(id => {
       if (!incomingIds.has(id)) {
         toPrune.push(id);
@@ -591,7 +595,11 @@ export const RemoteMonstersRenderer = ({
     }
 
     if (changed) {
-      setActiveMonsterIds(Array.from(seenIdsSet.current));
+      // PERF: Manual loop into pre-allocated array — avoids Array.from() heap alloc
+      const out = _activeMonsterIdsArr.current;
+      out.length = 0;
+      seenIdsSet.current.forEach(id => out.push(id));
+      setActiveMonsterIds(out.slice()); // .slice() is required so React sees a new reference
     }
   });
 

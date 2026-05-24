@@ -110,6 +110,8 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 			fmt.Printf("💀 Monster %s terbunuh oleh %s! Drop: Gold +%d, XP +%d\n",
 				monster.Name, playerData.Username, monster.GoldDrop, monster.XPDrop)
 			
+			// Lock active players write lock to safely modify state in RAM
+			u.activePlayersMu.Lock()
 			// Reward XP & Gold
 			playerData.XP += monster.XPDrop
 			playerData.Gold += monster.GoldDrop
@@ -140,11 +142,7 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 				playerData.MP = playerData.MaxMP
 				fmt.Printf("🌟 LEVEL UP! Player %s naik ke level %d! +5 Stat Points!\n", playerData.Username, playerData.Level)
 			}
-
-			// Update player record in Postgres persistence
-			go func(p *domain.Player) {
-				_ = u.playerRepo.Update(p)
-			}(playerData)
+			u.activePlayersMu.Unlock()
 
 			// Update player HP in ECS registry
 			if pHcomp, found := u.registry.GetComponent(domain.EntityID(playerID), "Health"); found {
@@ -207,20 +205,19 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 		fmt.Printf("%s⚔️ PvP Hit: Player %s -> Player %s (Damage: %.2f, Target HP: %.2f/%.2f)\n",
 			critLabel, playerData.Username, targetData.Username, finalDamage, targetData.HP - finalDamage, targetData.MaxHP)
 
+		u.activePlayersMu.Lock()
 		targetData.HP -= finalDamage
 		if targetData.HP <= 0 {
 			targetData.HP = 0
 			fmt.Printf("☠️ Player %s mengalahkan %s dalam duel PvP!\n", playerData.Username, targetData.Username)
 			
-			// Penalty/respawn handler: restore health and respawn at (0,0,0)
+			// Penalty/respawn handler: restore health and respawn at spawn coordinates
 			go func(tID string, tUser string) {
 				time.Sleep(3 * time.Second)
-				u.activePlayersMu.RLock()
+				u.activePlayersMu.Lock()
 				tData, exists := u.activePlayers[tID]
-				u.activePlayersMu.RUnlock()
 				if exists && tData != nil {
 					tData.HP = tData.MaxHP
-					_ = u.playerRepo.Update(tData)
 					
 					// Update player HP in ECS registry
 					if pHcomp, found := u.registry.GetComponent(domain.EntityID(tID), "Health"); found {
@@ -233,8 +230,11 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 					u.UpdatePlayerMovement(tID, tData.LastX, tData.LastY, tData.LastZ, 0, "idle", "")
 					fmt.Printf("🛡️ Player %s telah hidup kembali di koordinat terakhir (%f, %f, %f).\n", tUser, tData.LastX, tData.LastY, tData.LastZ)
 				}
+				u.activePlayersMu.Unlock()
 			}(targetID, targetData.Username)
 		}
+		u.activePlayersMu.Unlock()
+
 		// Update HP in ECS
 		if healthComp, found := u.registry.GetComponent(domain.EntityID(targetID), "Health"); found {
 			h := healthComp.(*domain.HealthComponent)

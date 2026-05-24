@@ -357,12 +357,10 @@ func (u *gameUsecase) processMonsterAI(m *domain.Monster, dt float32) {
 				// Respawn player handler after 5s
 				go func(pID string, pUser string) {
 					time.Sleep(5 * time.Second)
-					u.activePlayersMu.RLock()
+					u.activePlayersMu.Lock()
 					pl, exists := u.activePlayers[pID]
-					u.activePlayersMu.RUnlock()
 					if exists && pl != nil {
 						pl.HP = pl.MaxHP
-						_ = u.playerRepo.Update(pl)
 
 						// Update player HP in ECS registry
 						if pHcomp, found := u.registry.GetComponent(domain.EntityID(pID), "Health"); found {
@@ -375,6 +373,7 @@ func (u *gameUsecase) processMonsterAI(m *domain.Monster, dt float32) {
 						u.UpdatePlayerMovement(pID, pl.LastX, pl.LastY, pl.LastZ, 0, "idle", "")
 						fmt.Printf("🛡️ Player %s telah hidup kembali di koordinat terakhir (%f, %f, %f).\n", pUser, pl.LastX, pl.LastY, pl.LastZ)
 					}
+					u.activePlayersMu.Unlock()
 				}(targetPlayer.ID, pData.Username)
 			}
 
@@ -706,12 +705,10 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 
 				go func(pID string, pUser string) {
 					time.Sleep(5 * time.Second)
-					u.activePlayersMu.RLock()
+					u.activePlayersMu.Lock()
 					pl, exists := u.activePlayers[pID]
-					u.activePlayersMu.RUnlock()
 					if exists && pl != nil {
 						pl.HP = pl.MaxHP
-						_ = u.playerRepo.Update(pl)
 						if pHcomp, found := u.registry.GetComponent(domain.EntityID(pID), "Health"); found {
 							h := pHcomp.(*domain.HealthComponent)
 							h.HP = pl.HP
@@ -720,6 +717,7 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 						u.UpdatePlayerMovement(pID, pl.LastX, pl.LastY, pl.LastZ, 0, "idle", "")
 						fmt.Printf("🛡️ Player %s telah hidup kembali.\n", pUser)
 					}
+					u.activePlayersMu.Unlock()
 				}(targetPlayer.ID, pData.Username)
 			}
 			u.activePlayersMu.Unlock()

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef, Suspense } from "react";
+import { useMemo, useRef, Suspense } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF, useAnimations, Text } from "@react-three/drei";
 import * as THREE from 'three';
@@ -76,8 +76,6 @@ export const RemotePlayerInstance = ({
   const nameRef = useRef<THREE.Group>(null!);
   const textRef = useRef<any>(null);
   const { actions } = useAnimations(animations, groupRef);
-  const [isVisible, setIsVisible] = useState(false);
-  const wasVisible = useRef(false);
   const activeAction = useRef<THREE.AnimationAction | null>(null);
 
   const currentAnimState = useRef("Idle");
@@ -93,10 +91,6 @@ export const RemotePlayerInstance = ({
     
     if (!data) {
       groupRef.current.visible = false;
-      if (wasVisible.current) {
-        wasVisible.current = false;
-        setIsVisible(false);
-      }
       return;
     }
 
@@ -120,17 +114,7 @@ export const RemotePlayerInstance = ({
       groupRef.current.rotation.y = data.rotation;
       groupRef.current.visible = false;
       if (activeAction.current) activeAction.current.paused = true;
-
-      if (wasVisible.current) {
-        wasVisible.current = false;
-        setIsVisible(false);
-      }
       return;
-    }
-
-    if (!wasVisible.current) {
-      wasVisible.current = true;
-      setIsVisible(true);
     }
 
     groupRef.current.visible = true;
@@ -643,27 +627,23 @@ export const RemotePlayerInstance = ({
 
   return (
     <group ref={groupRef} visible={false}>
-      {isVisible && (
-        <>
-          <group scale={1.0} position={[0, -1.3, 0]}>
-            <primitive object={clone} />
-          </group>
-          <group ref={nameRef} position={[0, 1.75, 0]}>
-            <Text
-              ref={textRef}
-              fontSize={0.22}
-              anchorX="center"
-              anchorY="bottom"
-              outlineWidth={0.03}
-              outlineColor="#000000"
-              color="#06b6d4"
-              depthOffset={-5}
-            >
-              {""}
-            </Text>
-          </group>
-        </>
-      )}
+      <group scale={1.0} position={[0, -1.3, 0]}>
+        <primitive object={clone} />
+      </group>
+      <group ref={nameRef} position={[0, 1.75, 0]}>
+        <Text
+          ref={textRef}
+          fontSize={0.22}
+          anchorX="center"
+          anchorY="bottom"
+          outlineWidth={0.03}
+          outlineColor="#000000"
+          color="#06b6d4"
+          depthOffset={-5}
+        >
+          {""}
+        </Text>
+      </group>
     </group>
   );
 };
