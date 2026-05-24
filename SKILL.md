@@ -124,12 +124,14 @@ Untuk mencegah kembalinya masalah **Garbage Collection (GC) lag spikes** (drop F
 
 ### ⏱️ Throttling dan Pembatasan Frekuensi (LOD & Adaptive Cap)
 1. **LOD Jarak & Culling**:
-   * Jaga threshold jarak lod (`MONSTER_FAR_SQ` & `MONSTER_MED_FAR_SQ`) di file renderer. Di atas batas ini, mesh wajib di-cull (`visible = false`) dan animasinya di-pause (`activeAction.current.paused = true`).
-   * Jangan menghapus adaptive cap density yang membatasi render monster terdekat (cap 5/8/12) di situasi keramaian tinggi.
+   * Jaga threshold jarak lod (`MONSTER_FAR_SQ` & `MONSTER_MED_FAR_SQ` untuk monster, serta `FAR_SQ` & `MED_FAR_SQ` untuk remote players). Di atas batas ini, mesh wajib di-cull (`visible = false`) dan animasinya di-pause (`activeAction.current.paused = true`).
+   * Jangan menghapus adaptive cap density yang membatasi render monster terdekat (cap 5/8/12) dan remote players terdekat (cap 8/12) di situasi keramaian tinggi.
 2. **Penyortiran Teratur**:
-   * Operasi penyortiran jarak monster (`scratch.sort()`) sangat berat. Wajib di-throttle di frekuensi maksimal **10Hz** (`now - lastSortTime.current >= 0.10`) menggunakan penanda waktu dari `state.clock.elapsedTime`.
+   * Operasi penyortiran jarak monster (`scratch.sort()`) dan remote players (`scratchPlayerDistances.sort()`) sangat berat. Wajib di-throttle di frekuensi maksimal **10Hz** (`now - lastSortTime.current >= 0.10`) menggunakan penanda waktu dari `state.clock.elapsedTime`.
 3. **Object Pooling Terhadap Sorting Scratch**:
-   * Ketika melakukan sorting jarak, dilarang melakukan `.push({ id, distSq })` objek baru. Wajib memanfaatkan system pooling (`_sortObjPool`) untuk me-reuse penampung objek koordinat.
+   * Ketika melakukan sorting jarak, dilarang melakukan `.push({ id, distSq })` objek baru. Wajib memanfaatkan system pooling (`_sortObjPool` untuk monster dan `_sortPlayerObjPool` untuk remote players) untuk me-reuse penampung objek koordinat.
+4. **Set Reuse untuk Visibility Registry**:
+   * Gunakan registry `visiblePlayerIdsRef.current.clear()` langsung di dalam frame loop daripada menginstansiasi `new Set()` setiap frame untuk memantau visibilitas player lain.
 
 ### 🌐 Jaringan dan Background HTTP Polling
 1. **Metode requestIdleCallback**:

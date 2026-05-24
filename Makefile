@@ -16,6 +16,10 @@ RUN_FRONTEND_CMD = $(if $(BUN),bun run dev,npm run dev)
 TSC_FRONTEND_CMD = $(if $(BUN),bunx tsc --noEmit,npx tsc --noEmit)
 BUILD_FRONTEND_CMD = $(if $(BUN),bun run build,npm run build)
 
+# Live Reload Tool Detection for Backend (air preferred, go run as fallback)
+AIR := $(shell command -v air 2> /dev/null)
+RUN_BACKEND_CMD = $(if $(AIR),air,go run cmd/server/main.go)
+
 .PHONY: all help kill kill-backend-port kill-frontend-port run run-backend run-backend-heavy-monsters run-frontend seed-enemy check check-backend check-frontend clean build build-backend build-frontend loadtest loadtest-peaceful loadtest-extreme loadtest-fast-combat loadtest-massive-enemies accuracy-test
 
 # Default target displays the help menu
@@ -80,12 +84,12 @@ kill-frontend-port:
 # Runs the Go Backend exclusively
 run-backend: kill-backend-port
 	@echo "🚀 Booting Go Authoritative Backend..."
-	@cd backend && go run cmd/server/main.go
+	@cd backend && $(RUN_BACKEND_CMD)
 
 # Runs the Go Backend with extra monsters
 run-backend-heavy-monsters: kill-backend-port
 	@echo "🔥 Starting Go Server with 80 extra simulated monsters..."
-	@cd backend && SPAWN_EXTRA_MONSTERS=80 go run cmd/server/main.go
+	@cd backend && SPAWN_EXTRA_MONSTERS=80 $(RUN_BACKEND_CMD)
 
 
 # Runs the Next.js/Three Fiber Frontend exclusively
@@ -97,7 +101,7 @@ run-frontend: kill-frontend-port
 # Sets up trap listener on SIGINT (Ctrl+C) and SIGTERM to safely clean up both background subshells
 run: kill
 	@echo "🚀 Booting both engines concurrently..."
-	@(cd backend && go run cmd/server/main.go) & \
+	@(cd backend && $(RUN_BACKEND_CMD)) & \
 	BACKEND_PID=$$! ; \
 	(cd frontend && $(RUN_FRONTEND_CMD)) & \
 	FRONTEND_PID=$$! ; \

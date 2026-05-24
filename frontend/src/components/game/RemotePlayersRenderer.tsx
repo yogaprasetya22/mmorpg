@@ -672,9 +672,13 @@ export const RemotePlayersRenderer = ({
   unitRegistry
 }: RemotePlayersRendererProps) => {
   const { camera } = useThree();
-  // Build O(1) player Map every frame — replaces find() in every RemotePlayerInstance
   const playerMapRef = useRef<Map<string, PlayerNetworkState>>(new Map());
   const visiblePlayerIdsRef = useRef<Set<string>>(new Set());
+
+  const lastSortTime = useRef(-1);
+  // Pre-allocated scratch array and object pool to prevent heap allocation per frame
+  const scratchPlayerDistances = useRef<{ id: string; distSq: number }[]>([]);
+  const _sortPlayerObjPool = useRef<{ id: string; distSq: number }[]>([]);
 
   useFrame((state) => {
     const players = connectedPlayersRef.current || [];
@@ -684,27 +688,48 @@ export const RemotePlayersRenderer = ({
       map.set(players[i].id, players[i]);
     }
 
-    // Sort players by distance to camera
-    const camPos = state.camera.position;
-    const playerDistances = players.map(p => {
-      const dx = p.x - camPos.x;
-      const dy = p.y - camPos.y;
-      const dz = p.z - camPos.z;
-      const distSq = dx * dx + dy * dy + dz * dz;
-      return { id: p.id, distSq };
-    });
+    // ─── Throttled distance sort (10Hz max) ──────────────────────────────────
+    const now = state.clock.elapsedTime;
+    if (now - lastSortTime.current >= 0.10) {
+      lastSortTime.current = now;
 
-    playerDistances.sort((a, b) => a.distSq - b.distSq);
+      const camPos = state.camera.position;
+      const scratch = scratchPlayerDistances.current;
+      const pool = _sortPlayerObjPool.current;
+      scratch.length = 0;
 
-    // Adaptive cap: when loadtest saturates server with 40 bots, limit to 8 closest player skeletons
-    // Running heavy-monsters simultaneously leaves less GPU budget for player skeletons
-    const playerCap = players.length > 20 ? 8 : 12;
-    const visibleSet = new Set<string>();
-    const limit = Math.min(playerDistances.length, playerCap);
-    for (let i = 0; i < limit; i++) {
-      visibleSet.add(playerDistances[i].id);
+      let poolIdx = 0;
+      for (let i = 0; i < players.length; i++) {
+        const p = players[i];
+        const dx = p.x - camPos.x;
+        const dy = p.y - camPos.y;
+        const dz = p.z - camPos.z;
+        const distSq = dx * dx + dy * dy + dz * dz;
+
+        if (poolIdx < pool.length) {
+          pool[poolIdx].id = p.id;
+          pool[poolIdx].distSq = distSq;
+          scratch.push(pool[poolIdx]);
+        } else {
+          const entry = { id: p.id, distSq };
+          pool.push(entry);
+          scratch.push(entry);
+        }
+        poolIdx++;
+      }
+
+      scratch.sort((a, b) => a.distSq - b.distSq);
+
+      // Adaptive cap: when loadtest saturates server with 40 bots, limit to 8 closest player skeletons
+      const playerCap = players.length > 20 ? 8 : 12;
+      const visibleSet = visiblePlayerIdsRef.current;
+      visibleSet.clear();
+
+      const limit = Math.min(scratch.length, playerCap);
+      for (let i = 0; i < limit; i++) {
+        visibleSet.add(scratch[i].id);
+      }
     }
-    visiblePlayerIdsRef.current = visibleSet;
   });
   
   return (
