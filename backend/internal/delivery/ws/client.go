@@ -53,15 +53,15 @@ type Client struct {
 
 type WSIncomingMessage struct {
 	Action   string  `json:"action" msgpack:"action"` // "move", "attack", "distribute_stat", "equip_item", "use_item", "cast_skill", "change_class"
-	X        float32 `json:"x" msgpack:"x"`
-	Y        float32 `json:"y" msgpack:"y"`
-	Z        float32 `json:"z" msgpack:"z"`
-	Rotation float32 `json:"rotation" msgpack:"rotation"`
+	X        float64 `json:"x" msgpack:"x"`
+	Y        float64 `json:"y" msgpack:"y"`
+	Z        float64 `json:"z" msgpack:"z"`
+	Rotation float64 `json:"rotation" msgpack:"rotation"`
 	Animation string `json:"animation" msgpack:"animation"`
 
 	TargetType string  `json:"targetType" msgpack:"targetType"` // "monster", "player"
 	TargetID   string  `json:"targetId" msgpack:"targetId"`
-	Damage     float32 `json:"damage" msgpack:"damage"`
+	Damage     float64 `json:"damage" msgpack:"damage"`
 	IsCrit     bool    `json:"isCrit" msgpack:"isCrit"`
 
 	// RPG Attributes Payload
@@ -113,9 +113,9 @@ func (c *Client) ReadPump() {
 		// Dispatch action — no logging on hot-path "move" actions
 		switch msg.Action {
 		case "move":
-			c.Hub.gameUsecase.UpdatePlayerMovement(c.PlayerID, msg.X, msg.Y, msg.Z, msg.Rotation, msg.Animation, msg.TargetID)
+			c.Hub.gameUsecase.UpdatePlayerMovement(c.PlayerID, float32(msg.X), float32(msg.Y), float32(msg.Z), float32(msg.Rotation), msg.Animation, msg.TargetID)
 		case "attack":
-			c.Hub.gameUsecase.HandlePlayerAttack(c.PlayerID, msg.TargetType, msg.TargetID, msg.Damage, msg.IsCrit)
+			c.Hub.gameUsecase.HandlePlayerAttack(c.PlayerID, msg.TargetType, msg.TargetID, float32(msg.Damage), msg.IsCrit)
 		case "distribute_stat":
 			c.Hub.gameUsecase.DistributeStatPoints(c.PlayerID, msg.Stat, msg.Amount)
 		case "equip_item":
@@ -128,7 +128,7 @@ func (c *Client) ReadPump() {
 			c.Hub.gameUsecase.ChangeClass(c.PlayerID, msg.NewClass)
 		default:
 			if msg.Action == "" {
-				c.Hub.gameUsecase.UpdatePlayerMovement(c.PlayerID, msg.X, msg.Y, msg.Z, msg.Rotation, msg.Animation, msg.TargetID)
+				c.Hub.gameUsecase.UpdatePlayerMovement(c.PlayerID, float32(msg.X), float32(msg.Y), float32(msg.Z), float32(msg.Rotation), msg.Animation, msg.TargetID)
 			}
 		}
 	}
