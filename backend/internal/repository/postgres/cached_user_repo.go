@@ -164,32 +164,56 @@ func (c *cachedUserRepo) FlushDirtyToPostgres(ctx context.Context) {
 
 	fmt.Printf("💾 [Write-Back Cache] Starting batch flush of %d players to PostgreSQL...\n", len(playersToSync))
 
-	// Write back in a single database transaction for safety and maximum speed
+	// 1. Fetch and unmarshal all player profiles from Redis OUTSIDE the SQL transaction
+	playersData := make([]domain.Player, 0, len(playersToSync))
+	failedPlayers := make([]string, 0)
+
+	for _, pID := range playersToSync {
+		redisKey := "player:profile:" + pID
+		data, err := c.rdb.Get(ctx, redisKey).Result()
+		if err != nil {
+			fmt.Printf("⚠️ [Write-Back Cache] Gagal mengambil data Redis untuk player %s: %v\n", pID, err)
+			failedPlayers = append(failedPlayers, pID)
+			continue
+		}
+
+		var player domain.Player
+		if err := json.Unmarshal([]byte(data), &player); err != nil {
+			fmt.Printf("⚠️ [Write-Back Cache] Gagal unmarshal player %s: %v\n", pID, err)
+			continue
+		}
+		playersData = append(playersData, player)
+	}
+
+	if len(playersData) == 0 {
+		// Re-mark any failed players as dirty
+		for _, pID := range failedPlayers {
+			c.reMarkDirty(pID)
+		}
+		return
+	}
+
+	// 2. Perform database writes inside a tight, extremely fast transaction
 	err := c.db.Transaction(func(tx *gorm.DB) error {
-		for _, pID := range playersToSync {
-			redisKey := "player:profile:" + pID
-			data, err := c.rdb.Get(ctx, redisKey).Result()
-			if err != nil {
-				fmt.Printf("⚠️ [Write-Back Cache] Gagal mengambil data Redis untuk player %s: %v\n", pID, err)
-				c.reMarkDirty(pID)
-				continue
-			}
-
-			var player domain.Player
-			if err := json.Unmarshal([]byte(data), &player); err != nil {
-				fmt.Printf("⚠️ [Write-Back Cache] Gagal unmarshal player %s: %v\n", pID, err)
-				continue
-			}
-
+		for _, player := range playersData {
 			// Force GORM FullSaveAssociations to correctly update character profile and inventory/skills tables
 			if err := tx.Session(&gorm.Session{FullSaveAssociations: true}).Save(&player).Error; err != nil {
-				fmt.Printf("❌ [Write-Back Cache] Gagal menyimpan player %s ke PostgreSQL: %v\n", pID, err)
-				c.reMarkDirty(pID)
+				fmt.Printf("❌ [Write-Back Cache] Gagal menyimpan player %s ke PostgreSQL: %v\n", player.ID, err)
 				return err
 			}
 		}
 		return nil
 	})
+
+	// 3. Handle status and roll back dirty states if transaction failed
+	if err != nil {
+		for _, player := range playersData {
+			c.reMarkDirty(player.ID)
+		}
+	}
+	for _, pID := range failedPlayers {
+		c.reMarkDirty(pID)
+	}
 
 	if err == nil {
 		fmt.Printf("✅ [Write-Back Cache] Sukses mem-flush %d players ke PostgreSQL!\n", len(playersToSync))

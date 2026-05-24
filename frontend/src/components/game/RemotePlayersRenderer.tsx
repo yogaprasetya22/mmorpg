@@ -238,6 +238,8 @@ export const RemotePlayerInstance = ({
         clipName = keys.find((k) => k === "Run" || k.toLowerCase() === "run") || "Idle";
       } else if (desired.includes("walk")) {
         clipName = keys.find((k) => k === "Walk" || k.toLowerCase().includes("walk")) || "Idle";
+      } else if (desired.includes("jump")) {
+        clipName = keys.find((k) => k === "Jump" || k.toLowerCase() === "jump" || k.toLowerCase().includes("jump")) || "Idle";
       } else if (isAttacking || isUsingSkill) {
         clipName = keys.find((k) => k.toLowerCase().includes("attack") || k.toLowerCase().includes("slash") || k.toLowerCase().includes("shoot")) || "Idle";
       } else {
@@ -262,6 +264,8 @@ export const RemotePlayerInstance = ({
         activeAction.current.timeScale = Math.max(0.4, Math.min(1.2, smoothedSpeed.current / 3.0));
       } else if (desired.includes("run")) {
         activeAction.current.timeScale = Math.max(0.4, Math.min(1.4, smoothedSpeed.current / 5.5));
+      } else if (desired.includes("jump")) {
+        activeAction.current.timeScale = 0.8;
       } else {
         activeAction.current.timeScale = 1.0;
       }
