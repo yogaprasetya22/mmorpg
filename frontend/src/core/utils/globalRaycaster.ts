@@ -8,7 +8,11 @@ const direction = new THREE.Vector3(0, -1, 0); // Downward
 
 // Global list of meshes to raycast against
 export const colliders: THREE.Mesh[] = [];
-if (typeof window !== 'undefined') (window as any).globalColliders = colliders;
+export const nonInstancedColliders: THREE.Mesh[] = [];
+if (typeof window !== 'undefined') {
+    (window as any).globalColliders = colliders;
+    (window as any).globalNonInstancedColliders = nonInstancedColliders;
+}
 
 let cachedTerrainMesh: THREE.Mesh | null = null;
 
@@ -22,6 +26,9 @@ export const registerCollider = (obj: THREE.Object3D) => {
             }
             if (!colliders.includes(mesh)) {
                 colliders.push(mesh);
+                if (!(mesh as any).isInstancedMesh) {
+                    nonInstancedColliders.push(mesh);
+                }
             }
         }
     });
@@ -38,6 +45,10 @@ export const unregisterCollider = (obj: THREE.Object3D) => {
             const idx = colliders.indexOf(mesh);
             if (idx !== -1) {
                 colliders.splice(idx, 1);
+            }
+            const idxN = nonInstancedColliders.indexOf(mesh);
+            if (idxN !== -1) {
+                nonInstancedColliders.splice(idxN, 1);
             }
         }
     });

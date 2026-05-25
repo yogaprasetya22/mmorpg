@@ -451,7 +451,7 @@ export const PlayerController = ({
     _raycaster.set(_rayOrigin, _rayDir);
     _raycaster.far = camZoom[0];
 
-    const colliders = ((window as any).globalColliders || []).filter((c: any) => !c.isInstancedMesh);
+    const colliders = (window as any).globalNonInstancedColliders || [];
     const intersects = _raycaster.intersectObjects(colliders, false);
 
     if (intersects.length > 0) {
@@ -825,8 +825,8 @@ export const PlayerController = ({
     // Process Active States
     if (charState[0] === 1) { 
       // == STATE: ATTACKING ==
-      if (isMovingInput) {
-        // 3. Batal Memukul Jika Bergerak (Cancel/Override)
+      if (isMovingInput || keys.jump) {
+        // 3. Batal Memukul Jika Bergerak atau Melompat (Cancel/Override)
         charState[0] = 0; 
       } else {
         // 1. Berhenti Saat Menyerang (Animation Lock)
@@ -870,8 +870,8 @@ export const PlayerController = ({
       }
     } else if (charState[0] === 2) { 
       // == STATE: CHASING ==
-      if (isMovingInput) {
-        // Cancel chase if player moves manually
+      if (isMovingInput || keys.jump) {
+        // Cancel chase if player moves manually or jumps
         charState[0] = 0;
         ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
       } else if (hasTarget[0]) {
@@ -945,8 +945,8 @@ export const PlayerController = ({
       }
     } else if (charState[0] === 3) {
       // == STATE: TURNING_TO_TARGET ==
-      if (isMovingInput) {
-        charState[0] = 0; // Cancel turning/attack if player moves manually
+      if (isMovingInput || keys.jump) {
+        charState[0] = 0; // Cancel turning/attack if player moves manually or jumps
         (window as any).pendingSkillExecution = false;
         ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
         const toast = document.getElementById("facing-alignment-alert");
@@ -1132,7 +1132,7 @@ export const PlayerController = ({
         /* ── Collider (Narrower radius for nimble movement and stair clearance) ── */
         colliderCapsuleArgs={[0.3, 1.2, 4, 8]}
         /* ── Float / Ground Detection (Calibrated floatHeight for smooth stair stepping) ── */
-        floatCheckType="BOTH"
+        floatCheckType="RAY"
         floatHeight={0.4}
         floatPullBackHeight={0.4}
         floatSpringK={600}
@@ -1152,7 +1152,7 @@ export const PlayerController = ({
         /* ── Slope (Increased threshold to allow climbing steep stair models) ── */
         maxSlope={1.2}
         /* ── Collision ── */
-        collisionCheckIteration={4}
+        collisionCheckIteration={2}
         collisionPushBackVelocity={1.2}
         collisionPushBackDamping={0.08}
         collisionPushBackThreshold={0.01}

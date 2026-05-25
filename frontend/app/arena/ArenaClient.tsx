@@ -337,7 +337,7 @@ function PerformanceDiagnostics({
     };
 
     frameHistory.current.push(currentSample);
-    if (frameHistory.current.length > 1000) {
+    if (frameHistory.current.length > 50000) {
       frameHistory.current.shift();
     }
 
