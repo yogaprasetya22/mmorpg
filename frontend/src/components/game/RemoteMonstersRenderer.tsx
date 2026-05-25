@@ -170,12 +170,29 @@ export const RemoteMonsterInstance = ({
     // O(1) Map lookup
     const data = monsterMapRef.current?.get(monsterId);
 
-    if (!data || data.is_dead) {
-      if (data) monsterVisualPositions.delete(data.id);
+    if (!data) {
       groupRef.current.visible = false;
       hasInitializedPrevVisual.current = false;
       if (activeAction.current) activeAction.current.paused = true;
       return;
+    }
+
+    const serverAnim = (data.animation || "").toLowerCase();
+    const isDead = data.is_dead || serverAnim === "death";
+    if (isDead) {
+      monsterVisualPositions.delete(data.id);
+      if (billboardGroupRef.current) {
+        billboardGroupRef.current.visible = false;
+      }
+      
+      const deathAction = actions && clipCache.current ? actions[clipCache.current.death] : null;
+      const isDeathAnimFinished = deathAction && deathAction.time >= deathAction.getClip().duration - 0.1;
+      
+      if (isDeathAnimFinished || !actions || Object.keys(actions).length === 0) {
+        groupRef.current.visible = false;
+        if (activeAction.current) activeAction.current.paused = true;
+        return;
+      }
     }
 
     // ─── Density Culling — limit maximum rendered monster count when gathered ──────
@@ -187,7 +204,8 @@ export const RemoteMonsterInstance = ({
     _v3.sub(state.camera.position);
     const camDistSq = _v3.lengthSq();
 
-    const isCurrentlyVisible = !isDensityCulled && camDistSq <= MONSTER_FAR_SQ;
+    // Dead monsters playing their death animation should not be density-culled
+    const isCurrentlyVisible = (isDead || !isDensityCulled) && camDistSq <= MONSTER_FAR_SQ;
 
     // Snap position and rotation if culled to keep state synchronized
     if (!isCurrentlyVisible) {
@@ -249,7 +267,6 @@ export const RemoteMonsterInstance = ({
       isWithinAttackRange = (tDx * tDx + tDz * tDz) <= (isBoss ? 4.5 * 4.5 : 3.5 * 3.5);
     }
 
-    const serverAnim = (data.animation || "").toLowerCase();
     isMoving.current = distToTarget > 0.05;
 
     // ─── Determine desired animation state ───────────────────────────────────
@@ -466,6 +483,7 @@ export interface RemoteMonstersRendererProps {
   connectedPlayersRef: React.RefObject<PlayerNetworkState[]>;
   localPlayerId?: string;
   gameConfig?: any;
+  settingsRef?: React.RefObject<{ potatoMode: boolean; [key: string]: any }>;
 }
 
 export const RemoteMonstersRenderer = ({
@@ -473,7 +491,8 @@ export const RemoteMonstersRenderer = ({
   onAttack,
   connectedPlayersRef,
   localPlayerId,
-  gameConfig
+  gameConfig,
+  settingsRef
 }: RemoteMonstersRendererProps) => {
   const { camera } = useThree();
   const [activeMonsterIds, setActiveMonsterIds] = useState<string[]>([]);
@@ -551,9 +570,10 @@ export const RemoteMonstersRenderer = ({
 
       scratch.sort((a, b) => a.distSq - b.distSq);
 
-      // Adaptive cap: aggressively reduce skeleton updates under heavy load
-      // 80+ monsters: cap 5 (combined with 40 bots = very heavy), 40+: cap 8, otherwise 12
-      const densityCap = list.length > 60 ? 5 : list.length > 40 ? 8 : 12;
+      // Adaptive cap: when potatoMode is active, cap at 12-18 monsters.
+      // Otherwise, raise to 55 monsters in production for a rich, populated world experience!
+      const isPotato = settingsRef?.current?.potatoMode;
+      const densityCap = isPotato ? (list.length > 40 ? 12 : 18) : 55;
       const limit = Math.min(scratch.length, densityCap);
 
       // Reuse visibleMonsterIdsRef Set in-place — no new Set() allocation

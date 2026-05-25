@@ -658,6 +658,7 @@ export interface RemotePlayersRendererProps {
   tankSpellsRef?: React.RefObject<any[]>;
   assassinSpellsRef?: React.RefObject<any[]>;
   unitRegistry?: React.RefObject<UnitRuntimeData[]>;
+  settingsRef?: React.RefObject<{ potatoMode: boolean; [key: string]: any }>;
 }
 
 export const RemotePlayersRenderer = ({ 
@@ -669,7 +670,8 @@ export const RemotePlayersRenderer = ({
   fighterSpellsRef,
   tankSpellsRef,
   assassinSpellsRef,
-  unitRegistry
+  unitRegistry,
+  settingsRef
 }: RemotePlayersRendererProps) => {
   const { camera } = useThree();
   const playerMapRef = useRef<Map<string, PlayerNetworkState>>(new Map());
@@ -720,8 +722,10 @@ export const RemotePlayersRenderer = ({
 
       scratch.sort((a, b) => a.distSq - b.distSq);
 
-      // Adaptive cap: when loadtest saturates server with 40 bots, limit to 8 closest player skeletons
-      const playerCap = players.length > 20 ? 8 : 12;
+      // Adaptive cap: when loadtest saturates server, limit skeletons.
+      // If potatoMode is active: cap at 15 players. Otherwise, raise to 45 players for high-density production gaming!
+      const isPotato = settingsRef?.current?.potatoMode;
+      const playerCap = isPotato ? (players.length > 20 ? 10 : 15) : 45;
       const visibleSet = visiblePlayerIdsRef.current;
       visibleSet.clear();
 

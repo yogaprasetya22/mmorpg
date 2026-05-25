@@ -1572,6 +1572,7 @@ export default function MultiplayerArena() {
                 tankSpellsRef={tankSpellsRef}
                 assassinSpellsRef={assassinSpellsRef}
                 unitRegistry={unitRegistryRef}
+                settingsRef={settingsRef}
               />
 
               {/* Render Server Authoritative Monsters */}
@@ -1585,6 +1586,7 @@ export default function MultiplayerArena() {
                 connectedPlayersRef={connectedPlayersRef}
                 localPlayerId={selectedCharacter?.id}
                 gameConfig={gameConfig}
+                settingsRef={settingsRef}
               />
             </VFXProvider>
 
