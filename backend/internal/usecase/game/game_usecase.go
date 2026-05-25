@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/looplab/fsm"
 	"mmorpg-backend/internal/domain"
 	"mmorpg-backend/internal/repository/redis"
 )
@@ -53,9 +52,6 @@ type gameUsecase struct {
 	patrolWaiting   map[string]time.Time
 	patrolTargetsMu sync.Mutex
 	
-	fsmMap          map[string]*fsm.FSM
-	fsmMu           sync.RWMutex
-	
 	broadcastCallback func(payload domain.GameStatePayload)
 }
 
@@ -76,7 +72,6 @@ func NewGameUsecase(
 		activePlayers:     make(map[string]*domain.Player),
 		patrolTargets:     make(map[string]domain.Vector3),
 		patrolWaiting:     make(map[string]time.Time),
-		fsmMap:            make(map[string]*fsm.FSM),
 		broadcastCallback: broadcastCallback,
 	}
 
@@ -274,6 +269,12 @@ func (u *gameUsecase) SimulateMonstersTick(dt float32) {
 	}
 	u.playersMu.RUnlock()
 
+	// Build O(1) Spatial Hash Grid of player positions for ultra-fast aggro lookup
+	grid := NewSpatialHashGrid(10.0)
+	for id, p := range playerSnapshot {
+		grid.Insert(id, p.X, p.Z)
+	}
+
 	// Snapshot monsters list (pointers — mutations below are still guarded per-monster)
 	u.monstersMu.Lock()
 	monsters := make([]*domain.Monster, 0, len(u.monsters))
@@ -282,11 +283,10 @@ func (u *gameUsecase) SimulateMonstersTick(dt float32) {
 	}
 	u.monstersMu.Unlock()
 
-	// With ≤10 monsters, sequential processing is fine and avoids goroutine overhead.
-	// For future scalability (100+ monsters), we use parallel fan-out capped at GOMAXPROCS.
+	// With ≤8 monsters, sequential processing is fine and avoids goroutine overhead.
 	if len(monsters) <= 8 {
 		for _, m := range monsters {
-			u.processMonsterAIWithSnapshot(m, dt, playerSnapshot)
+			u.processMonsterAIWithSnapshot(m, dt, playerSnapshot, grid)
 		}
 		return
 	}
@@ -309,7 +309,7 @@ func (u *gameUsecase) SimulateMonstersTick(dt float32) {
 		go func() {
 			defer wg.Done()
 			for m := range work {
-				u.processMonsterAIWithSnapshot(m, dt, playerSnapshot)
+				u.processMonsterAIWithSnapshot(m, dt, playerSnapshot, grid)
 			}
 		}()
 	}
@@ -959,4 +959,49 @@ func (u *gameUsecase) ChangeClass(playerID string, newClass string) {
 	}
 
 	fmt.Printf("⚔️ Player %s changed class to %s! Attributes recalculated successfully.\n", playerData.Username, newClass)
+}
+
+// SpatialHashGrid provides O(1) cell-based spatial partitioning lookup for aggro checks.
+type SpatialHashGrid struct {
+	cellSize float32
+	buckets  map[int][]string
+}
+
+func NewSpatialHashGrid(cellSize float32) *SpatialHashGrid {
+	return &SpatialHashGrid{
+		cellSize: cellSize,
+		buckets:  make(map[int][]string),
+	}
+}
+
+func (g *SpatialHashGrid) hash(x, z float32) int {
+	// Simple multiplier hashing for 2D cell coordinate projection
+	ix := int(x / g.cellSize)
+	iz := int(z / g.cellSize)
+	return (ix * 73856093) ^ (iz * 19349663)
+}
+
+func (g *SpatialHashGrid) Insert(id string, x, z float32) {
+	h := g.hash(x, z)
+	g.buckets[h] = append(g.buckets[h], id)
+}
+
+func (g *SpatialHashGrid) GetNearby(x, z, radius float32) []string {
+	var result []string
+	
+	minX := int((x - radius) / g.cellSize)
+	maxX := int((x + radius) / g.cellSize)
+	minZ := int((z - radius) / g.cellSize)
+	maxZ := int((z + radius) / g.cellSize)
+
+	// Traverse bounding cells
+	for ix := minX; ix <= maxX; ix++ {
+		for iz := minZ; iz <= maxZ; iz++ {
+			h := (ix * 73856093) ^ (iz * 19349663)
+			if ids, exists := g.buckets[h]; exists {
+				result = append(result, ids...)
+			}
+		}
+	}
+	return result
 }

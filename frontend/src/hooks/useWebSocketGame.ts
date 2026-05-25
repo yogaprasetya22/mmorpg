@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { encode, decode } from "@msgpack/msgpack";
+import { encode } from "@msgpack/msgpack";
 
 export interface PlayerNetworkState {
     id: string;
@@ -59,25 +59,52 @@ export const useWebSocketGame = (
         const wsUrl = `${serverUrl}?token=${token}&character_id=${characterId}`;
         console.log(`Connecting to WebSocket: ${wsUrl}`);
         
+        // Spin up an inline Web Worker to parse MessagePack / JSON on a background thread.
+        // This keeps the React main thread 100% free for physics and 60 FPS rendering!
+        const workerBlob = new Blob([`
+            importScripts('https://cdn.jsdelivr.net/npm/@msgpack/msgpack@2.8.0/dist/msgpack.min.js');
+            self.onmessage = function(e) {
+                const { type, data } = e.data;
+                if (type === 'decode-msgpack') {
+                    try {
+                        const payload = MessagePack.decode(new Uint8Array(data));
+                        self.postMessage({ type: 'success', payload: payload });
+                    } catch (err) {
+                        self.postMessage({ type: 'error', error: err.message });
+                    }
+                } else if (type === 'decode-json') {
+                    try {
+                        const payload = JSON.parse(data);
+                        self.postMessage({ type: 'success', payload: payload });
+                    } catch (err) {
+                        self.postMessage({ type: 'error', error: err.message });
+                    }
+                }
+            };
+        `], { type: 'application/javascript' });
+
+        const workerUrl = URL.createObjectURL(workerBlob);
+        const worker = new Worker(workerUrl);
+
+        worker.onmessage = (e) => {
+            const { type, payload, error } = e.data;
+            if (type === 'success') {
+                onStateReceived(payload);
+            } else {
+                console.error("Worker decoding failed:", error);
+            }
+        };
+
         const ws = new WebSocket(wsUrl);
         ws.binaryType = "arraybuffer";
         wsRef.current = ws;
 
         ws.onmessage = (event) => {
             if (event.data instanceof ArrayBuffer) {
-                try {
-                    const payload = decode(new Uint8Array(event.data)) as GameStatePayload;
-                    onStateReceived(payload);
-                } catch (err) {
-                    console.error("Failed to parse binary game state payload via MessagePack", err);
-                }
+                // Pass ArrayBuffer as a transferable object to achieve zero-copy transfer overhead
+                worker.postMessage({ type: 'decode-msgpack', data: event.data }, [event.data]);
             } else if (typeof event.data === "string") {
-                try {
-                    const payload = JSON.parse(event.data) as GameStatePayload;
-                    onStateReceived(payload);
-                } catch (err) {
-                    console.error("Failed to parse game state payload", err);
-                }
+                worker.postMessage({ type: 'decode-json', data: event.data });
             }
         };
 
@@ -87,6 +114,8 @@ export const useWebSocketGame = (
 
         return () => {
             ws.close();
+            worker.terminate();
+            URL.revokeObjectURL(workerUrl);
         };
     }, [serverUrl, token, characterId]);
 
