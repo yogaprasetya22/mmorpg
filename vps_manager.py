@@ -384,8 +384,8 @@ def interactive_menu():
             elif choice == "7":
                 print_header("Re-Seeding Monsters Database")
                 print("Running the backend seeder command inside the docker backend container...")
-                # Run seeder inside the go backend container
-                run_remote_command(client, "docker compose exec -T backend go run cmd/seeder/main.go")
+                # Run compiled seeder binary inside the go backend container
+                run_remote_command(client, "docker compose exec -T backend ./seeder")
             elif choice == "0":
                 print(f"\n🔌 Disconnecting from VPS...")
                 client.close()

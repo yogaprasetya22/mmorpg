@@ -434,8 +434,11 @@ func (u *gameUsecase) RegisterPlayer(playerID string, username string) {
 	// Respawn player on reconnect if they logged out dead (HP == 0)
 	if pData.HP <= 0 {
 		pData.HP = pData.MaxHP
+		pData.LastX = 0
+		pData.LastY = 0
+		pData.LastZ = 0
 		_ = u.playerRepo.Update(pData)
-		fmt.Printf("🛡️ Player %s has been resurrected on login because they were dead.\n", username)
+		fmt.Printf("🛡️ Player %s has been resurrected on login because they were dead. Relocated to (0, 0, 0).\n", username)
 	}
 
 	// 2. Cache player data in memory

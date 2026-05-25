@@ -68,6 +68,11 @@ const _camTarget  = new THREE.Vector3();
 const _camDir     = new THREE.Vector3();
 const _originVec  = new THREE.Vector3();
 const _fwdVec     = new THREE.Vector3();
+const _fwdAxis        = new THREE.Vector3(0, 0, 1);
+const _tempFwd        = new THREE.Vector3();
+const _tempFwd2       = new THREE.Vector3();
+const _velVec         = new THREE.Vector3();
+const _shoulderOffsetVec = new THREE.Vector3();
 
 
 // ─── ECS BUFFERS (TypedArrays — same-frame, no GC) ───────────────────────────
@@ -301,7 +306,7 @@ export const PlayerController = ({
     _charPos.copy(characterStatus.position as THREE.Vector3);
     (window as any).localPlayerPos = _charPos;
     if (characterRef.current) {
-      const fwd = new THREE.Vector3(0, 0, 1);
+      const fwd = _tempFwd.copy(_fwdAxis);
       fwd.applyQuaternion(characterRef.current.quaternion);
       if (characterRef.current.parent) {
         fwd.applyQuaternion(characterRef.current.parent.quaternion);
@@ -376,7 +381,7 @@ export const PlayerController = ({
           _charPos.y = groundH;
           if (ecctrlRef.current.setLinVel) {
             const currentVel = characterStatus.linvel;
-            ecctrlRef.current.setLinVel(new THREE.Vector3(currentVel.x, Math.max(0, currentVel.y), currentVel.z));
+            ecctrlRef.current.setLinVel(_velVec.set(currentVel.x, Math.max(0, currentVel.y), currentVel.z));
           }
         }
       }
@@ -391,7 +396,7 @@ export const PlayerController = ({
       syncAccumulator.current = 0;
       if (sendPlayerState && characterRef.current) {
         // Calculate exact world rotation from character mesh
-        const fwd = new THREE.Vector3(0, 0, 1);
+        const fwd = _tempFwd.copy(_fwdAxis);
         fwd.applyQuaternion(characterRef.current.quaternion);
         if (characterRef.current.parent) {
           fwd.applyQuaternion(characterRef.current.parent.quaternion);
@@ -429,9 +434,9 @@ export const PlayerController = ({
     // --- 1. CALCULATE IDEAL CAMERA POSITION ---
     // Offset the target slightly to the shoulder for premium look
     _fwdVec.set(Math.sin(camYaw[0]), 0, Math.cos(camYaw[0])).normalize();
-    const _shoulderOffset = new THREE.Vector3().set(Math.cos(camYaw[0]), 0, -Math.sin(camYaw[0])).multiplyScalar(SHOULDER_OFFSET);
+    const shoulderOffset = _shoulderOffsetVec.set(Math.cos(camYaw[0]), 0, -Math.sin(camYaw[0])).multiplyScalar(SHOULDER_OFFSET);
     
-    _camTarget.copy(_charPos).add(_shoulderOffset);
+    _camTarget.copy(_charPos).add(shoulderOffset);
     _camTarget.y += EYE_HEIGHT;
 
     _camDesired.set(
@@ -677,7 +682,7 @@ export const PlayerController = ({
 
       // Check if we are facing the target first before starting skill animation / damage
       const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
-      const fwd = new THREE.Vector3(0, 0, 1);
+      const fwd = _tempFwd.copy(_fwdAxis);
       fwd.applyQuaternion(characterRef.current.quaternion);
       if (characterRef.current.parent) {
         fwd.applyQuaternion(characterRef.current.parent.quaternion);
@@ -777,7 +782,7 @@ export const PlayerController = ({
         } else {
           // Check if facing target first
           const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
-          const fwd = new THREE.Vector3(0, 0, 1);
+          const fwd = _tempFwd.copy(_fwdAxis);
           fwd.applyQuaternion(characterRef.current.quaternion);
           if (characterRef.current.parent) {
             fwd.applyQuaternion(characterRef.current.parent.quaternion);
@@ -833,7 +838,7 @@ export const PlayerController = ({
         // Face target dynamically
         if (hasTarget[0]) {
           const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
-          const fwd = new THREE.Vector3(0, 0, 1);
+          const fwd = _tempFwd.copy(_fwdAxis);
           fwd.applyQuaternion(characterRef.current.quaternion);
           if (characterRef.current.parent) {
             fwd.applyQuaternion(characterRef.current.parent.quaternion);
@@ -879,7 +884,7 @@ export const PlayerController = ({
         if (distSq <= effectiveRangeSq) {
           // Reached Target! Check if facing target first
           const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
-          const fwd = new THREE.Vector3(0, 0, 1);
+          const fwd = _tempFwd.copy(_fwdAxis);
           fwd.applyQuaternion(characterRef.current.quaternion);
           if (characterRef.current.parent) {
             fwd.applyQuaternion(characterRef.current.parent.quaternion);
@@ -954,7 +959,7 @@ export const PlayerController = ({
         
         // Rotate towards target
         const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
-        const fwd = new THREE.Vector3(0, 0, 1);
+        const fwd = _tempFwd.copy(_fwdAxis);
         fwd.applyQuaternion(characterRef.current.quaternion);
         if (characterRef.current.parent) {
           fwd.applyQuaternion(characterRef.current.parent.quaternion);
@@ -968,7 +973,7 @@ export const PlayerController = ({
         characterRef.current.rotation.y += diff * 18 * delta;
 
         // Check if we are facing the target now
-        const fwdAfter = new THREE.Vector3(0, 0, 1);
+        const fwdAfter = _tempFwd2.copy(_fwdAxis);
         fwdAfter.applyQuaternion(characterRef.current.quaternion);
         if (characterRef.current.parent) {
           fwdAfter.applyQuaternion(characterRef.current.parent.quaternion);

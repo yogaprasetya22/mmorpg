@@ -226,16 +226,20 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 						h.HP = tData.HP
 						h.MaxHP = tData.MaxHP
 					}
-					lastX = tData.LastX
-					lastY = tData.LastY
-					lastZ = tData.LastZ
+					// Reset coordinates to safe zone (0, 0, 0) to avoid spawn/death loops
+					tData.LastX = 0
+					tData.LastY = 0
+					tData.LastZ = 0
+					lastX = 0
+					lastY = 0
+					lastZ = 0
 				}
 				u.activePlayersMu.Unlock() // Release activePlayersMu lock before calling UpdatePlayerMovement to prevent recursive deadlock
 
 				if exists && tData != nil {
 					// Move player back to their last exited/saved coordinates in registry and Redis
 					u.UpdatePlayerMovement(tID, lastX, lastY, lastZ, 0, "idle", "")
-					fmt.Printf("🛡️ Player %s telah hidup kembali di koordinat terakhir (%f, %f, %f).\n", tUser, lastX, lastY, lastZ)
+					fmt.Printf("🛡️ Player %s telah hidup kembali di safe zone (0, 0, 0).\n", tUser)
 				}
 			}(targetID, targetData.Username)
 		}

@@ -370,16 +370,20 @@ func (u *gameUsecase) processMonsterAI(m *domain.Monster, dt float32) {
 							h.HP = pl.HP
 							h.MaxHP = pl.MaxHP
 						}
-						lastX = pl.LastX
-						lastY = pl.LastY
-						lastZ = pl.LastZ
+						// Reset coordinates to safe zone (0, 0, 0) to avoid spawn/death loops
+						pl.LastX = 0
+						pl.LastY = 0
+						pl.LastZ = 0
+						lastX = 0
+						lastY = 0
+						lastZ = 0
 					}
 					u.activePlayersMu.Unlock() // Release activePlayersMu lock before calling UpdatePlayerMovement to prevent recursive deadlock
 
 					if exists && pl != nil {
 						// Move player back to their last exited/saved coordinates in registry and Redis
 						u.UpdatePlayerMovement(pID, lastX, lastY, lastZ, 0, "idle", "")
-						fmt.Printf("🛡️ Player %s telah hidup kembali di koordinat terakhir (%f, %f, %f).\n", pUser, lastX, lastY, lastZ)
+						fmt.Printf("🛡️ Player %s telah hidup kembali di safe zone (0, 0, 0).\n", pUser)
 					}
 				}(targetPlayer.ID, pData.Username)
 
@@ -735,15 +739,19 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 							h.HP = pl.HP
 							h.MaxHP = pl.MaxHP
 						}
-						lastX = pl.LastX
-						lastY = pl.LastY
-						lastZ = pl.LastZ
+						// Reset coordinates to safe zone (0, 0, 0) to avoid spawn/death loops
+						pl.LastX = 0
+						pl.LastY = 0
+						pl.LastZ = 0
+						lastX = 0
+						lastY = 0
+						lastZ = 0
 					}
 					u.activePlayersMu.Unlock() // Release activePlayersMu lock before calling UpdatePlayerMovement to prevent recursive deadlock
 
 					if exists && pl != nil {
 						u.UpdatePlayerMovement(pID, lastX, lastY, lastZ, 0, "idle", "")
-						fmt.Printf("🛡️ Player %s telah hidup kembali.\n", pUser)
+						fmt.Printf("🛡️ Player %s telah hidup kembali di safe zone (0, 0, 0).\n", pUser)
 					}
 				}(targetPlayer.ID, pData.Username)
 

@@ -25,6 +25,7 @@ import { TankSpellEffect } from "@/src/components/game/systems/effects/TankSpell
 import { AssassinSpellEffect } from "@/src/components/game/systems/effects/AssassinSpellEffect";
 import { MageSpellEffect } from "@/src/components/game/systems/effects/MageSpellEffect";
 import { MeshoptDecoder } from 'meshoptimizer';
+import { VFX_TEXTURES } from "@/src/components/game/systems/effects/VFXAssets";
 import { CLASS_CONFIG, INITIAL_SETTINGS } from "@/src/core/logic/combat/constants";
 import { API_BASE_URL, WS_BASE_URL } from "@/src/core/config";
 
@@ -90,29 +91,96 @@ const ExposureBridge = ({ exposure }: { exposure: number }) => {
 
 // --- Models Preloader using React Suspense & GLTFLoader Cache ---
 const ModelsPreloader = ({ onReady }: { onReady: () => void }) => {
+  const { gl, camera } = useThree();
+
   // Preload all character models
-  useGLTF('/assets-model/Chef_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  useGLTF('/assets-model/Chef_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  useGLTF('/assets-model/Knight_Golden_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  useGLTF('/assets-model/Knight_Golden_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  useGLTF('/assets-model/Wizard.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  useGLTF('/assets-model/Witch.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  useGLTF('/assets-model/Viking_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  useGLTF('/assets-model/Viking_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  useGLTF('/assets-model/Ninja_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  useGLTF('/assets-model/Ninja_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  useGLTF('/assets-model/Knight_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  useGLTF('/assets-model/Cowboy_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g1 = useGLTF('/assets-model/Chef_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g2 = useGLTF('/assets-model/Chef_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g3 = useGLTF('/assets-model/Knight_Golden_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g4 = useGLTF('/assets-model/Knight_Golden_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g5 = useGLTF('/assets-model/Wizard.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g6 = useGLTF('/assets-model/Witch.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g7 = useGLTF('/assets-model/Viking_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g8 = useGLTF('/assets-model/Viking_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g9 = useGLTF('/assets-model/Ninja_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g10 = useGLTF('/assets-model/Ninja_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g11 = useGLTF('/assets-model/Knight_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g12 = useGLTF('/assets-model/Cowboy_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
 
   // Preload all monster models
-  useGLTF('/assets-model/Goblin_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  useGLTF('/assets-model/Goblin_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  useGLTF('/assets-model/Zombie_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  useGLTF('/assets-model/Zombie_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g13 = useGLTF('/assets-model/Goblin_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g14 = useGLTF('/assets-model/Goblin_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g15 = useGLTF('/assets-model/Zombie_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g16 = useGLTF('/assets-model/Zombie_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
 
   useEffect(() => {
-    onReady();
-  }, [onReady]);
+    let active = true;
+
+    const compileAll = async () => {
+      console.log("🚀 Starting Asynchronous GPU Shader/Texture Compilation...");
+
+      // Pre-upload all VFX textures to GPU to avoid stutter on first spell cast
+      const texturesToInit: THREE.Texture[] = [];
+      const collectTextures = (obj: any) => {
+        if (obj instanceof THREE.Texture) {
+          texturesToInit.push(obj);
+        } else if (Array.isArray(obj)) {
+          obj.forEach(collectTextures);
+        } else if (obj && typeof obj === 'object') {
+          Object.values(obj).forEach(collectTextures);
+        }
+      };
+      collectTextures(VFX_TEXTURES);
+
+      console.log(`Pre-uploading ${texturesToInit.length} VFX textures to GPU...`);
+      texturesToInit.forEach(tex => {
+        try {
+          if (tex && (gl as any).initTexture) {
+            (gl as any).initTexture(tex);
+          }
+        } catch (e) {
+          console.warn("Failed to pre-upload texture to GPU:", e);
+        }
+      });
+
+      const tempGroup = new THREE.Group();
+
+      const gltfs = [g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14, g15, g16];
+      gltfs.forEach((g: any) => {
+        if (g && g.scene) {
+          tempGroup.add(g.scene);
+        }
+      });
+
+      try {
+        if (typeof (gl as any).compileAsync === 'function') {
+          await (gl as any).compileAsync(tempGroup, camera);
+          console.log("✅ Asynchronous GPU compilation complete!");
+        } else {
+          gl.compile(tempGroup, camera);
+          console.log("✅ Synchronous GPU compilation complete (fallback)!");
+        }
+      } catch (err) {
+        console.warn("GPU compilation failed or timed out:", err);
+      } finally {
+        gltfs.forEach((g: any) => {
+          if (g && g.scene) {
+            tempGroup.remove(g.scene);
+          }
+        });
+
+        if (active) {
+          onReady();
+        }
+      }
+    };
+
+    compileAll();
+
+    return () => {
+      active = false;
+    };
+  }, [onReady, gl, camera, g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14, g15, g16]);
 
   return null;
 };
