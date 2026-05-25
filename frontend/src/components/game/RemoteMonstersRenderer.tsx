@@ -8,6 +8,8 @@ import { SkeletonUtils } from 'three-stdlib';
 import { MeshoptDecoder } from 'meshoptimizer';
 import { MonsterNetworkState, PlayerNetworkState } from "@/src/hooks/useWebSocketGame";
 import { useStore } from "@/src/state/useStore";
+import { getTerrainElevation } from "@/src/core/utils/terrainHeight";
+import { useEditorStore } from "@/src/state/useEditorStore";
 
 // ─── Shared reusable Box3 to avoid allocation per monster ────────────────────
 const _sharedBox3 = new THREE.Box3();
@@ -168,35 +170,25 @@ export const RemoteMonsterInstance = ({
     if (!groupRef.current) return;
 
     // O(1) Map lookup
-    const data = monsterMapRef.current?.get(monsterId);
+    // O(1) Map lookup
+    let data = monsterMapRef.current?.get(monsterId);
+    if (!data && _worldMonstersRef.current) {
+      // Fallback search to prevent frame-ordering race conditions!
+      data = _worldMonstersRef.current.find(m => m.id === monsterId);
+    }
 
-    if (!data) {
+    if (!data || data.is_dead) {
+      if (data) monsterVisualPositions.delete(data.id);
       groupRef.current.visible = false;
       hasInitializedPrevVisual.current = false;
       if (activeAction.current) activeAction.current.paused = true;
       return;
     }
 
-    const serverAnim = (data.animation || "").toLowerCase();
-    const isDead = data.is_dead || serverAnim === "death";
-    if (isDead) {
-      monsterVisualPositions.delete(data.id);
-      if (billboardGroupRef.current) {
-        billboardGroupRef.current.visible = false;
-      }
-      
-      const deathAction = actions && clipCache.current ? actions[clipCache.current.death] : null;
-      const isDeathAnimFinished = deathAction && deathAction.time >= deathAction.getClip().duration - 0.1;
-      
-      if (isDeathAnimFinished || !actions || Object.keys(actions).length === 0) {
-        groupRef.current.visible = false;
-        if (activeAction.current) activeAction.current.paused = true;
-        return;
-      }
-    }
-
     // ─── Density Culling — limit maximum rendered monster count when gathered ──────
-    const isDensityCulled = visibleMonsterIdsRef && visibleMonsterIdsRef.current && !visibleMonsterIdsRef.current.has(monsterId);
+    // Disable density culling if overall monster count is low to prevent desync hiding
+    const isDensityCulled = (_worldMonstersRef.current && _worldMonstersRef.current.length > 12) &&
+      visibleMonsterIdsRef && visibleMonsterIdsRef.current && !visibleMonsterIdsRef.current.has(monsterId);
 
     // ─── Distance Culling — avoids full skeleton update for far monsters ──────
     // Compare distance to server coordinates directly for consistency
@@ -204,12 +196,16 @@ export const RemoteMonsterInstance = ({
     _v3.sub(state.camera.position);
     const camDistSq = _v3.lengthSq();
 
-    // Dead monsters playing their death animation should not be density-culled
-    const isCurrentlyVisible = (isDead || !isDensityCulled) && camDistSq <= MONSTER_FAR_SQ;
+    const isCurrentlyVisible = !isDensityCulled && camDistSq <= MONSTER_FAR_SQ;
+
+    // Get client terrain elevation to map server's flat 2D movement cleanly onto 3D sculpted landscape
+    const activeEnv = useStore.getState().environment;
+    const terrainConfig = useEditorStore.getState().terrainConfig;
+    const terrainY = getTerrainElevation(data.x, data.z, activeEnv, 24, terrainConfig);
 
     // Snap position and rotation if culled to keep state synchronized
     if (!isCurrentlyVisible) {
-      groupRef.current.position.set(data.x, data.y, data.z);
+      groupRef.current.position.set(data.x, terrainY, data.z);
       groupRef.current.visible = false;
       if (activeAction.current) activeAction.current.paused = true;
       return;
@@ -229,8 +225,8 @@ export const RemoteMonsterInstance = ({
     // ─── Read flat position fields (no nested object allocation) ─────────────
     const x = data.x;
     const z = data.z;
-    // O(1) Server Authoritative Ground Height: bypasses slow BVH raycasting completely!
-    const groundY = data.y;
+    // Client-side 3D terrain elevation handles server flat coordinate mapping
+    const groundY = terrainY;
 
     const meshX = groupRef.current.position.x;
     const meshY = groupRef.current.position.y;
@@ -267,6 +263,7 @@ export const RemoteMonsterInstance = ({
       isWithinAttackRange = (tDx * tDx + tDz * tDz) <= (isBoss ? 4.5 * 4.5 : 3.5 * 3.5);
     }
 
+    const serverAnim = (data.animation || "").toLowerCase();
     isMoving.current = distToTarget > 0.05;
 
     // ─── Determine desired animation state ───────────────────────────────────
@@ -432,7 +429,7 @@ export const RemoteMonsterInstance = ({
   const scale = isBoss ? 2.3 : 0.9;
 
   return (
-    <group ref={groupRef} visible={false}>
+    <group ref={groupRef}>
       <Billboard ref={billboardGroupRef} position={[0, hpBarY, 0]} follow={true} visible={false}>
         <Text
           ref={textRef}
@@ -483,7 +480,7 @@ export interface RemoteMonstersRendererProps {
   connectedPlayersRef: React.RefObject<PlayerNetworkState[]>;
   localPlayerId?: string;
   gameConfig?: any;
-  settingsRef?: React.RefObject<{ potatoMode: boolean; [key: string]: any }>;
+  settingsRef?: React.RefObject<any>;
 }
 
 export const RemoteMonstersRenderer = ({
@@ -494,6 +491,7 @@ export const RemoteMonstersRenderer = ({
   gameConfig,
   settingsRef
 }: RemoteMonstersRendererProps) => {
+  if (settingsRef) { /* bypass */ }
   const { camera } = useThree();
   const [activeMonsterIds, setActiveMonsterIds] = useState<string[]>([]);
   const seenIdsSet = useRef<Set<string>>(new Set());
@@ -570,10 +568,9 @@ export const RemoteMonstersRenderer = ({
 
       scratch.sort((a, b) => a.distSq - b.distSq);
 
-      // Adaptive cap: when potatoMode is active, cap at 12-18 monsters.
-      // Otherwise, raise to 55 monsters in production for a rich, populated world experience!
-      const isPotato = settingsRef?.current?.potatoMode;
-      const densityCap = isPotato ? (list.length > 40 ? 12 : 18) : 55;
+      // Adaptive cap: aggressively reduce skeleton updates under heavy load
+      // 80+ monsters: cap 5 (combined with 40 bots = very heavy), 40+: cap 8, otherwise 12
+      const densityCap = list.length > 60 ? 5 : list.length > 40 ? 8 : 12;
       const limit = Math.min(scratch.length, densityCap);
 
       // Reuse visibleMonsterIdsRef Set in-place — no new Set() allocation

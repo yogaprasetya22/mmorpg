@@ -1124,11 +1124,12 @@ export const PlayerController = ({
         ref={ecctrlRef}
         paused={paused || isDead}
         position={[0, 8, 0]}
-        /* ── Collider ── */
-        colliderCapsuleArgs={[0.4, 1.2, 4, 8]}
-        /* ── Float / Ground Detection (BVHEcctrl default-safe values) ── */
+        /* ── Collider (Narrower radius for nimble movement and stair clearance) ── */
+        colliderCapsuleArgs={[0.3, 1.2, 4, 8]}
+        /* ── Float / Ground Detection (Calibrated floatHeight for smooth stair stepping) ── */
         floatCheckType="BOTH"
-        floatHeight={0.2}
+        floatHeight={0.4}
+        floatPullBackHeight={0.4}
         floatSpringK={600}
         floatDampingC={28}
         /* ── Movement ── */
@@ -1143,8 +1144,8 @@ export const PlayerController = ({
         fallGravityFactor={3.5}
         maxFallSpeed={40}
         mass={1}
-        /* ── Slope ── */
-        maxSlope={0.85}
+        /* ── Slope (Increased threshold to allow climbing steep stair models) ── */
+        maxSlope={1.2}
         /* ── Collision ── */
         collisionCheckIteration={4}
         collisionPushBackVelocity={1.2}

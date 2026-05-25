@@ -43,7 +43,10 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
     useFrame(() => {
         if (lightRef.current) {
             const pos = useStore.getState().playerPosition;
-            lightRef.current.position.set(pos[0] + 15, 45, pos[2] + 15);
+            const rad = (useEditorStore.getState().sunAngle * Math.PI) / 180;
+            const ox = Math.cos(rad) * 15.0;
+            const oz = Math.sin(rad) * 15.0;
+            lightRef.current.position.set(pos[0] + ox, 45, pos[2] + oz);
             lightRef.current.target.position.set(pos[0], pos[1], pos[2]);
             lightRef.current.target.updateMatrixWorld();
         }

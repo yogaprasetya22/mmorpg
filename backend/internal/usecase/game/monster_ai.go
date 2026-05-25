@@ -350,6 +350,7 @@ func (u *gameUsecase) processMonsterAI(m *domain.Monster, dt float32) {
 			pData.HP -= finalDamage
 			if pData.HP <= 0 {
 				pData.HP = 0
+				deadPlayerID := m.TargetPlayerID
 				m.TargetPlayerID = ""
 				_ = f.Event(ctx, "return")
 				fmt.Printf("☠️ Monster %s membunuh Player %s!\n", m.Name, pData.Username)
@@ -359,6 +360,7 @@ func (u *gameUsecase) processMonsterAI(m *domain.Monster, dt float32) {
 					time.Sleep(5 * time.Second)
 					u.activePlayersMu.Lock()
 					pl, exists := u.activePlayers[pID]
+					var lastX, lastY, lastZ float32
 					if exists && pl != nil {
 						pl.HP = pl.MaxHP
 
@@ -368,25 +370,42 @@ func (u *gameUsecase) processMonsterAI(m *domain.Monster, dt float32) {
 							h.HP = pl.HP
 							h.MaxHP = pl.MaxHP
 						}
-
-						// Move player back to their last exited/saved coordinates in registry and Redis
-						u.UpdatePlayerMovement(pID, pl.LastX, pl.LastY, pl.LastZ, 0, "idle", "")
-						fmt.Printf("🛡️ Player %s telah hidup kembali di koordinat terakhir (%f, %f, %f).\n", pUser, pl.LastX, pl.LastY, pl.LastZ)
+						lastX = pl.LastX
+						lastY = pl.LastY
+						lastZ = pl.LastZ
 					}
-					u.activePlayersMu.Unlock()
+					u.activePlayersMu.Unlock() // Release activePlayersMu lock before calling UpdatePlayerMovement to prevent recursive deadlock
+
+					if exists && pl != nil {
+						// Move player back to their last exited/saved coordinates in registry and Redis
+						u.UpdatePlayerMovement(pID, lastX, lastY, lastZ, 0, "idle", "")
+						fmt.Printf("🛡️ Player %s telah hidup kembali di koordinat terakhir (%f, %f, %f).\n", pUser, lastX, lastY, lastZ)
+					}
 				}(targetPlayer.ID, pData.Username)
-			}
 
-			// Update ECS Player Health Component and Real-time WebSocket state
-			if healthComp, found := u.registry.GetComponent(domain.EntityID(m.TargetPlayerID), "Health"); found {
-				h := healthComp.(*domain.HealthComponent)
-				h.HP = pData.HP
+				// Update ECS Player Health Component and Real-time WebSocket state for dead player
+				if healthComp, found := u.registry.GetComponent(domain.EntityID(deadPlayerID), "Health"); found {
+					h := healthComp.(*domain.HealthComponent)
+					h.HP = 0
 
-				u.playersMu.Lock()
-				if pState, exists := u.players[m.TargetPlayerID]; exists && pState != nil {
-					pState.HP = h.HP
+					u.playersMu.Lock()
+					if pState, exists := u.players[deadPlayerID]; exists && pState != nil {
+						pState.HP = 0
+					}
+					u.playersMu.Unlock()
 				}
-				u.playersMu.Unlock()
+			} else {
+				// Update ECS Player Health Component and Real-time WebSocket state for damage
+				if healthComp, found := u.registry.GetComponent(domain.EntityID(m.TargetPlayerID), "Health"); found {
+					h := healthComp.(*domain.HealthComponent)
+					h.HP = pData.HP
+
+					u.playersMu.Lock()
+					if pState, exists := u.players[m.TargetPlayerID]; exists && pState != nil {
+						pState.HP = h.HP
+					}
+					u.playersMu.Unlock()
+				}
 			}
 		} else {
 			// Look idle while waiting for attack cooldown tick
@@ -699,6 +718,7 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 			pData.HP -= finalDamage
 			if pData.HP <= 0 {
 				pData.HP = 0
+				deadPlayerID := m.TargetPlayerID
 				m.TargetPlayerID = ""
 				_ = f.Event(ctx, "return")
 				fmt.Printf("☠️ Monster %s membunuh Player %s!\n", m.Name, pData.Username)
@@ -707,6 +727,7 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 					time.Sleep(5 * time.Second)
 					u.activePlayersMu.Lock()
 					pl, exists := u.activePlayers[pID]
+					var lastX, lastY, lastZ float32
 					if exists && pl != nil {
 						pl.HP = pl.MaxHP
 						if pHcomp, found := u.registry.GetComponent(domain.EntityID(pID), "Health"); found {
@@ -714,24 +735,45 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 							h.HP = pl.HP
 							h.MaxHP = pl.MaxHP
 						}
-						u.UpdatePlayerMovement(pID, pl.LastX, pl.LastY, pl.LastZ, 0, "idle", "")
+						lastX = pl.LastX
+						lastY = pl.LastY
+						lastZ = pl.LastZ
+					}
+					u.activePlayersMu.Unlock() // Release activePlayersMu lock before calling UpdatePlayerMovement to prevent recursive deadlock
+
+					if exists && pl != nil {
+						u.UpdatePlayerMovement(pID, lastX, lastY, lastZ, 0, "idle", "")
 						fmt.Printf("🛡️ Player %s telah hidup kembali.\n", pUser)
 					}
-					u.activePlayersMu.Unlock()
 				}(targetPlayer.ID, pData.Username)
-			}
-			u.activePlayersMu.Unlock()
 
-			// Update ECS Player Health Component and Real-time WebSocket state
-			if healthComp, found := u.registry.GetComponent(domain.EntityID(m.TargetPlayerID), "Health"); found {
-				h := healthComp.(*domain.HealthComponent)
-				h.HP = pData.HP
+				u.activePlayersMu.Unlock()
 
-				u.playersMu.Lock()
-				if pState, exists := u.players[m.TargetPlayerID]; exists && pState != nil {
-					pState.HP = h.HP
+				// Update ECS Player Health Component and Real-time WebSocket state for dead player
+				if healthComp, found := u.registry.GetComponent(domain.EntityID(deadPlayerID), "Health"); found {
+					h := healthComp.(*domain.HealthComponent)
+					h.HP = 0
+
+					u.playersMu.Lock()
+					if pState, exists := u.players[deadPlayerID]; exists && pState != nil {
+						pState.HP = 0
+					}
+					u.playersMu.Unlock()
 				}
-				u.playersMu.Unlock()
+			} else {
+				u.activePlayersMu.Unlock()
+
+				// Update ECS Player Health Component and Real-time WebSocket state for damage
+				if healthComp, found := u.registry.GetComponent(domain.EntityID(m.TargetPlayerID), "Health"); found {
+					h := healthComp.(*domain.HealthComponent)
+					h.HP = pData.HP
+
+					u.playersMu.Lock()
+					if pState, exists := u.players[m.TargetPlayerID]; exists && pState != nil {
+						pState.HP = h.HP
+					}
+					u.playersMu.Unlock()
+				}
 			}
 		} else {
 			m.Animation = "idle"

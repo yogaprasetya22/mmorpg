@@ -216,6 +216,7 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 				time.Sleep(3 * time.Second)
 				u.activePlayersMu.Lock()
 				tData, exists := u.activePlayers[tID]
+				var lastX, lastY, lastZ float32
 				if exists && tData != nil {
 					tData.HP = tData.MaxHP
 					
@@ -225,12 +226,17 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 						h.HP = tData.HP
 						h.MaxHP = tData.MaxHP
 					}
-					
-					// Move player back to their last exited/saved coordinates in registry and Redis
-					u.UpdatePlayerMovement(tID, tData.LastX, tData.LastY, tData.LastZ, 0, "idle", "")
-					fmt.Printf("🛡️ Player %s telah hidup kembali di koordinat terakhir (%f, %f, %f).\n", tUser, tData.LastX, tData.LastY, tData.LastZ)
+					lastX = tData.LastX
+					lastY = tData.LastY
+					lastZ = tData.LastZ
 				}
-				u.activePlayersMu.Unlock()
+				u.activePlayersMu.Unlock() // Release activePlayersMu lock before calling UpdatePlayerMovement to prevent recursive deadlock
+
+				if exists && tData != nil {
+					// Move player back to their last exited/saved coordinates in registry and Redis
+					u.UpdatePlayerMovement(tID, lastX, lastY, lastZ, 0, "idle", "")
+					fmt.Printf("🛡️ Player %s telah hidup kembali di koordinat terakhir (%f, %f, %f).\n", tUser, lastX, lastY, lastZ)
+				}
 			}(targetID, targetData.Username)
 		}
 		u.activePlayersMu.Unlock()

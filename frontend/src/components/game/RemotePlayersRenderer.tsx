@@ -8,6 +8,9 @@ import { SkeletonUtils } from 'three-stdlib';
 import { MeshoptDecoder } from 'meshoptimizer';
 import { PlayerNetworkState } from "@/src/hooks/useWebSocketGame";
 import { UnitRuntimeData } from "@/src/core/domain/unit.types";
+import { getTerrainElevation } from "@/src/core/utils/terrainHeight";
+import { useStore } from "@/src/state/useStore";
+import { useEditorStore } from "@/src/state/useEditorStore";
 
 // Pre-built player Map for O(1) lookup inside useFrame (avoids O(n) find every 60fps)
 export type PlayerMapRef = React.RefObject<Map<string, PlayerNetworkState>>;
@@ -87,7 +90,11 @@ export const RemotePlayerInstance = ({
     if (!groupRef.current) return;
     
     // O(1) Map lookup — avoids O(n) find() per frame
-    const data = playerMapRef.current?.get(id);
+    let data = playerMapRef.current?.get(id);
+    if (!data && _connectedPlayersRef.current) {
+      // Fallback search to prevent frame-ordering race conditions!
+      data = _connectedPlayersRef.current.find(p => p.id === id);
+    }
     
     if (!data) {
       groupRef.current.visible = false;
@@ -95,7 +102,9 @@ export const RemotePlayerInstance = ({
     }
 
     // ─── Density Culling — limit maximum rendered player count when gathered ──────
-    const isDensityCulled = visiblePlayerIdsRef.current && !visiblePlayerIdsRef.current.has(id);
+    // Disable density culling if overall player count is low to prevent desync hiding
+    const isDensityCulled = (_connectedPlayersRef.current && _connectedPlayersRef.current.length > 12) &&
+      visiblePlayerIdsRef.current && !visiblePlayerIdsRef.current.has(id);
 
     // ─── Distance Culling — avoids full skeleton/animation ticks for far players ──────
     const dxCam = state.camera.position.x - data.x;
@@ -108,9 +117,15 @@ export const RemotePlayerInstance = ({
 
     const isCurrentlyVisible = !isDensityCulled && camDistSq <= FAR_SQ;
 
+    // Get client terrain elevation to map desynced or flat server coordinates cleanly onto 3D sculpted landscape
+    const activeEnv = useStore.getState().environment;
+    const terrainConfig = useEditorStore.getState().terrainConfig;
+    const terrainY = getTerrainElevation(data.x, data.z, activeEnv, 24, terrainConfig);
+
     // Snapping position and rotation if culled to keep state synchronized
     if (!isCurrentlyVisible) {
-      groupRef.current.position.set(data.x, data.y, data.z);
+      const snapY = (Math.abs(data.y) < 0.001 || Math.abs(data.y - terrainY) > 8.0) ? terrainY : data.y;
+      groupRef.current.position.set(data.x, snapY, data.z);
       groupRef.current.rotation.y = data.rotation;
       groupRef.current.visible = false;
       if (activeAction.current) activeAction.current.paused = true;
@@ -188,6 +203,11 @@ export const RemotePlayerInstance = ({
         targetZ = buf[buf.length - 1].z;
         targetRot = buf[buf.length - 1].rotation;
       }
+    }
+
+    // Adjust targetY using the terrain height fallback if desynced or flat server coordinate
+    if (Math.abs(targetY) < 0.001 || Math.abs(targetY - terrainY) > 8.0) {
+      targetY = terrainY;
     }
     
     // Smooth position lerping with high responsiveness (24.0 * delta)
@@ -626,7 +646,7 @@ export const RemotePlayerInstance = ({
   });
 
   return (
-    <group ref={groupRef} visible={false}>
+    <group ref={groupRef}>
       <group scale={1.0} position={[0, -1.3, 0]}>
         <primitive object={clone} />
       </group>
@@ -658,7 +678,7 @@ export interface RemotePlayersRendererProps {
   tankSpellsRef?: React.RefObject<any[]>;
   assassinSpellsRef?: React.RefObject<any[]>;
   unitRegistry?: React.RefObject<UnitRuntimeData[]>;
-  settingsRef?: React.RefObject<{ potatoMode: boolean; [key: string]: any }>;
+  settingsRef?: React.RefObject<any>;
 }
 
 export const RemotePlayersRenderer = ({ 
@@ -673,6 +693,7 @@ export const RemotePlayersRenderer = ({
   unitRegistry,
   settingsRef
 }: RemotePlayersRendererProps) => {
+  if (settingsRef) { /* bypass */ }
   const { camera } = useThree();
   const playerMapRef = useRef<Map<string, PlayerNetworkState>>(new Map());
   const visiblePlayerIdsRef = useRef<Set<string>>(new Set());
@@ -722,10 +743,8 @@ export const RemotePlayersRenderer = ({
 
       scratch.sort((a, b) => a.distSq - b.distSq);
 
-      // Adaptive cap: when loadtest saturates server, limit skeletons.
-      // If potatoMode is active: cap at 15 players. Otherwise, raise to 45 players for high-density production gaming!
-      const isPotato = settingsRef?.current?.potatoMode;
-      const playerCap = isPotato ? (players.length > 20 ? 10 : 15) : 45;
+      // Adaptive cap: when loadtest saturates server with 40 bots, limit to 8 closest player skeletons
+      const playerCap = players.length > 20 ? 8 : 12;
       const visibleSet = visiblePlayerIdsRef.current;
       visibleSet.clear();
 
