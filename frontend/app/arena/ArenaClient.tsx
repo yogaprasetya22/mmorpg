@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { KeyboardControls, useGLTF, Stats, PerformanceMonitor, AdaptiveEvents, AdaptiveDpr } from "@react-three/drei";
+import { KeyboardControls, useGLTF, PerformanceMonitor, AdaptiveEvents, AdaptiveDpr } from "@react-three/drei";
 import { useWebSocketGame, PlayerNetworkState, MonsterNetworkState, GameStatePayload } from "@/src/hooks/useWebSocketGame";
 import { PlayerController, keyboardMap } from "@/src/components/game/PlayerController";
 import { RemotePlayersRenderer } from "@/src/components/game/RemotePlayersRenderer";
@@ -1550,7 +1550,6 @@ export default function MultiplayerArena() {
             }}
             className="w-full h-full"
           >
-            <Stats className="!absolute !bottom-4 !right-2 !top-auto !left-auto !z-[2000]" />
             <PerformanceDiagnostics 
               connectedPlayersRef={connectedPlayersRef} 
               worldMonstersRef={worldMonstersRef} 
@@ -1758,52 +1757,7 @@ export default function MultiplayerArena() {
             </div>
           </div>
         </div>
-        {/* ── TOP-LEFT: Diagnostics HUD Panel (Collapsible, real-time performance diagnostics) ── */}
-        {selectedCharacter && (
-          <div className="absolute left-3 top-[86px] w-[202px] bg-[#090d16]/75 backdrop-blur-xl border border-white/10 rounded-2xl p-3 flex flex-col gap-1.5 shadow-2xl pointer-events-auto transition-all duration-300 z-30">
-            <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
-              <span className="text-[9.5px] font-black text-cyan-400 uppercase tracking-widest flex items-center gap-1">
-                <Activity className="w-3.5 h-3.5 animate-pulse text-cyan-400" />
-                DIAGNOSTIK LAG
-              </span>
-              <span className="text-[7.5px] font-black bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded-md uppercase">SYSTEM</span>
-            </div>
-            <div className="flex flex-col gap-1 text-[8.5px] font-bold text-zinc-400">
-              <div className="flex justify-between items-center">
-                <span>Kecepatan Render:</span>
-                <span id="diag-fps" className="text-emerald-400 font-black">-- FPS</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span>Draw Calls (CPU):</span>
-                <span id="diag-draw" className="text-zinc-200">--</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span>Poligon/Triangles (GPU):</span>
-                <span id="diag-tri" className="text-zinc-200">--</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span>Geometri Memori:</span>
-                <span id="diag-geo" className="text-zinc-200">--</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span>Tekstur VRAM:</span>
-                <span id="diag-tex" className="text-zinc-200">--</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span>Aktif Bot (Player):</span>
-                <span id="diag-players" className="text-zinc-200">--</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span>Aktif Monster:</span>
-                <span id="diag-monsters" className="text-zinc-200">--</span>
-              </div>
-            </div>
-            <div className="border-t border-white/5 pt-1.5 flex flex-col gap-0.5">
-              <span className="text-[7px] font-black text-zinc-500 uppercase tracking-wider">Status & Analisis Bottleneck:</span>
-              <span id="diag-status" className="text-emerald-400 font-black uppercase text-[7.5px]">Mengumpulkan Data...</span>
-            </div>
-          </div>
-        )}
+
 
         {/* ── TOP-CENTER: Currency bar ── */}
         <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-black/55 backdrop-blur-xl border border-white/10 px-4 py-1.5 rounded-2xl shadow-xl pointer-events-auto">
