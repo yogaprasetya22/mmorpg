@@ -2,7 +2,7 @@
 
 import { useMemo, useEffect, useRef, useState } from 'react';
 import React from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Environment, Sky } from '@react-three/drei';
 import { StaticCollider } from 'bvhecctrl';
@@ -138,6 +138,8 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
         return () => cancelAnimationFrame(id);
     }, [terrainGeometry, onReady]);
 
+    const { scene } = useThree();
+
     useEffect(() => {
         if (meshRef.current) {
             registerCollider(meshRef.current);
@@ -146,6 +148,11 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
     }, [terrainGeometry]);
 
     useFrame((state) => {
+        // Clear global EXR reflection lighting so that only Editor-configured lights control the scene brightness
+        if (scene.environment) {
+            scene.environment = null;
+        }
+
         const time = state.clock.elapsedTime;
         PainterlyWaterMaterial.uniforms.time.value = time;
         PainterlyTerrainMaterial.uniforms.time.value = time;
@@ -202,7 +209,12 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
                 shadow-camera-near={0.5}
                 shadow-camera-far={120}
             />
-            <pointLight position={[0, 15, 0]} intensity={sky === 'night' ? 6.0 : 4.0} color={sky === 'night' ? "#ff5500" : "#ffaa00"} distance={250} />
+            <pointLight 
+                position={[0, 15, 0]} 
+                intensity={(ambientIntensity !== null ? (sky === 'night' ? 6.0 : 4.0) * (ambientIntensity / 3.5) : (sky === 'night' ? 6.0 : 4.0))} 
+                color={sky === 'night' ? "#ff5500" : "#ffaa00"} 
+                distance={250} 
+            />
 
 
             {/* 2. WEATHER EFFECTS */}

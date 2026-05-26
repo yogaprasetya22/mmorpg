@@ -3,7 +3,7 @@
  */
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { Environment, useTexture, Sky } from "@react-three/drei";
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from "three-mesh-bvh";
 import { StaticCollider, characterStatus } from "bvhecctrl";
@@ -706,8 +706,14 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
   const isSetup    = gameState === "SETUP";
   const { spawnVFX } = useVFX();
   const lightRef = useRef<THREE.DirectionalLight>(null);
+  const { scene } = useThree();
 
   useFrame(state => {
+    // Clear global EXR reflection lighting so that only Editor-configured lights control the scene brightness
+    if (scene.environment) {
+      scene.environment = null;
+    }
+
     PainterlyWaterMaterial.uniforms.time.value = state.clock.elapsedTime;
 
     if (lightRef.current) {
@@ -793,11 +799,6 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
           <Sky sunPosition={sunPosition} />
         </>
       )}
-      <hemisphereLight 
-        intensity={sky === 'night' ? 0.3 : 1.0} 
-        color={sky === 'night' ? "#a5b4fc" : "#ffffff"} 
-        groundColor={sky === 'night' ? "#1e1b4b" : "#445544"} 
-      />
       <ambientLight intensity={ambientIntensity ?? (sky === 'night' ? 0.2 : 0.8)} />
 
       <directionalLight
