@@ -66,9 +66,9 @@ export const RemotePlayerInstance = ({
     const cloned = SkeletonUtils.clone(scene);
     cloned.traverse((child: any) => {
       if (child.isMesh) {
-        // Shadows disabled on remote players for performance (shadow maps are expensive)
-        child.castShadow = false;
-        child.receiveShadow = false;
+        // Enable highly optimized shadows for remote players
+        child.castShadow = true;
+        child.receiveShadow = true;
         child.geometry?.computeBoundingSphere?.();
       }
     });

@@ -113,8 +113,9 @@ export const RemoteMonsterInstance = ({
     const cloned = SkeletonUtils.clone(scene);
     cloned.traverse((child: any) => {
       if (child.isMesh) {
-        child.castShadow = false;
-        child.receiveShadow = false;
+        // Enable highly optimized shadows for remote monsters
+        child.castShadow = true;
+        child.receiveShadow = true;
         // Pre-compute bounding sphere once — skip per-frame auto-compute
         child.geometry?.computeBoundingSphere?.();
         // Freeze material to skip redundant uniform uploads
