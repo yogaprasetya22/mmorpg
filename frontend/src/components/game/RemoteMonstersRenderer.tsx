@@ -142,6 +142,7 @@ export const RemoteMonsterInstance = ({
   const isMoving = useRef(false);
   const currentAnimState = useRef("Idle");
   const monsterIdRef = useRef<string | null>(null);
+  const stateBufferRef = useRef<{ x: number; y: number; z: number; animation: string; timestamp: number }[]>([]);
 
   // Optimization refs
   const smoothedSpeed = useRef(0);
@@ -230,6 +231,57 @@ export const RemoteMonsterInstance = ({
     // Client-side 3D terrain elevation handles server flat coordinate mapping
     const groundY = terrainY;
 
+    // Push new network state to buffer if it differs from the last pushed state
+    const buf = stateBufferRef.current;
+    if (buf.length === 0 || 
+        buf[buf.length - 1].x !== x || 
+        buf[buf.length - 1].z !== z ||
+        buf[buf.length - 1].animation !== (data.animation || "")) {
+      buf.push({
+        x: x,
+        y: groundY,
+        z: z,
+        animation: data.animation || "",
+        timestamp: performance.now()
+      });
+      if (buf.length > 30) buf.shift(); // Limit queue length to 30 frames
+    }
+
+    // Perform Entity Interpolation with a 100ms visual buffer delay
+    const renderTime = performance.now() - 100;
+    
+    let targetX = x;
+    let targetY = groundY;
+    let targetZ = z;
+    let targetAnim = data.animation || "";
+
+    if (buf.length >= 2) {
+      let i = 0;
+      for (; i < buf.length - 1; i++) {
+        if (buf[i].timestamp <= renderTime && buf[i+1].timestamp > renderTime) {
+          break;
+        }
+      }
+
+      if (i < buf.length - 1) {
+        const start = buf[i];
+        const end = buf[i+1];
+        const elapsed = renderTime - start.timestamp;
+        const duration = end.timestamp - start.timestamp;
+        const alpha = Math.min(1, Math.max(0, elapsed / (duration || 1)));
+
+        targetX = start.x + (end.x - start.x) * alpha;
+        targetY = start.y + (end.y - start.y) * alpha;
+        targetZ = start.z + (end.z - start.z) * alpha;
+        targetAnim = alpha < 0.5 ? start.animation : end.animation;
+      } else {
+        targetX = buf[buf.length - 1].x;
+        targetY = buf[buf.length - 1].y;
+        targetZ = buf[buf.length - 1].z;
+        targetAnim = buf[buf.length - 1].animation;
+      }
+    }
+
     const meshX = groupRef.current.position.x;
     const meshY = groupRef.current.position.y;
     const meshZ = groupRef.current.position.z;
@@ -237,7 +289,7 @@ export const RemoteMonsterInstance = ({
     const dx = x - meshX;
     const dz = z - meshZ;
     const distToTargetSq = dx * dx + dz * dz;
-    const distToTarget = Math.sqrt(distToTargetSq); // needed for step calc only
+    const distToTarget = Math.sqrt(distToTargetSq);
 
     // ─── Resolve target position for attack/rotation ──────────────────────────
     let targetPosX = 0, targetPosZ = 0, hasTarget = false;
@@ -248,7 +300,6 @@ export const RemoteMonsterInstance = ({
         targetPosZ = localPos[2];
         hasTarget = true;
       } else {
-        // O(1) Map lookup — replaces O(n) .find() per frame per monster
         const rp = remotePlayerMapRef.current?.get(data.target_player_id);
         if (rp) {
           targetPosX = rp.x;
@@ -265,8 +316,8 @@ export const RemoteMonsterInstance = ({
       isWithinAttackRange = (tDx * tDx + tDz * tDz) <= (isBoss ? 4.5 * 4.5 : 3.5 * 3.5);
     }
 
-    const serverAnim = (data.animation || "").toLowerCase();
-    isMoving.current = distToTarget > 0.05;
+    const serverAnim = (targetAnim || "").toLowerCase();
+    isMoving.current = distToTarget > 0.15;
 
     // ─── Determine desired animation state ───────────────────────────────────
     let desiredState = "idle";
@@ -282,47 +333,26 @@ export const RemoteMonsterInstance = ({
       desiredState = "walk";
     }
 
-    // ─── Uniform Constant-Speed Movement with Dynamic Catch-up ───────────────
-    if (!hasInitializedPrevVisual.current || distToTarget > 3.0) {
-      groupRef.current.position.set(x, groundY, z);
-      prevVisualPos.current[0] = x;
-      prevVisualPos.current[1] = z;
+    // ─── Highly Responsive Lerp Interpolation ───────────────────
+    if (!hasInitializedPrevVisual.current || distToTarget > 4.0) {
+      groupRef.current.position.set(targetX, targetY, targetZ);
+      prevVisualPos.current[0] = targetX;
+      prevVisualPos.current[1] = targetZ;
       hasInitializedPrevVisual.current = true;
-    } else if (distToTarget > 0.01) {
-      let baseSpeed = 1.8;
-      if      (desiredState === "run")  baseSpeed = isBoss ? 3.5 : 3.0;
-      else if (desiredState === "walk") baseSpeed = isBoss ? 2.0 : 1.8;
-
-      // Dynamic catch-up: scale speed when lagging behind server position
-      const speedMult = distToTarget > 0.3
-        ? 1.0 + (distToTarget - 0.3) * 2.5
-        : 1.0;
-
-      const step = baseSpeed * speedMult * delta;
-
-      if (distToTarget <= step) {
-        groupRef.current.position.x = x;
-        groupRef.current.position.z = z;
-      } else {
-        const invDist = 1.0 / distToTarget;
-        groupRef.current.position.x += dx * invDist * step;
-        groupRef.current.position.z += dz * invDist * step;
-      }
-
-      // Smooth Y interpolation to avoid hill jitter
-      groupRef.current.position.y += (groundY - meshY) * Math.min(1, 10.0 * delta);
+    } else {
+      groupRef.current.position.x += (targetX - meshX) * Math.min(1, 24.0 * delta);
+      groupRef.current.position.y += (targetY - meshY) * Math.min(1, 24.0 * delta);
+      groupRef.current.position.z += (targetZ - meshZ) * Math.min(1, 24.0 * delta);
     }
 
     const currentMeshX = groupRef.current.position.x;
     const currentMeshZ = groupRef.current.position.z;
     const visualDx = currentMeshX - prevVisualPos.current[0];
     const visualDz = currentMeshZ - prevVisualPos.current[1];
-    // Use squared distance for speed estimate to avoid a sqrt — accurate enough for low-pass filter
     const visualDistSq = visualDx * visualDx + visualDz * visualDz;
     const visualDistance = visualDistSq > 0.000001 ? Math.sqrt(visualDistSq) : 0;
 
     monsterVisualPositions.set(data.id, { x: currentMeshX, z: currentMeshZ });
-    // Keep window reference for external minimap/targeting code that reads it
     if (!(window as any).monsterVisualPositions) {
       (window as any).monsterVisualPositions = monsterVisualPositions;
     }
@@ -330,7 +360,6 @@ export const RemoteMonsterInstance = ({
     prevVisualPos.current[0] = currentMeshX;
     prevVisualPos.current[1] = currentMeshZ;
 
-    // ─── Low-pass filter speed to prevent animation timescale jitter ─────────
     const currentSpeed = visualDistance / Math.max(0.0001, delta);
     smoothedSpeed.current += (currentSpeed - smoothedSpeed.current) * Math.min(1, 10.0 * delta);
 
@@ -348,7 +377,7 @@ export const RemoteMonsterInstance = ({
       let diff = targetAngle - groupRef.current.rotation.y;
       while (diff < -Math.PI) diff += Math.PI * 2;
       while (diff > Math.PI)  diff -= Math.PI * 2;
-      groupRef.current.rotation.y += diff * Math.min(1, 12.0 * delta);
+      groupRef.current.rotation.y += diff * Math.min(1, 24.0 * delta);
     }
 
     // ─── Animation State Machine (JIT clip name cache initialization) ──────────
