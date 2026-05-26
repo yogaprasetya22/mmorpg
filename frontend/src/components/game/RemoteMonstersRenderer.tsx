@@ -247,8 +247,8 @@ export const RemoteMonsterInstance = ({
       if (buf.length > 30) buf.shift(); // Limit queue length to 30 frames
     }
 
-    // Perform Entity Interpolation with a 100ms visual buffer delay
-    const renderTime = performance.now() - 100;
+    // Perform Entity Interpolation with a 160ms visual buffer delay to absorb 20Hz network jitter
+    const renderTime = performance.now() - 160;
     
     let targetX = x;
     let targetY = groundY;
