@@ -41,17 +41,33 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
     const meshRef = useRef<THREE.Mesh>(null!);
     const lightRef = useRef<THREE.DirectionalLight>(null);
 
-    useFrame(() => {
+    useFrame((state) => {
         if (lightRef.current) {
             if (lightRef.current.target.parent !== scene) {
                 scene.add(lightRef.current.target);
             }
-            const pos = useStore.getState().playerPosition;
+            
+            let centerX = 0;
+            let centerY = 0;
+            let centerZ = 0;
+            
+            const isEditorOpen = useEditorStore.getState().isEditorOpen;
+            if (isEditorOpen) {
+                centerX = state.camera.position.x;
+                centerY = state.camera.position.y;
+                centerZ = state.camera.position.z;
+            } else {
+                const pos = useStore.getState().playerPosition;
+                centerX = pos[0];
+                centerY = pos[1];
+                centerZ = pos[2];
+            }
+
             const rad = (useEditorStore.getState().sunAngle * Math.PI) / 180;
             const ox = Math.cos(rad) * 15.0;
             const oz = Math.sin(rad) * 15.0;
-            lightRef.current.position.set(pos[0] + ox, 45, pos[2] + oz);
-            lightRef.current.target.position.set(pos[0], pos[1], pos[2]);
+            lightRef.current.position.set(centerX + ox, 45, centerZ + oz);
+            lightRef.current.target.position.set(centerX, centerY, centerZ);
             lightRef.current.target.updateMatrixWorld();
             lightRef.current.shadow.camera.updateProjectionMatrix();
         }
@@ -197,20 +213,21 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
 
             <ambientLight intensity={ambientIntensity ?? (sky === 'night' ? 0.8 : 3.5)} color={sky === 'night' ? "#a5b4fc" : "#ffffff"} />
 
-            <directionalLight
+             <directionalLight
                 ref={lightRef}
                 position={sunPosition}
                 intensity={lightIntensity ?? (sky === 'night' ? 2.5 : 15.0)}
 
                 color={sky === 'night' ? "#a5b4fc" : "#ffffff"}
                 castShadow
-                shadow-mapSize={[512, 512]}
+                shadow-mapSize-width={1024}
+                shadow-mapSize-height={1024}
                 shadow-bias={-0.0001}
 
-                shadow-camera-left={-30}
-                shadow-camera-right={30}
-                shadow-camera-top={30}
-                shadow-camera-bottom={-30}
+                shadow-camera-left={-35}
+                shadow-camera-right={35}
+                shadow-camera-top={35}
+                shadow-camera-bottom={-35}
                 shadow-camera-near={0.5}
                 shadow-camera-far={120}
             />

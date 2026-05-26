@@ -734,12 +734,28 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
       if (lightRef.current.target.parent !== scene) {
         scene.add(lightRef.current.target);
       }
-      const pos = useStore.getState().playerPosition;
+      
+      let centerX = 0;
+      let centerY = 0;
+      let centerZ = 0;
+      
+      const isEditorOpen = useEditorStore.getState().isEditorOpen;
+      if (isEditorOpen) {
+        centerX = state.camera.position.x;
+        centerY = state.camera.position.y;
+        centerZ = state.camera.position.z;
+      } else {
+        const pos = useStore.getState().playerPosition;
+        centerX = pos[0];
+        centerY = pos[1];
+        centerZ = pos[2];
+      }
+
       const rad = (useEditorStore.getState().sunAngle * Math.PI) / 180;
       const ox = Math.cos(rad) * 15.0;
       const oz = Math.sin(rad) * 15.0;
-      lightRef.current.position.set(pos[0] + ox, 45, pos[2] + oz);
-      lightRef.current.target.position.set(pos[0], pos[1], pos[2]);
+      lightRef.current.position.set(centerX + ox, centerY + 45, centerZ + oz);
+      lightRef.current.target.position.set(centerX, centerY, centerZ);
       lightRef.current.target.updateMatrixWorld();
       lightRef.current.shadow.camera.updateProjectionMatrix();
     }
@@ -824,16 +840,17 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
         position={sunPosition}
         intensity={lightIntensity ?? (sky === 'night' ? 0.8 : 2.5)}
 
-        castShadow={!isSetup}
-        shadow-mapSize={[512, 512]}
+        castShadow
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-bias={-0.0001}
 
 
         shadow-camera-far={120}
-        shadow-camera-left={-30}
-        shadow-camera-right={30}
-        shadow-camera-top={30}
-        shadow-camera-bottom={-30}
+        shadow-camera-left={-35}
+        shadow-camera-right={35}
+        shadow-camera-top={35}
+        shadow-camera-bottom={-35}
       />
 
       <Terrain 
