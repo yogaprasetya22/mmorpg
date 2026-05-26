@@ -10,6 +10,7 @@ import { MonsterNetworkState, PlayerNetworkState } from "@/src/hooks/useWebSocke
 import { useStore } from "@/src/state/useStore";
 import { getTerrainElevation } from "@/src/core/utils/terrainHeight";
 import { useEditorStore } from "@/src/state/useEditorStore";
+import { API_BASE_URL } from "@/src/core/config";
 
 // ─── Shared reusable Box3 to avoid allocation per monster ────────────────────
 const _sharedBox3 = new THREE.Box3();
@@ -90,14 +91,14 @@ export const RemoteMonsterInstance = ({
         }
       }
       const path = gameConfig.monster_models[typeKey];
-      if (path) return path;
+      if (path) return path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
     }
 
-    if (isBoss) return '/assets-model/Zombie_Female.glb';
+    if (isBoss) return `${API_BASE_URL}/assets-model/Zombie_Female.glb`;
     const MONSTER_MODELS = [
-      '/assets-model/Goblin_Male.glb',
-      '/assets-model/Goblin_Female.glb',
-      '/assets-model/Zombie_Male.glb',
+      `${API_BASE_URL}/assets-model/Goblin_Male.glb`,
+      `${API_BASE_URL}/assets-model/Goblin_Female.glb`,
+      `${API_BASE_URL}/assets-model/Zombie_Male.glb`,
     ];
     let hash = 0;
     if (monsterId) {

@@ -5,6 +5,7 @@ import { Trophy, Sword, Users, RefreshCw, Star, Crown } from 'lucide-react';
 import { Canvas } from '@react-three/fiber';
 import { useGLTF, useAnimations, Float, Environment } from '@react-three/drei';
 import * as THREE from 'three';
+import { API_BASE_URL } from '@/src/core/config';
 
 interface MVPData {
   topDamage: { username: string; value: number } | null;
@@ -28,7 +29,8 @@ interface MVPScreenProps {
 
 const CharacterModel = ({ modelPath }: { modelPath: string }) => {
   const group = useRef<THREE.Group>(null);
-  const { scene, animations } = useGLTF(modelPath);
+  const resolvedPath = modelPath.startsWith('http') ? modelPath : `${API_BASE_URL}${modelPath}`;
+  const { scene, animations } = useGLTF(resolvedPath);
   const { actions } = useAnimations(animations, group);
 
   useEffect(() => {

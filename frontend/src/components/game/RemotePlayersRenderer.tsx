@@ -11,6 +11,7 @@ import { UnitRuntimeData } from "@/src/core/domain/unit.types";
 import { getTerrainElevation } from "@/src/core/utils/terrainHeight";
 import { useStore } from "@/src/state/useStore";
 import { useEditorStore } from "@/src/state/useEditorStore";
+import { API_BASE_URL } from "@/src/core/config";
 
 // Pre-built player Map for O(1) lookup inside useFrame (avoids O(n) find every 60fps)
 export type PlayerMapRef = React.RefObject<Map<string, PlayerNetworkState>>;
@@ -55,10 +56,10 @@ export const RemotePlayerInstance = ({
     if (gameConfig && gameConfig.character_models) {
       const genderModels = gameConfig.character_models[gender || "Male"] || gameConfig.character_models["Male"];
       const path = genderModels[cls || "Beginner"];
-      if (path) return path;
+      if (path) return path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
     }
     
-    return '/assets-model/Knight_Golden_Male.glb';
+    return `${API_BASE_URL}/assets-model/Knight_Golden_Male.glb`;
   }, [cls, gender, gameConfig]);
 
   const { scene, animations } = useGLTF(modelPath, true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
