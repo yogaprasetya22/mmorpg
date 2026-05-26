@@ -13,7 +13,7 @@ export interface MapItem {
   color?: string;
 }
 
-import { FULL_ASSET_LIBRARY, AssetInfo } from '@/src/core/logic/environment/assetRegistry';
+import { FULL_ASSET_LIBRARY, AssetInfo, setAssetLibrary } from '@/src/core/logic/environment/assetRegistry';
 
 export interface EditorState {
   isEditorOpen: boolean;
@@ -460,6 +460,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           };
         });
         set({ dynamicAssets: mapped });
+        setAssetLibrary(mapped);
       }
     } catch (e) {
       console.error("Failed to fetch dynamic assets", e);

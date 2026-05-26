@@ -19,8 +19,14 @@ func main() {
 	// 2. Connect to GORM PostgreSQL
 	db := postgres.NewPostgreSQLConnection(cfg)
 
+	// Ensure the Asset table exists
+	_ = db.AutoMigrate(&domain.Asset{})
+
 	// 3. Safe delete existing configurations to force fresh re-seeding
 	fmt.Println("🧹 Clearing existing configurations from PostgreSQL...")
+	if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&domain.Asset{}).Error; err != nil {
+		log.Fatalf("❌ Gagal membersihkan assets lama: %v", err)
+	}
 	if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&domain.MonsterConfig{}).Error; err != nil {
 		log.Fatalf("❌ Gagal membersihkan monster_configs lama: %v", err)
 	}

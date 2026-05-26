@@ -37,6 +37,7 @@ func main() {
 		&domain.MonsterConfig{},
 		&domain.MapConfig{},
 		&domain.MapItem{},
+		&domain.Asset{},
 	)
 	if err != nil {
 		log.Fatalf("❌ Gagal melakukan auto-migrasi database: %v", err)

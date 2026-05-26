@@ -4,9 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -239,33 +236,20 @@ type AssetInfo struct {
 	Path string `json:"path"`
 }
 
-// GetAssetList scans backend's ./assets-model directory recursively to serve all GLBs dynamically
+// GetAssetList queries all dynamic assets stored in the database Asset table
 func (h *ConfigHandler) GetAssetList(c *gin.Context) {
-	var assets []AssetInfo
-	root := "./assets-model"
-
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".glb") {
-			relPath, err := filepath.Rel(root, path)
-			if err != nil {
-				return err
-			}
-			relPath = filepath.ToSlash(relPath)
-			webPath := "/assets-model/" + relPath
-			assets = append(assets, AssetInfo{
-				Name: info.Name(),
-				Path: webPath,
-			})
-		}
-		return nil
-	})
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal men-scan direktori asset: " + err.Error()})
+	var dbAssets []domain.Asset
+	if err := h.db.Order("name ASC").Find(&dbAssets).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengambil data asset dari database: " + err.Error()})
 		return
+	}
+
+	var assets []AssetInfo
+	for _, asset := range dbAssets {
+		assets = append(assets, AssetInfo{
+			Name: asset.Name,
+			Path: asset.Path,
+		})
 	}
 
 	c.JSON(http.StatusOK, assets)
@@ -280,10 +264,14 @@ type MapSettingsInput struct {
 		Seed      int     `json:"seed"`
 		Sharpness float64 `json:"sharpness"`
 	} `json:"terrainConfig"`
-	TerrainMaterialID string `json:"terrainMaterialId"`
-	TerrainColor      string `json:"terrainColor"`
-	Sky               string `json:"sky"`
-	Environment       string `json:"environment"`
+	TerrainMaterialID string   `json:"terrainMaterialId"`
+	TerrainColor      string   `json:"terrainColor"`
+	Sky               string   `json:"sky"`
+	Environment       string   `json:"environment"`
+	LightIntensity    *float64 `json:"lightIntensity"`
+	AmbientIntensity  *float64 `json:"ambientIntensity"`
+	SunAngle          float64  `json:"sunAngle"`
+	FogDensity        float64  `json:"fogDensity"`
 }
 
 type MapItemInput struct {
@@ -346,6 +334,10 @@ func (h *ConfigHandler) SaveMap(c *gin.Context) {
 			TerrainColor:      input.Settings.TerrainColor,
 			Sky:               skyPreset,
 			Environment:       envMode,
+			LightIntensity:    input.Settings.LightIntensity,
+			AmbientIntensity:  input.Settings.AmbientIntensity,
+			SunAngle:          input.Settings.SunAngle,
+			FogDensity:        input.Settings.FogDensity,
 			PaintData:         input.PaintData,
 			SculptData:        input.SculptData,
 		}
@@ -461,6 +453,10 @@ func (h *ConfigHandler) LoadMap(c *gin.Context) {
 				"terrainColor":      mapConfig.TerrainColor,
 				"sky":               mapConfig.Sky,
 				"environment":       mapConfig.Environment,
+				"lightIntensity":    mapConfig.LightIntensity,
+				"ambientIntensity":  mapConfig.AmbientIntensity,
+				"sunAngle":          mapConfig.SunAngle,
+				"fogDensity":        mapConfig.FogDensity,
 			},
 			"paintData":  mapConfig.PaintData,
 			"sculptData": mapConfig.SculptData,

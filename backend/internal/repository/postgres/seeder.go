@@ -2,6 +2,10 @@ package postgres
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"gorm.io/gorm"
 	"mmorpg-backend/internal/domain"
 )
@@ -438,5 +442,103 @@ func SeedConfigurations(db *gorm.DB) error {
 		fmt.Println("✅ Success: Starter Zone map configuration seeded!")
 	}
 
+	// 5. Seed Dynamic Assets
+	if err := SeedAssets(db); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func SeedAssets(db *gorm.DB) error {
+	fmt.Println("🌱 Scanning and seeding dynamic environment assets...")
+
+	// Target folders and their categories
+	targets := []struct {
+		dir      string
+		category string
+	}{
+		{"asset-enverement", "env"},
+		{"assets-env", "env"},
+		{"assets-tree", "tree"},
+		{"kingdom", "kingdom"},
+	}
+
+	// Find the correct base path (handling running from root or from cmd/server or cmd/seeder)
+	basePaths := []string{
+		"./assets-model",
+		"../assets-model",
+		"../../assets-model",
+		"./backend/assets-model",
+	}
+
+	var assetsModelPath string
+	for _, bp := range basePaths {
+		if fi, err := os.Stat(bp); err == nil && fi.IsDir() {
+			assetsModelPath = bp
+			break
+		}
+	}
+
+	if assetsModelPath == "" {
+		fmt.Println("⚠️  Warning: assets-model directory not found, skipping asset scraping.")
+		return nil
+	}
+
+	var seededCount int
+	for _, target := range targets {
+		dirPath := filepath.Join(assetsModelPath, target.dir)
+		if fi, err := os.Stat(dirPath); err != nil || !fi.IsDir() {
+			fmt.Printf("⚠️  Skipping missing directory: %s\n", dirPath)
+			continue
+		}
+
+		err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".glb") {
+				// Get relative path from assets-model root
+				rel, err := filepath.Rel(assetsModelPath, path)
+				if err != nil {
+					return err
+				}
+				rel = filepath.ToSlash(rel)
+				webPath := "/assets-model/" + rel
+
+				// Format the name: remove extension and replace dashes/underscores with spaces
+				nameWithoutExt := strings.TrimSuffix(info.Name(), filepath.Ext(info.Name()))
+				prettifiedName := strings.Title(strings.ReplaceAll(strings.ReplaceAll(nameWithoutExt, "-", " "), "_", " "))
+
+				// Save or update in database
+				var existing domain.Asset
+				err = db.Where("path = ?", webPath).First(&existing).Error
+				if err != nil {
+					if err == gorm.ErrRecordNotFound {
+						// Create new asset
+						newAsset := domain.Asset{
+							Name:     prettifiedName,
+							Path:     webPath,
+							Category: target.category,
+						}
+						if err := db.Create(&newAsset).Error; err == nil {
+							seededCount++
+						}
+					}
+				} else {
+					// Update existing asset properties
+					existing.Name = prettifiedName
+					existing.Category = target.category
+					db.Save(&existing)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("failed walking directory %s: %w", target.dir, err)
+		}
+	}
+
+	fmt.Printf("✅ Success: Scraped and seeded %d dynamic assets to PostgreSQL database!\n", seededCount)
 	return nil
 }
