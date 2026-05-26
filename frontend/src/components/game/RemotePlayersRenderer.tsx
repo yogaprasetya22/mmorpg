@@ -654,6 +654,7 @@ export const RemotePlayerInstance = ({
       <group ref={nameRef} position={[0, 1.75, 0]}>
         <Text
           ref={textRef}
+          font="/Press_Start_2P/PressStart2P-Regular.ttf"
           fontSize={0.22}
           anchorX="center"
           anchorY="bottom"

@@ -435,6 +435,7 @@ export const RemoteMonsterInstance = ({
       <Billboard ref={billboardGroupRef} position={[0, hpBarY, 0]} follow={true} visible={false}>
         <Text
           ref={textRef}
+          font="/Press_Start_2P/PressStart2P-Regular.ttf"
           fontSize={0.22}
           position={[0, 0.25, 0]}
           anchorX="center"
