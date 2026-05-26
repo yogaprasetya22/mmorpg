@@ -212,7 +212,8 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 			break
 		}
 
-		if dist <= 3.5 {
+		dy := float32(math.Abs(float64(m.Position.Y - playerPos.Y)))
+		if dist <= 3.5 && dy <= 4.5 {
 			m.AIState = "attack"
 			break
 		}
@@ -259,7 +260,8 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 			break
 		}
 
-		if dist > 3.5 {
+		dyAttack := float32(math.Abs(float64(m.Position.Y - playerPos.Y)))
+		if dist > 3.5 || dyAttack > 4.5 {
 			m.AIState = "chase"
 			break
 		}
