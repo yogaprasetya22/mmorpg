@@ -242,7 +242,7 @@ export const RemoteMonsterInstance = ({
         y: groundY,
         z: z,
         animation: data.animation || "",
-        timestamp: performance.now()
+        timestamp: (data as any).receivedAt || performance.now()
       });
       if (buf.length > 30) buf.shift(); // Limit queue length to 30 frames
     }
@@ -283,7 +283,6 @@ export const RemoteMonsterInstance = ({
     }
 
     const meshX = groupRef.current.position.x;
-    const meshY = groupRef.current.position.y;
     const meshZ = groupRef.current.position.z;
 
     const dx = x - meshX;
@@ -340,9 +339,7 @@ export const RemoteMonsterInstance = ({
       prevVisualPos.current[1] = targetZ;
       hasInitializedPrevVisual.current = true;
     } else {
-      groupRef.current.position.x += (targetX - meshX) * Math.min(1, 24.0 * delta);
-      groupRef.current.position.y += (targetY - meshY) * Math.min(1, 24.0 * delta);
-      groupRef.current.position.z += (targetZ - meshZ) * Math.min(1, 24.0 * delta);
+      groupRef.current.position.set(targetX, targetY, targetZ);
     }
 
     const currentMeshX = groupRef.current.position.x;

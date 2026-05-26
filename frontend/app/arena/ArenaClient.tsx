@@ -683,6 +683,15 @@ export default function MultiplayerArena() {
     token,
     selectedCharacter?.id || "",
     (payload: GameStatePayload) => {
+      // Record precise network packet arrival timestamp to guarantee jitter-free entity interpolation timeline
+      const packetReceivedTime = performance.now();
+      for (let i = 0; i < payload.players.length; i++) {
+        (payload.players[i] as any).receivedAt = packetReceivedTime;
+      }
+      for (let i = 0; i < payload.monsters.length; i++) {
+        (payload.monsters[i] as any).receivedAt = packetReceivedTime;
+      }
+
       // Update refs (zero React re-renders for 3D rendering)
       connectedPlayersRef.current = payload.players;
       // Server is authoritative — store raw payload directly.
