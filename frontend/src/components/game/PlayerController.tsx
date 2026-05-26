@@ -1131,12 +1131,13 @@ export const PlayerController = ({
         position={[0, 8, 0]}
         /* ── Collider (Narrower radius for nimble movement and stair clearance) ── */
         colliderCapsuleArgs={[0.3, 1.2, 4, 8]}
-        /* ── Float / Ground Detection (Calibrated floatHeight for smooth stair stepping) ── */
+        /* ── Float / Ground Detection (Calibrated parameters for smooth stair climbing & stable jumping) ── */
         floatCheckType="SHAPECAST"
-        floatHeight={0.4}
+        floatHeight={0.3}
         floatPullBackHeight={0.4}
-        floatSpringK={600}
-        floatDampingC={28}
+        floatSensorRadius={0.25}
+        floatSpringK={500}
+        floatDampingC={32}
         /* ── Movement ── */
         maxWalkSpeed={3.5}
         maxRunSpeed={6.5}
