@@ -833,17 +833,22 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
           <Sky sunPosition={sunPosition} />
         </>
       )}
-      <ambientLight intensity={ambientIntensity ?? (sky === 'night' ? 0.2 : 0.8)} />
+      <ambientLight intensity={(ambientIntensity ?? (sky === 'night' ? 0.2 : 0.8)) + 0.5} />
+      <hemisphereLight
+        intensity={sky === 'night' ? 0.3 : 1.2}
+        color={sky === 'night' ? "#a5b4fc" : "#ffffff"}
+        groundColor="#556677"
+      />
 
       <directionalLight
         ref={lightRef}
         position={sunPosition}
-        intensity={lightIntensity ?? (sky === 'night' ? 0.8 : 2.5)}
+        intensity={lightIntensity ?? (sky === 'night' ? 0.6 : 1.8)}
 
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-        shadow-bias={-0.0001}
+        shadow-mapSize-width={512}
+        shadow-mapSize-height={512}
+        shadow-bias={-0.0002}
 
 
         shadow-camera-far={120}

@@ -211,18 +211,23 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
                 </>
             )}
 
-            <ambientLight intensity={ambientIntensity ?? (sky === 'night' ? 0.8 : 3.5)} color={sky === 'night' ? "#a5b4fc" : "#ffffff"} />
+            <ambientLight intensity={(ambientIntensity ?? (sky === 'night' ? 0.8 : 3.5)) + 1.0} color={sky === 'night' ? "#a5b4fc" : "#ffffff"} />
+            <hemisphereLight
+                intensity={sky === 'night' ? 0.4 : 1.5}
+                color={sky === 'night' ? "#a5b4fc" : "#ffffff"}
+                groundColor="#556677"
+            />
 
              <directionalLight
                 ref={lightRef}
                 position={sunPosition}
-                intensity={lightIntensity ?? (sky === 'night' ? 2.5 : 15.0)}
+                intensity={lightIntensity ?? (sky === 'night' ? 2.0 : 10.0)}
 
                 color={sky === 'night' ? "#a5b4fc" : "#ffffff"}
                 castShadow
-                shadow-mapSize-width={1024}
-                shadow-mapSize-height={1024}
-                shadow-bias={-0.0001}
+                shadow-mapSize-width={512}
+                shadow-mapSize-height={512}
+                shadow-bias={-0.0002}
 
                 shadow-camera-left={-35}
                 shadow-camera-right={35}
