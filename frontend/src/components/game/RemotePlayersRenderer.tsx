@@ -124,7 +124,7 @@ export const RemotePlayerInstance = ({
 
     // Snapping position and rotation if culled to keep state synchronized
     if (!isCurrentlyVisible) {
-      const snapY = (Math.abs(data.y) < 0.001 || Math.abs(data.y - terrainY) > 8.0) ? terrainY : data.y;
+      const snapY = (Math.abs(data.y) < 0.001 || data.y < terrainY - 5.0) ? terrainY : data.y;
       groupRef.current.position.set(data.x, snapY, data.z);
       groupRef.current.rotation.y = data.rotation;
       groupRef.current.visible = false;
@@ -205,8 +205,8 @@ export const RemotePlayerInstance = ({
       }
     }
 
-    // Adjust targetY using the terrain height fallback if desynced or flat server coordinate
-    if (Math.abs(targetY) < 0.001 || Math.abs(targetY - terrainY) > 8.0) {
+    // Adjust targetY using the terrain height fallback if desynced/flat, but do NOT cap players standing on high elevated obstacles
+    if (Math.abs(targetY) < 0.001 || targetY < terrainY - 5.0) {
       targetY = terrainY;
     }
     

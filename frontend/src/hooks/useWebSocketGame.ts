@@ -51,6 +51,7 @@ export const useWebSocketGame = (
     // Throttle: deduplicate WS messages within same animation state (micro-stutter prevention)
     const lastAnimation = useRef("");
     const lastX = useRef(0);
+    const lastY = useRef(0);
     const lastZ = useRef(0);
 
     useEffect(() => {
@@ -100,13 +101,15 @@ export const useWebSocketGame = (
         
         // Skip sending if position and animation haven't meaningfully changed (save ~30% WS sends)
         const dx = Math.abs(state.x - lastX.current);
+        const dy = Math.abs(state.y - lastY.current);
         const dz = Math.abs(state.z - lastZ.current);
         const animChanged = state.animation !== lastAnimation.current;
-        if (!animChanged && dx < 0.01 && dz < 0.01) return;
+        if (!animChanged && dx < 0.01 && dy < 0.01 && dz < 0.01) return;
         
         lastSendTime.current = now;
         lastAnimation.current = state.animation;
         lastX.current = state.x;
+        lastY.current = state.y;
         lastZ.current = state.z;
 
         // Encode object to raw binary byte array (MessagePack)
