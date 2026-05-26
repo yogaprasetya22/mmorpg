@@ -12,6 +12,7 @@ import { TerrainSculptModule } from './editor/TerrainSculptModule';
 import { TerrainPaintModule } from './editor/TerrainPaintModule';
 import { VegetationModule } from './editor/VegetationModule';
 import { SystemModule } from './editor/SystemModule';
+import { LightingSettingsModule } from './editor/LightingSettingsModule';
 
 export const WorldEditorUI = () => {
   const {
@@ -151,6 +152,7 @@ export const WorldEditorUI = () => {
     { id: 'sculpt', label: 'Terrain sculpting', component: <TerrainSculptModule /> },
     { id: 'paint', label: 'Terrain painting', component: <TerrainPaintModule /> },
     { id: 'vegetation', label: 'Vegetation spawner', component: <VegetationModule /> },
+    { id: 'lighting', label: 'Atmosphere & Lighting', component: <LightingSettingsModule /> },
     { id: 'system', label: 'Workspace operations', component: <SystemModule /> }
   ];
 

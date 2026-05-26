@@ -37,11 +37,15 @@ interface WhimsicalDioramaProps {
 
 export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false, onReady }: WhimsicalDioramaProps) => {
     const weather = useStore(s => s.weather);
+    const { scene } = useThree();
     const meshRef = useRef<THREE.Mesh>(null!);
     const lightRef = useRef<THREE.DirectionalLight>(null);
 
     useFrame(() => {
         if (lightRef.current) {
+            if (lightRef.current.target.parent !== scene) {
+                scene.add(lightRef.current.target);
+            }
             const pos = useStore.getState().playerPosition;
             const rad = (useEditorStore.getState().sunAngle * Math.PI) / 180;
             const ox = Math.cos(rad) * 15.0;
@@ -49,6 +53,7 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
             lightRef.current.position.set(pos[0] + ox, 45, pos[2] + oz);
             lightRef.current.target.position.set(pos[0], pos[1], pos[2]);
             lightRef.current.target.updateMatrixWorld();
+            lightRef.current.shadow.camera.updateProjectionMatrix();
         }
     });
 
@@ -138,7 +143,7 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
         return () => cancelAnimationFrame(id);
     }, [terrainGeometry, onReady]);
 
-    const { scene } = useThree();
+
 
     useEffect(() => {
         if (meshRef.current) {

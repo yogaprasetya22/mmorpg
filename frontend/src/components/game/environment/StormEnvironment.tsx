@@ -23,30 +23,42 @@ import { API_BASE_URL } from "@/src/core/config";
 (THREE.BufferGeometry.prototype as any).disposeBoundsTree = disposeBoundsTree;
 (THREE.Mesh.prototype as any).raycast = acceleratedRaycast;
 
-const TerrainMaterial = new THREE.ShaderMaterial({
-  uniforms: {
-    baseColor: { value: new THREE.Color("#3d5c36") },
-    peakColor: { value: new THREE.Color("#95b58b") },
-    rockColor: { value: new THREE.Color("#5a5e52") },
-    uMap: { value: null },
-    uUseMap: { value: 0.0 },
-    uPaintMap: { value: null },
-    uUsePaint: { value: 0.0 },
-    uBrushTex: { value: null },
-    uUseBrushTex: { value: 0.0 },
-  },
-  vertexShader: `
+const TerrainMaterial = new THREE.MeshStandardMaterial({
+  roughness: 0.85,
+  metalness: 0.15,
+}) as any;
+
+TerrainMaterial.uniforms = {
+  baseColor: { value: new THREE.Color("#3d5c36") },
+  peakColor: { value: new THREE.Color("#95b58b") },
+  rockColor: { value: new THREE.Color("#5a5e52") },
+  uMap: { value: null },
+  uUseMap: { value: 0.0 },
+  uPaintMap: { value: null },
+  uUsePaint: { value: 0.0 },
+  uBrushTex: { value: null },
+  uUseBrushTex: { value: 0.0 },
+};
+
+TerrainMaterial.onBeforeCompile = (shader: any) => {
+  Object.assign(shader.uniforms, TerrainMaterial.uniforms);
+
+  shader.vertexShader = `
     varying float vElevation;
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      vElevation = position.z;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
+    varying vec2 vTerrainUv;
+    ${shader.vertexShader}
+  `.replace(
+    '#include <begin_vertex>',
+    `
+    #include <begin_vertex>
+    vTerrainUv = uv;
+    vElevation = position.z;
+    `
+  );
+
+  shader.fragmentShader = `
     varying float vElevation;
-    varying vec2 vUv;
+    varying vec2 vTerrainUv;
     uniform vec3 baseColor;
     uniform vec3 peakColor;
     uniform vec3 rockColor;
@@ -59,41 +71,43 @@ const TerrainMaterial = new THREE.ShaderMaterial({
     
     ${PainterlyShaderUtils.brushstrokeNoise}
     ${PainterlyShaderUtils.toonMix}
+    ${shader.fragmentShader}
+  `.replace(
+    'vec4 diffuseColor = vec4( diffuse, opacity );',
+    `
+    float strokes = brushstrokes(vTerrainUv * 80.0, 0.35);
+    float t = smoothstep(0.0, 35.0, vElevation) + strokes * 0.08;
+    vec3 mountainColor = toonMix(baseColor, peakColor, t * 1.5);
 
-    void main() {
-      float strokes = brushstrokes(vUv * 80.0, 0.35);
-      float t = smoothstep(0.0, 35.0, vElevation) + strokes * 0.08;
-      vec3 mountainColor = toonMix(baseColor, peakColor, t * 1.5);
+    float rockMask = smoothstep(22.0, 35.0, vElevation);
+    mountainColor = mix(mountainColor, rockColor, rockMask * 0.6);
 
-      float rockMask = smoothstep(22.0, 35.0, vElevation);
-      mountainColor = mix(mountainColor, rockColor, rockMask * 0.6);
+    // Texture Mask: Apply PBR texture only to the floor (0m - 15m)
+    vec3 floorTex = texture2D(uMap, vTerrainUv * 30.0).rgb;
+    float floorMask = smoothstep(12.0, 5.0, vElevation); 
+    
+    vec3 finalColor = mix(mountainColor, floorTex, floorMask * uUseMap);
 
-      // Texture Mask: Apply PBR texture only to the floor (0m - 15m)
-      vec3 floorTex = texture2D(uMap, vUv * 30.0).rgb;
-      float floorMask = smoothstep(12.0, 5.0, vElevation); 
-      
-      vec3 finalColor = mix(mountainColor, floorTex, floorMask * uUseMap);
-
-      // Paint Layer: Overlays painted paths/colors or textures
-      vec4 paint = texture2D(uPaintMap, vUv);
-      
-      if (uUseBrushTex > 0.5) {
-        // Texture Splatting mode
-        vec3 brushTex = texture2D(uBrushTex, vUv * 40.0).rgb;
-        finalColor = mix(finalColor, brushTex, paint.a * uUsePaint);
-      } else {
-        // Solid Color Tint mode (Multiply)
-        vec3 tintedColor = finalColor * paint.rgb * 1.5;
-        finalColor = mix(finalColor, tintedColor, paint.a * uUsePaint);
-      }
-
-      float road = smoothstep(6.0, 3.0, abs(vUv.x - 0.5) * 150.0);
-      finalColor = mix(finalColor, vec3(0.5, 0.45, 0.4), road * 0.4 * floorMask);
-
-      gl_FragColor = vec4(finalColor, 1.0);
+    // Paint Layer: Overlays painted paths/colors or textures
+    vec4 paint = texture2D(uPaintMap, vTerrainUv);
+    
+    if (uUseBrushTex > 0.5) {
+      // Texture Splatting mode
+      vec3 brushTex = texture2D(uBrushTex, vTerrainUv * 40.0).rgb;
+      finalColor = mix(finalColor, brushTex, paint.a * uUsePaint);
+    } else {
+      // Solid Color Tint mode (Multiply)
+      vec3 tintedColor = finalColor * paint.rgb * 1.5;
+      finalColor = mix(finalColor, tintedColor, paint.a * uUsePaint);
     }
-  `,
-});
+
+    float road = smoothstep(6.0, 3.0, abs(vTerrainUv.x - 0.5) * 150.0);
+    finalColor = mix(finalColor, vec3(0.5, 0.45, 0.4), road * 0.4 * floorMask);
+
+    vec4 diffuseColor = vec4( finalColor, opacity );
+    `
+  );
+};
 
 let globalIsSculptLoaded = false;
 const globalSculptHeights = new Float32Array(256 * 256);
@@ -717,6 +731,9 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
     PainterlyWaterMaterial.uniforms.time.value = state.clock.elapsedTime;
 
     if (lightRef.current) {
+      if (lightRef.current.target.parent !== scene) {
+        scene.add(lightRef.current.target);
+      }
       const pos = useStore.getState().playerPosition;
       const rad = (useEditorStore.getState().sunAngle * Math.PI) / 180;
       const ox = Math.cos(rad) * 15.0;
@@ -724,6 +741,7 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
       lightRef.current.position.set(pos[0] + ox, 45, pos[2] + oz);
       lightRef.current.target.position.set(pos[0], pos[1], pos[2]);
       lightRef.current.target.updateMatrixWorld();
+      lightRef.current.shadow.camera.updateProjectionMatrix();
     }
 
     if (isSetup || potatoMode) return;
