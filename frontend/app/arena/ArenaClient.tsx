@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, forwardRef, useImperativeHandle } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { KeyboardControls, useGLTF, PerformanceMonitor, AdaptiveEvents, AdaptiveDpr } from "@react-three/drei";
 import { useWebSocketGame, PlayerNetworkState, MonsterNetworkState, GameStatePayload } from "@/src/hooks/useWebSocketGame";
@@ -428,6 +428,280 @@ function PerformanceDiagnostics({
   return null;
 }
 
+export interface GameChatRef {
+  appendMessage: (sender: string, msg: string) => void;
+}
+
+const GameChat = forwardRef<GameChatRef, { sendChatMessage: (msg: string) => void }>(
+  ({ sendChatMessage }, ref) => {
+    const [chatMessages, setChatMessages] = useState<{type: string; name?: string; msg: string}[]>([
+      { type: "system", msg: "Selamat datang di Arena! Basmi monster di sekitarmu." },
+      { type: "info", msg: "Tekan Q untuk skill, WASD bergerak, mouse untuk mengarahkan kamera." }
+    ]);
+    const [chatInput, setChatInput] = useState("");
+    const chatScrollRef = useRef<HTMLDivElement>(null);
+
+    useImperativeHandle(ref, () => ({
+      appendMessage(sender: string, msg: string) {
+        setChatMessages(p => [
+          ...p,
+          { type: "player", name: sender, msg: msg }
+        ]);
+        setTimeout(() => {
+          if (chatScrollRef.current) {
+            chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+          }
+        }, 50);
+      }
+    }));
+
+    return (
+      <div className="absolute left-3 bottom-16 w-[280px] flex flex-col gap-1 pointer-events-auto">
+        <div ref={chatScrollRef} className="max-h-[80px] overflow-y-auto flex flex-col gap-1 pr-1">
+          {chatMessages.map((m, i) => (
+            <p key={i} className="text-[9px] leading-relaxed">
+              {m.type === "system" && <><span className="text-emerald-400 font-black mr-1">[Sistem]</span><span className="text-zinc-300">{m.msg}</span></>}
+              {m.type === "info" && <><span className="text-amber-400 font-black mr-1">[Info]</span><span className="text-zinc-300">{m.msg}</span></>}
+              {m.type === "player" && <><span className="text-indigo-400 font-black mr-1">[{m.name}]</span><span className="text-zinc-100">{m.msg}</span></>}
+            </p>
+          ))}
+        </div>
+        {/* Input */}
+        <div className="flex gap-1.5">
+          <input
+            type="text"
+            value={chatInput}
+            onChange={e => setChatInput(e.target.value)}
+            onKeyDown={e => {
+              e.stopPropagation(); // Shield from three-drei keyboard capture
+              if (e.key === "Enter" && chatInput.trim()) {
+                sendChatMessage(chatInput.trim());
+                setChatInput("");
+              }
+            }}
+            onKeyUp={e => e.stopPropagation()} // Shield from three-drei keyboard release
+            placeholder="Ketik pesan..."
+            className="flex-1 bg-black/55 border border-white/10 rounded-lg px-2.5 py-1 text-[9px] text-white placeholder-zinc-600 focus:outline-none focus:border-cyan-500/50 backdrop-blur-sm"
+          />
+          <button
+            onClick={() => {
+              if (chatInput.trim()) {
+                sendChatMessage(chatInput.trim());
+                setChatInput("");
+              }
+            }}
+            className="bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-500/30 px-2.5 py-1 rounded-lg text-[9px] font-black text-cyan-300 transition-all"
+          >Enter</button>
+        </div>
+      </div>
+    );
+  }
+);
+GameChat.displayName = "GameChat";
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ISOLATED MICROSERVICE: PlayerStatsHUD
+// All HP/MP/Gold/Level state is FULLY CONTAINED here — parent never re-renders.
+// ═══════════════════════════════════════════════════════════════════════════════
+export interface PlayerStatsHUDRef {
+  updateStats: (stats: any) => void;
+  updateHpMp: (hp: number, maxHp: number) => void;
+  getStats: () => any;
+}
+
+const PlayerStatsHUD = forwardRef<PlayerStatsHUDRef, {
+  defaultUsername: string;
+  defaultLevel: number;
+  onOpenStats: () => void;
+}>(({ defaultUsername, defaultLevel, onOpenStats }, ref) => {
+  const [stats, setStats] = useState<any>({
+    hp: 100, max_hp: 100, mp: 50, max_mp: 50,
+    level: defaultLevel, gold: 0,
+    username: defaultUsername,
+  });
+
+  useImperativeHandle(ref, () => ({
+    updateStats(newStats: any) {
+      setStats((prev: any) => {
+        if (!prev) return newStats;
+        return { ...prev, ...newStats };
+      });
+    },
+    updateHpMp(hp: number, maxHp: number) {
+      setStats((prev: any) => {
+        if (!prev) return { hp, max_hp: maxHp, mp: 50, max_mp: 50, level: defaultLevel, gold: 0, username: defaultUsername };
+        if (prev.hp === hp && prev.max_hp === maxHp) return prev; // Skip if unchanged
+        return { ...prev, hp, max_hp: maxHp };
+      });
+    },
+    getStats() { return stats; }
+  }));
+
+  const hpPct = Math.max(0, Math.min(100, ((stats.hp ?? 100) / (stats.max_hp ?? 100)) * 100));
+  const mpPct = Math.max(0, Math.min(100, ((stats.mp ?? 50) / (stats.max_mp ?? 50)) * 100));
+
+  return (
+    <>
+      {/* ── TOP-LEFT: Avatar + HP/MP ── */}
+      <div className="absolute left-3 top-3 flex items-center gap-2.5 pointer-events-auto">
+        <div className="relative cursor-pointer" onClick={onOpenStats}>
+          <div className="w-[62px] h-[62px] rounded-full bg-gradient-to-br from-emerald-400 via-cyan-500 to-indigo-600 p-[3px] shadow-[0_0_18px_rgba(16,185,129,0.45)]">
+            <div className="w-full h-full rounded-full bg-[#0d1117] flex items-center justify-center overflow-hidden">
+              <User className="w-7 h-7 text-cyan-300" />
+            </div>
+          </div>
+          <div className="absolute -bottom-1 -right-1 w-[22px] h-[22px] rounded-full bg-gradient-to-br from-amber-400 to-orange-500 border-2 border-[#0d1117] flex items-center justify-center text-[9px] font-black text-black shadow-lg">
+            {stats.level ?? defaultLevel}
+          </div>
+          <div className="absolute inset-0 rounded-full border-2 border-emerald-400/20 pointer-events-none" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[13px] font-black text-white drop-shadow-md tracking-tight">
+              {stats.username ?? defaultUsername}
+            </span>
+            <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[8px] font-black px-2 py-0.5 rounded-md tracking-wider">
+              CP {((stats.level ?? 1) * 350 + 742).toLocaleString()}
+            </span>
+          </div>
+          <div className="w-48 h-[14px] rounded-full bg-black/70 border border-white/10 overflow-hidden relative shadow-inner">
+            <div className="h-full bg-gradient-to-r from-green-600 via-emerald-400 to-green-500 rounded-full transition-all duration-300 shadow-[0_0_6px_rgba(16,185,129,0.5)]" style={{width:`${hpPct}%`}} />
+            <span className="absolute inset-0 flex items-center justify-center text-[8px] font-black text-white drop-shadow">
+              {Math.round(stats.hp ?? 100)} / {Math.round(stats.max_hp ?? 100)}
+            </span>
+          </div>
+          <div className="w-48 h-[10px] rounded-full bg-black/70 border border-white/10 overflow-hidden relative shadow-inner">
+            <div className="h-full bg-gradient-to-r from-blue-600 via-sky-400 to-blue-500 rounded-full transition-all duration-300 shadow-[0_0_6px_rgba(59,130,246,0.4)]" style={{width:`${mpPct}%`}} />
+            <span className="absolute inset-0 flex items-center justify-center text-[7px] font-black text-white drop-shadow">
+              {Math.round(stats.mp ?? 50)} / {Math.round(stats.max_mp ?? 50)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── TOP-CENTER: Currency bar ── */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-black/55 backdrop-blur-xl border border-white/10 px-4 py-1.5 rounded-2xl shadow-xl pointer-events-auto">
+        <div className="flex items-center gap-1.5">
+          <span className="w-5 h-5 rounded-full bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center text-[9px] font-black text-black shadow">S</span>
+          <span className="text-[11px] font-black text-amber-400">{(stats.gold ?? 2048).toLocaleString()}</span>
+        </div>
+        <div className="w-px h-4 bg-white/10" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm">💎</span>
+          <span className="text-[11px] font-black text-pink-400">88</span>
+        </div>
+        <div className="w-px h-4 bg-white/10" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm">🔷</span>
+          <span className="text-[11px] font-black text-cyan-400">150</span>
+        </div>
+        <div className="w-px h-4 bg-white/10" />
+        <FPSBadge />
+      </div>
+
+      {/* ── BOTTOM-CENTER: Big HP + Fever bar ── */}
+      <div className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[380px] flex flex-col gap-1 pointer-events-none">
+        <div className="relative w-full h-[18px] bg-black/75 rounded-full border border-white/10 overflow-hidden shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)]">
+          <div
+            className="absolute inset-y-0 left-0 bg-gradient-to-r from-green-700 via-emerald-400 to-green-500 rounded-full transition-all duration-500 shadow-[0_0_12px_rgba(16,185,129,0.5)]"
+            style={{width:`${hpPct}%`}}
+          />
+          <div className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-white drop-shadow">
+            {hpPct.toFixed(2)}%
+          </div>
+        </div>
+        <div className="relative w-full h-[11px] bg-black/70 rounded-full border border-white/10 overflow-hidden shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
+          <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-pink-600 via-rose-400 to-fuchsia-500 rounded-full shadow-[0_0_8px_rgba(236,72,153,0.6)]" style={{width:"65%"}} />
+          <div className="absolute inset-0 flex items-center justify-center gap-1 text-[7px] font-black text-white drop-shadow tracking-widest uppercase">
+            <span className="bg-pink-500/80 px-1.5 py-0.5 rounded-full text-[6px] font-black">FEVER</span>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+});
+PlayerStatsHUD.displayName = "PlayerStatsHUD";
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ISOLATED MICROSERVICE: GameStatusBar
+// Player count + monster count + quest panel data — never re-renders parent.
+// ═══════════════════════════════════════════════════════════════════════════════
+export interface GameStatusBarRef {
+  update: (playerCount: number, aliveMonsterCount: number) => void;
+}
+
+const GameStatusBar = forwardRef<GameStatusBarRef, {}>((_props, ref) => {
+  const [playerCount, setPlayerCount] = useState(1);
+  const [aliveMonsterCount, setAliveMonsterCount] = useState(0);
+
+  useImperativeHandle(ref, () => ({
+    update(pc: number, mc: number) {
+      setPlayerCount(pc);
+      setAliveMonsterCount(mc);
+    }
+  }));
+
+  return (
+    <>
+      {/* Server info pills */}
+      <div className="flex gap-1.5 mt-6">
+        <div className="bg-black/55 backdrop-blur-md border border-white/10 px-2.5 py-1 rounded-lg flex items-center gap-1">
+          <Users className="w-3 h-3 text-cyan-400" />
+          <span className="text-[9px] font-black text-white">{playerCount}</span>
+        </div>
+        <div className="bg-black/55 backdrop-blur-md border border-white/10 px-2.5 py-1 rounded-lg flex items-center gap-1">
+          <Skull className="w-3 h-3 text-red-400 animate-pulse" />
+          <span className="text-[9px] font-black text-white">{aliveMonsterCount}</span>
+        </div>
+      </div>
+    </>
+  );
+});
+GameStatusBar.displayName = "GameStatusBar";
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ISOLATED MICROSERVICE: DeathOverlay
+// Death screen rendering — completely independent from parent state.
+// ═══════════════════════════════════════════════════════════════════════════════
+export interface DeathOverlayRef {
+  setDead: (isDead: boolean) => void;
+}
+
+const DeathOverlay = forwardRef<DeathOverlayRef, {}>((_props, ref) => {
+  const [isDead, setIsDead] = useState(false);
+
+  useImperativeHandle(ref, () => ({
+    setDead(dead: boolean) {
+      setIsDead(dead);
+    }
+  }));
+
+  if (!isDead) return null;
+  return (
+    <div className="absolute inset-0 z-[99999] pointer-events-auto select-none bg-black/85 backdrop-blur-md flex flex-col items-center justify-center transition-all duration-500">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(239,68,68,0)_30%,rgba(0,0,0,0.9)_90%)] pointer-events-none animate-pulse" />
+      <div className="flex flex-col items-center text-center max-w-md px-6 relative z-10">
+        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-red-600 via-rose-700 to-red-950 p-0.5 border-4 border-red-500/40 shadow-2xl flex items-center justify-center mb-6 animate-bounce">
+          <Skull className="w-10 h-10 text-white drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
+        </div>
+        <h1 className="text-3xl font-black tracking-tighter uppercase text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,0.5)] italic mb-2">
+          Karakter Anda Gugur!
+        </h1>
+        <p className="text-xs font-semibold text-zinc-400 leading-relaxed mb-8">
+          Anda dikalahkan di pertempuran. Menghidupkan kembali dan memulihkan seluruh tenaga di Kota Starter...
+        </p>
+        <div className="flex items-center gap-3 bg-zinc-950/80 border border-red-500/20 px-6 py-3.5 rounded-2xl shadow-xl">
+          <RefreshCw className="w-4 h-4 text-red-400 animate-spin" />
+          <span className="text-[9px] font-black uppercase tracking-widest text-zinc-300">
+            Memulihkan tenaga dalam beberapa detik...
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+});
+DeathOverlay.displayName = "DeathOverlay";
+
 export default function MultiplayerArena() {
   const selectedMapId = useEditorStore(s => s.selectedMapId);
   const [envReady, setEnvReady] = useState(false);
@@ -464,36 +738,24 @@ export default function MultiplayerArena() {
   const [charHairStyle, setCharHairStyle] = useState(1);
   const [charHairColor, setCharHairColor] = useState("#5A3E2D");
 
-  const [playerStats, setPlayerStats] = useState<any>(null);
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showEnemyEditorModal, setShowEnemyEditorModal] = useState(false);
   const [monsterConfigs, setMonsterConfigs] = useState<any[]>([]);
   const [editingMonster, setEditingMonster] = useState<any>(null);
-  const [playerCount, setPlayerCount] = useState(1);
-  const [aliveMonsterCount, setAliveMonsterCount] = useState(10);
-  const [chatInput, setChatInput] = useState("");
-  const [chatMessages, setChatMessages] = useState<{type: string; name?: string; msg: string}[]>([
-    { type: "system", msg: "Selamat datang di Arena! Basmi monster di sekitarmu." },
-    { type: "info", msg: "Tekan Q untuk skill, WASD bergerak, mouse untuk bidik." },
-  ]);
   const [isAutoMode, setIsAutoMode] = useState(false);
   const [showMiniActions, setShowMiniActions] = useState(false);
-  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const chatRef = useRef<GameChatRef>(null);
+
+  // Isolated microservice refs — each updates its own component, NEVER triggers parent re-render
+  const statsHudRef = useRef<PlayerStatsHUDRef>(null);
+  const statusBarRef = useRef<GameStatusBarRef>(null);
+  const deathOverlayRef = useRef<DeathOverlayRef>(null);
   
   // Pure mouse-drag looking system active (Pointer Lock removed as requested)
 
-  // Local damage screenshake monitor
+  // Local damage screenshake monitor (ref-based, zero React re-renders)
   const lastPlayerHp = useRef(0);
   const playerStatsRef = useRef({ hp: -1, maxHp: -1 });
-  useEffect(() => {
-    if (playerStats) {
-      if (lastPlayerHp.current > 0 && playerStats.hp < lastPlayerHp.current) {
-        // Player took damage! Trigger dynamic screenshake!
-        (window as any).triggerCameraShake?.(0.35);
-      }
-      lastPlayerHp.current = playerStats.hp;
-    }
-  }, [playerStats]);
   
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -678,7 +940,7 @@ export default function MultiplayerArena() {
   }, [token]);
 
   // 1. Establish WebSocket link with our Go Server using selected character ID
-  const { sendPlayerState, sendPlayerAttack, sendDistributeStat } = useWebSocketGame(
+  const { sendPlayerState, sendPlayerAttack, sendDistributeStat, sendChatMessage } = useWebSocketGame(
     WS_BASE_URL,
     token,
     selectedCharacter?.id || "",
@@ -704,16 +966,17 @@ export default function MultiplayerArena() {
         const rawHP = (me as any).hp;
         const rawMaxHP = (me as any).maxHp;
         if (playerStatsRef.current.hp !== rawHP || playerStatsRef.current.maxHp !== rawMaxHP) {
+          // Screenshake on damage (ref-based, zero React re-renders)
+          if (lastPlayerHp.current > 0 && rawHP < lastPlayerHp.current) {
+            (window as any).triggerCameraShake?.(0.35);
+          }
+          lastPlayerHp.current = rawHP;
           playerStatsRef.current.hp = rawHP;
           playerStatsRef.current.maxHp = rawMaxHP;
-          setPlayerStats((prev: any) => {
-            if (!prev) return { hp: rawHP, max_hp: rawMaxHP, level: selectedCharacter?.level || 1, gold: 0, mp: 50, max_mp: 50, username: selectedCharacter?.username || "Hero" };
-            return {
-              ...prev,
-              hp: rawHP,
-              max_hp: rawMaxHP,
-            };
-          });
+          // Push to isolated HUD microservice (only PlayerStatsHUD re-renders)
+          statsHudRef.current?.updateHpMp(rawHP, rawMaxHP);
+          // Push death state to isolated overlay
+          deathOverlayRef.current?.setDead(rawHP <= 0);
         }
       }
 
@@ -761,6 +1024,9 @@ export default function MultiplayerArena() {
         unitRegistryRef.current = mockUnits;
         battleGrid.update(mockUnits);
       }
+    },
+    (sender: string, msg: string) => {
+      chatRef.current?.appendMessage(sender, msg);
     }
   );
 
@@ -790,13 +1056,12 @@ export default function MultiplayerArena() {
         if (timeSinceLast >= PROFILE_FETCH_INTERVAL && deadline.timeRemaining() > 5) {
           lastProfileFetch = now;
 
-          // Update HUD counters directly from refs (zero allocations, no React state)
+          // Update HUD counters via isolated microservice (only GameStatusBar re-renders)
           const pCount = (connectedPlayersRef.current?.length ?? 0) + 1;
           const mCount = worldMonstersRef.current?.filter((m: any) => !m.is_dead).length ?? 0;
-          setPlayerCount(pCount);
-          setAliveMonsterCount(mCount);
+          statusBarRef.current?.update(pCount, mCount);
 
-          // Fire-and-forget async fetch — response handler uses functional setState to avoid stale closure
+          // Fire-and-forget async fetch — response updates isolated HUD microservice only
           fetch(`${API_BASE_URL}/api/player/profile?character_id=${selectedCharacter.id}`, {
             headers: { "Authorization": `Bearer ${token}` },
             signal: AbortSignal.timeout(4000), // Prevent zombie fetches if server is slow
@@ -806,15 +1071,10 @@ export default function MultiplayerArena() {
               if (response.ok) {
                 const data = await response.json();
                 if (data.player) {
-                  // Only update stats that actually changed to avoid unnecessary React re-renders
+                  // Push full profile to isolated HUD microservice (only PlayerStatsHUD re-renders)
                   playerStatsRef.current.hp = data.player.hp;
                   playerStatsRef.current.maxHp = data.player.max_hp;
-                  setPlayerStats((prev: any) => {
-                    if (!prev) return data.player;
-                    // Skip re-render if nothing meaningful changed (HP is already live via WS)
-                    if (prev.gold === data.player.gold && prev.level === data.player.level && prev.experience === data.player.experience) return prev;
-                    return { ...prev, ...data.player };
-                  });
+                  statsHudRef.current?.updateStats(data.player);
                 }
               } else if (response.status === 401) {
                 handleLogout();
@@ -938,7 +1198,8 @@ export default function MultiplayerArena() {
   const handleSwitchCharacter = async () => {
     localStorage.removeItem("game_active_char_id");
     setSelectedCharacter(null);
-    setPlayerStats(null);
+    statsHudRef.current?.updateStats({ hp: 100, max_hp: 100, mp: 50, max_mp: 50, level: 1, gold: 0, username: "Hero" });
+    playerStatsRef.current = { hp: -1, maxHp: -1 };
     setIsCreatingChar(false);
     setSuccessMsg("");
     setErrorMsg("");
@@ -1021,7 +1282,8 @@ export default function MultiplayerArena() {
     localStorage.removeItem("game_active_char_id");
     setToken("");
     setSelectedCharacter(null);
-    setPlayerStats(null);
+    statsHudRef.current?.updateStats({ hp: 100, max_hp: 100, mp: 50, max_mp: 50, level: 1, gold: 0, username: "Hero" });
+    playerStatsRef.current = { hp: -1, maxHp: -1 };
     setCharacters([]);
     setIsCreatingChar(false);
     connectedPlayersRef.current = [];
@@ -1634,7 +1896,7 @@ export default function MultiplayerArena() {
                 simTimeRef={simTimeRef}
                 dealPlayerDamage={handleAuthoritativeAttack}
                 sendPlayerState={sendPlayerState}
-                playerStats={playerStats}
+                playerStats={playerStatsRef.current.hp >= 0 ? { hp: playerStatsRef.current.hp, max_hp: playerStatsRef.current.maxHp } : undefined}
               />
 
               {/* Render Other Connected Players in real-time */}
@@ -1674,35 +1936,8 @@ export default function MultiplayerArena() {
         </KeyboardControls>
       </div>
 
-      {/* 4. PREMIUM DEATH / RESPAWN OVERLAY SCREEN */}
-      {playerStats && typeof playerStats.hp !== 'undefined' && playerStats.hp <= 0 && (
-        <div className="absolute inset-0 z-[99999] pointer-events-auto select-none bg-black/85 backdrop-blur-md flex flex-col items-center justify-center transition-all duration-500">
-          {/* Red Vignette Glow */}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(239,68,68,0)_30%,rgba(0,0,0,0.9)_90%)] pointer-events-none animate-pulse" />
-          
-          <div className="flex flex-col items-center text-center max-w-md px-6 relative z-10">
-            {/* Pulsing skull container */}
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-red-600 via-rose-700 to-red-950 p-0.5 border-4 border-red-500/40 shadow-2xl flex items-center justify-center mb-6 animate-bounce">
-              <Skull className="w-10 h-10 text-white drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
-            </div>
-
-            <h1 className="text-3xl font-black tracking-tighter uppercase text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,0.5)] italic mb-2">
-              Karakter Anda Gugur!
-            </h1>
-            <p className="text-xs font-semibold text-zinc-400 leading-relaxed mb-8">
-              Anda dikalahkan di pertempuran. Menghidupkan kembali dan memulihkan seluruh tenaga di Kota Starter...
-            </p>
-
-            {/* Countdown spinner container */}
-            <div className="flex items-center gap-3 bg-zinc-950/80 border border-red-500/20 px-6 py-3.5 rounded-2xl shadow-xl">
-              <RefreshCw className="w-4 h-4 text-red-400 animate-spin" />
-              <span className="text-[9px] font-black uppercase tracking-widest text-zinc-300">
-                Memulihkan tenaga dalam beberapa detik...
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 4. PREMIUM DEATH / RESPAWN OVERLAY SCREEN (Isolated Microservice) */}
+      <DeathOverlay ref={deathOverlayRef} />
 
       {/* MULTIPLAYER HUD OVERLAY */}
       <div className="absolute inset-0 pointer-events-none z-10 select-none">
@@ -1717,80 +1952,16 @@ export default function MultiplayerArena() {
           <span className="animate-pulse">🔄</span> MENYELARASKAN HADAP TARGET...
         </div>
 
-        {/* ── TOP-LEFT: Avatar + HP/MP/EXP ── */}
-        <div className="absolute left-3 top-3 flex items-center gap-2.5 pointer-events-auto">
-          {/* Avatar ring */}
-          <div className="relative cursor-pointer" onClick={() => setShowStatsModal(true)}>
-            <div className="w-[62px] h-[62px] rounded-full bg-gradient-to-br from-emerald-400 via-cyan-500 to-indigo-600 p-[3px] shadow-[0_0_18px_rgba(16,185,129,0.45)]">
-              <div className="w-full h-full rounded-full bg-[#0d1117] flex items-center justify-center overflow-hidden">
-                <User className="w-7 h-7 text-cyan-300" />
-              </div>
-            </div>
-            {/* Level badge */}
-            <div className="absolute -bottom-1 -right-1 w-[22px] h-[22px] rounded-full bg-gradient-to-br from-amber-400 to-orange-500 border-2 border-[#0d1117] flex items-center justify-center text-[9px] font-black text-black shadow-lg">
-              {playerStats?.level ?? selectedCharacter?.level ?? 1}
-            </div>
-            {/* EXP arc border thin overlay */}
-            <div className="absolute inset-0 rounded-full border-2 border-emerald-400/20 pointer-events-none" />
-          </div>
-
-          {/* Name + CP + HP/MP bars */}
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[13px] font-black text-white drop-shadow-md tracking-tight">
-                {playerStats?.username ?? selectedCharacter?.username ?? "Hero"}
-              </span>
-              <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[8px] font-black px-2 py-0.5 rounded-md tracking-wider">
-                CP {((playerStats?.level ?? 1) * 350 + 742).toLocaleString()}
-              </span>
-            </div>
-            {/* HP bar */}
-            <div className="w-48 h-[14px] rounded-full bg-black/70 border border-white/10 overflow-hidden relative shadow-inner">
-              <div
-                className="h-full bg-gradient-to-r from-green-600 via-emerald-400 to-green-500 rounded-full transition-all duration-300 shadow-[0_0_6px_rgba(16,185,129,0.5)]"
-                style={{width:`${Math.max(0,Math.min(100,((playerStats?.hp??selectedCharacter?.hp??100)/(playerStats?.max_hp??selectedCharacter?.max_hp??100))*100))}%`}}
-              />
-              <span className="absolute inset-0 flex items-center justify-center text-[8px] font-black text-white drop-shadow">
-                {Math.round(playerStats?.hp??100)} / {Math.round(playerStats?.max_hp??100)}
-              </span>
-            </div>
-            {/* MP bar */}
-            <div className="w-48 h-[10px] rounded-full bg-black/70 border border-white/10 overflow-hidden relative shadow-inner">
-              <div
-                className="h-full bg-gradient-to-r from-blue-600 via-sky-400 to-blue-500 rounded-full transition-all duration-300 shadow-[0_0_6px_rgba(59,130,246,0.4)]"
-                style={{width:`${Math.max(0,Math.min(100,((playerStats?.mp??selectedCharacter?.mp??50)/(playerStats?.max_mp??selectedCharacter?.max_mp??50))*100))}%`}}
-              />
-              <span className="absolute inset-0 flex items-center justify-center text-[7px] font-black text-white drop-shadow">
-                {Math.round(playerStats?.mp??50)} / {Math.round(playerStats?.max_mp??50)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-
-        {/* ── TOP-CENTER: Currency bar ── */}
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-black/55 backdrop-blur-xl border border-white/10 px-4 py-1.5 rounded-2xl shadow-xl pointer-events-auto">
-          <div className="flex items-center gap-1.5">
-            <span className="w-5 h-5 rounded-full bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center text-[9px] font-black text-black shadow">S</span>
-            <span className="text-[11px] font-black text-amber-400">{(playerStats?.gold??2048).toLocaleString()}</span>
-          </div>
-          <div className="w-px h-4 bg-white/10" />
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm">💎</span>
-            <span className="text-[11px] font-black text-pink-400">88</span>
-          </div>
-          <div className="w-px h-4 bg-white/10" />
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm">🔷</span>
-            <span className="text-[11px] font-black text-cyan-400">150</span>
-          </div>
-          <div className="w-px h-4 bg-white/10" />
-          <FPSBadge />
-        </div>
+        {/* ── TOP-LEFT Avatar + HP/MP + TOP-CENTER Currency + BOTTOM-CENTER HP (Isolated Microservice) ── */}
+        <PlayerStatsHUD
+          ref={statsHudRef}
+          defaultUsername={selectedCharacter?.username || "Hero"}
+          defaultLevel={selectedCharacter?.level || 1}
+          onOpenStats={() => setShowStatsModal(true)}
+        />
 
         {/* ── TOP-RIGHT: Mini-map + Server info + Actions ── */}
         <div className="absolute right-3 top-3 flex flex-col items-end gap-2 pointer-events-auto">
-          {/* Mini-map circle */}
           {/* Mini-map circle */}
           <Minimap
             connectedPlayersRef={connectedPlayersRef}
@@ -1799,17 +1970,8 @@ export default function MultiplayerArena() {
             mapId={selectedMapId || "Starter Zone"}
           />
 
-          {/* Server info pills */}
-          <div className="flex gap-1.5 mt-6">
-            <div className="bg-black/55 backdrop-blur-md border border-white/10 px-2.5 py-1 rounded-lg flex items-center gap-1">
-              <Users className="w-3 h-3 text-cyan-400" />
-              <span className="text-[9px] font-black text-white">{playerCount}</span>
-            </div>
-            <div className="bg-black/55 backdrop-blur-md border border-white/10 px-2.5 py-1 rounded-lg flex items-center gap-1">
-              <Skull className="w-3 h-3 text-red-400 animate-pulse" />
-              <span className="text-[9px] font-black text-white">{aliveMonsterCount}</span>
-            </div>
-          </div>
+          {/* Server info pills (Isolated Microservice) */}
+          <GameStatusBar ref={statusBarRef} />
 
           {/* Mini action burger */}
           <button
@@ -1849,86 +2011,27 @@ export default function MultiplayerArena() {
             </div>
             <div className="bg-black/40 border border-white/5 rounded-lg px-2 py-1 flex justify-between text-[8px] font-black">
               <span className="text-zinc-500 uppercase tracking-wide">MONSTER</span>
-              <span className={aliveMonsterCount>0?"text-red-400 animate-pulse":"text-emerald-400"}>
-                {aliveMonsterCount>0?`${aliveMonsterCount} TERSISA`:"SELESAI ✓"}
-              </span>
+              <span id="quest-monster-count" className="text-amber-400">—</span>
             </div>
             <div className="flex flex-col gap-0.5">
               <span className="text-[10px] font-black text-amber-300 leading-tight">Berburu Harta Karun</span>
               <div className="flex justify-between text-[8px]">
                 <span className="text-zinc-500">Kumpulkan Gold</span>
-                <span className="text-amber-400 font-black">{Math.min(playerStats?.gold??0,500)}/500</span>
+                <span id="quest-gold-count" className="text-amber-400 font-black">0/500</span>
               </div>
             </div>
             <div className="flex flex-col gap-0.5">
               <span className="text-[10px] font-black text-cyan-300 leading-tight">Eksplorasi Wilayah</span>
               <div className="flex justify-between text-[8px]">
                 <span className="text-zinc-500">Pemain Online</span>
-                <span className="text-cyan-400 font-black">{playerCount}/33</span>
+                <span id="quest-player-count" className="text-cyan-400 font-black">—</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── BOTTOM-CENTER: Big HP + Fever bar ── */}
-        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[380px] flex flex-col gap-1 pointer-events-none">
-          {/* HP bar */}
-          <div className="relative w-full h-[18px] bg-black/75 rounded-full border border-white/10 overflow-hidden shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)]">
-            <div
-              className="absolute inset-y-0 left-0 bg-gradient-to-r from-green-700 via-emerald-400 to-green-500 rounded-full transition-all duration-500 shadow-[0_0_12px_rgba(16,185,129,0.5)]"
-              style={{width:`${Math.max(0,Math.min(100,((playerStats?.hp??100)/(playerStats?.max_hp??100))*100))}%`}}
-            />
-            <div className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-white drop-shadow">
-              {(((playerStats?.hp??100)/(playerStats?.max_hp??100))*100).toFixed(2)}%
-            </div>
-          </div>
-          {/* Fever/SP bar */}
-          <div className="relative w-full h-[11px] bg-black/70 rounded-full border border-white/10 overflow-hidden shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
-            <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-pink-600 via-rose-400 to-fuchsia-500 rounded-full shadow-[0_0_8px_rgba(236,72,153,0.6)]" style={{width:"65%"}} />
-            <div className="absolute inset-0 flex items-center justify-center gap-1 text-[7px] font-black text-white drop-shadow tracking-widest uppercase">
-              <span className="bg-pink-500/80 px-1.5 py-0.5 rounded-full text-[6px] font-black">FEVER</span>
-            </div>
-          </div>
-        </div>
-
         {/* ── BOTTOM-LEFT: Chat ── */}
-        <div className="absolute left-3 bottom-16 w-[280px] flex flex-col gap-1 pointer-events-auto">
-          <div ref={chatScrollRef} className="max-h-[80px] overflow-y-auto flex flex-col gap-1 pr-1">
-            {chatMessages.map((m,i)=>(
-              <p key={i} className="text-[9px] leading-relaxed">
-                {m.type==="system" && <><span className="text-emerald-400 font-black mr-1">[Sistem]</span><span className="text-zinc-300">{m.msg}</span></>}
-                {m.type==="info" && <><span className="text-amber-400 font-black mr-1">[Info]</span><span className="text-zinc-300">{m.msg}</span></>}
-                {m.type==="player" && <><span className="text-indigo-400 font-black mr-1">[{m.name}]</span><span className="text-zinc-100">{m.msg}</span></>}
-              </p>
-            ))}
-          </div>
-          {/* Input */}
-          <div className="flex gap-1.5">
-            <input
-              type="text"
-              value={chatInput}
-              onChange={e=>setChatInput(e.target.value)}
-              onKeyDown={e=>{
-                if(e.key==="Enter"&&chatInput.trim()){
-                  setChatMessages(p=>[...p,{type:"player",name:selectedCharacter?.username??"You",msg:chatInput.trim()}]);
-                  setChatInput("");
-                  setTimeout(()=>{if(chatScrollRef.current)chatScrollRef.current.scrollTop=chatScrollRef.current.scrollHeight;},50);
-                }
-              }}
-              placeholder="Ketik pesan..."
-              className="flex-1 bg-black/55 border border-white/10 rounded-lg px-2.5 py-1 text-[9px] text-white placeholder-zinc-600 focus:outline-none focus:border-cyan-500/50 backdrop-blur-sm"
-            />
-            <button
-              onClick={()=>{
-                if(chatInput.trim()){
-                  setChatMessages(p=>[...p,{type:"player",name:selectedCharacter?.username??"You",msg:chatInput.trim()}]);
-                  setChatInput("");
-                }
-              }}
-              className="bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-500/30 px-2.5 py-1 rounded-lg text-[9px] font-black text-cyan-300 transition-all"
-            >Enter</button>
-          </div>
-        </div>
+        <GameChat ref={chatRef} sendChatMessage={sendChatMessage} />
 
         {/* ── BOTTOM-RIGHT: Skill bar (4 slots) + main attack + AUTO ── */}
         {selectedCharacter && (
@@ -1999,7 +2102,10 @@ export default function MultiplayerArena() {
         )}
 
         {/* Character Status Modal (Premium Glassmorphism Overlay) */}
-        {showStatsModal && playerStats && (
+        {showStatsModal && (() => {
+          const playerStats = statsHudRef.current?.getStats();
+          if (!playerStats) return null;
+          return (
           <div 
             className="fixed inset-0 w-screen h-screen z-[9999] bg-black/65 backdrop-blur-sm flex items-center justify-center pointer-events-auto font-sans"
             onClick={() => setShowStatsModal(false)}
@@ -2103,7 +2209,8 @@ export default function MultiplayerArena() {
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* Enemy Editor Admin Modal (Premium Glassmorphism Overlay) */}
         {showEnemyEditorModal && (

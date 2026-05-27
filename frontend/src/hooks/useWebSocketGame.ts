@@ -44,6 +44,7 @@ export const useWebSocketGame = (
     token: string,
     characterId: string,
     onStateReceived: (payload: GameStatePayload) => void,
+    onChatReceived: (sender: string, msg: string) => void,
 ) => {
     const wsRef = useRef<WebSocket | null>(null);
     // Throttle: limit sendPlayerState to 20Hz regardless of how often called (60fps client)
@@ -74,8 +75,12 @@ export const useWebSocketGame = (
                 }
             } else if (typeof event.data === "string") {
                 try {
-                    const payload = JSON.parse(event.data) as GameStatePayload;
-                    onStateReceived(payload);
+                    const data = JSON.parse(event.data);
+                    if (data && data.type === "chat") {
+                        onChatReceived(data.name || "Unknown", data.msg || "");
+                    } else {
+                        onStateReceived(data as GameStatePayload);
+                    }
                 } catch (err) {
                     console.error("Failed to parse game state payload", err);
                 }
@@ -146,5 +151,15 @@ export const useWebSocketGame = (
         }
     };
 
-    return { sendPlayerState, sendPlayerAttack, sendDistributeStat };
+    // Send client chat message over WebSocket
+    const sendChatMessage = (msg: string) => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+                action: "chat",
+                msg: msg
+            }));
+        }
+    };
+
+    return { sendPlayerState, sendPlayerAttack, sendDistributeStat, sendChatMessage };
 };

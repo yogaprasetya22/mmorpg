@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
+	"github.com/gin-gonic/gin"
 	"mmorpg-backend/internal/delivery/http"
 	"mmorpg-backend/internal/delivery/kcp"
 	"mmorpg-backend/internal/delivery/ws"
@@ -17,7 +19,11 @@ import (
 )
 
 func main() {
-	fmt.Println("🚀 Starting MMORPG Real-Time Game Backend...")
+	serviceType := os.Getenv("SERVICE_TYPE")
+	if serviceType == "" {
+		serviceType = "monolith"
+	}
+	fmt.Printf("🚀 Starting MMORPG Real-Time Game Backend in [%s] mode...\n", serviceType)
 
 	// 1. Load Configurations
 	cfg := config.LoadConfig()
@@ -25,48 +31,69 @@ func main() {
 	// 2. Connect to PostgreSQL Database via GORM
 	db := postgres.NewPostgreSQLConnection(cfg)
 
-	// 3. Auto Migrate PostgreSQL Database schemas
-	err := db.AutoMigrate(
-		&domain.User{},
-		&domain.Player{},
-		&domain.PlayerItem{},
-		&domain.PlayerSkill{},
-		&domain.PlayerQuest{},
-		&domain.ClassConfig{},
-		&domain.SimulationSetting{},
-		&domain.MonsterConfig{},
-		&domain.MapConfig{},
-		&domain.MapItem{},
-		&domain.Asset{},
-	)
-	if err != nil {
-		log.Fatalf("❌ Gagal melakukan auto-migrasi database: %v", err)
-	}
-	fmt.Println("💾 Database schemas auto-migrated successfully!")
+	// In API or Monolith mode, perform auto migrations & seeding
+	if serviceType == "monolith" || serviceType == "api" {
+		err := db.AutoMigrate(
+			&domain.User{},
+			&domain.Player{},
+			&domain.PlayerItem{},
+			&domain.PlayerSkill{},
+			&domain.PlayerQuest{},
+			&domain.ClassConfig{},
+			&domain.SimulationSetting{},
+			&domain.MonsterConfig{},
+			&domain.MapConfig{},
+			&domain.MapItem{},
+			&domain.Asset{},
+		)
+		if err != nil {
+			log.Fatalf("❌ Gagal melakukan auto-migrasi database: %v", err)
+		}
+		fmt.Println("💾 Database schemas auto-migrated successfully!")
 
-	// Seed initial balance configurations if database tables are unpopulated
-	if err := postgres.SeedConfigurations(db); err != nil {
-		log.Fatalf("❌ Gagal melakukan seeding database: %v", err)
+		// Seed initial balance configurations if database tables are unpopulated
+		if err := postgres.SeedConfigurations(db); err != nil {
+			log.Fatalf("❌ Gagal melakukan seeding database: %v", err)
+		}
 	}
 
 	// 4. Connect to Redis Position State Caching
 	rdb := redis.NewRedisClient(cfg)
 	stateRepo := redis.NewStateRepository(rdb)
 
-	// 5. Initialize Core Domain Registry (ECS) & Repositories
-	registry := domain.NewRegistry()
+	// 5. Initialize Repositories
 	playerRepo := postgres.NewCachedUserRepository(db, rdb)
 	userRepo := postgres.NewAccountRepository(db)
 	configRepo := postgres.NewConfigRepository(db)
 
-	// Initialize AuthUsecase early so we can pass it to both HTTP/WS handlers and KCP Server
 	authUsecase := auth.NewAuthUsecase(playerRepo, userRepo, cfg.JWTSecret)
 
-	// 6. Initialize Game Simulation Engine and WS Hub with circular dependency resolution
+	// 6. Branch according to serviceType
+	if serviceType == "api" {
+		authHandler := http.NewAuthHandler(authUsecase)
+		configHandler := http.NewConfigHandler(configRepo, db)
+
+		router := http.SetupAPIRouter(authHandler, configHandler)
+		
+		// Run API microservice on Port 8081 (default) or custom port
+		port := os.Getenv("API_PORT")
+		if port == "" {
+			port = "8081"
+		}
+		addr := ":" + port
+		fmt.Printf("🌐 API Microservice is running and listening on port %s\n", addr)
+		if err := router.Run(addr); err != nil {
+			log.Fatalf("❌ Gagal menjalankan API HTTP server: %v", err)
+		}
+		return
+	}
+
+	// For Monolith or Game mode, we run the ECS Engine & Websockets/KCP servers
+	registry := domain.NewRegistry()
+
 	var hub *ws.Hub
 	var kcpServer *kcp.KCPServer
-	
-	// Create Game Usecase with a callback to broadcast game state payloads through the Hub & KCP
+
 	gameUsecase := game.NewGameUsecase(
 		registry,
 		playerRepo,
@@ -84,31 +111,42 @@ func main() {
 
 	// Instantiate WebSockets Hub
 	hub = ws.NewHub(gameUsecase)
-
-	// 7. Start WebSocket Hub thread
 	go hub.Run()
 
-	// Instantiate and Start KCP Server for fast real-time UDP position synchronization
+	// KCP Server for fast real-time UDP synchronization
 	kcpServer = kcp.NewKCPServer(gameUsecase, authUsecase)
-	go kcpServer.Start(":9999") // Bind KCP to UDP Port 9999
+	kcpPort := os.Getenv("KCP_PORT")
+	if kcpPort == "" {
+		kcpPort = "9999"
+	}
+	go kcpServer.Start(":" + kcpPort)
 
-	// 8. Start Authoritative Real-Time Tick Loop (30Hz)
+	// Start Authoritative Real-Time Tick Loop (30Hz)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	
 	go gameUsecase.StartGameLoop(ctx)
 	fmt.Println("🕹️  Authoritative Fixed Tick Loop (30Hz) started.")
 
-	// 9. Initialize Delivery Handlers
-	authHandler := http.NewAuthHandler(authUsecase)
 	wsHandler := ws.NewGameHandler(hub, authUsecase, playerRepo)
-	configHandler := http.NewConfigHandler(configRepo, db)
 
-	// 10. Setup Gin Router & Run Server
-	router := http.SetupRouter(authHandler, wsHandler, configHandler)
+	var router *gin.Engine
+	if serviceType == "game" {
+		apiServiceURL := os.Getenv("API_SERVICE_URL")
+		if apiServiceURL == "" {
+			apiServiceURL = "http://localhost:8081"
+		}
+		fmt.Printf("🌉 Gateway active: transparently proxying API traffic to %s\n", apiServiceURL)
+		router = http.SetupGameRouter(wsHandler, apiServiceURL)
+	} else {
+		// monolith mode
+		authHandler := http.NewAuthHandler(authUsecase)
+		configHandler := http.NewConfigHandler(configRepo, db)
+		router = http.SetupRouter(authHandler, wsHandler, configHandler)
+	}
 
 	addr := ":" + cfg.Port
-	fmt.Printf("🌐 Server is running and listening on port %s\n", addr)
+	fmt.Printf("🌐 Gateway & Game Service is running and listening on port %s\n", addr)
 	
 	if err := router.Run(addr); err != nil {
 		log.Fatalf("❌ Gagal menjalankan HTTP server: %v", err)

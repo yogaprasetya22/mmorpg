@@ -333,7 +333,7 @@ export const GameCanvas = React.memo(({
         </div>
 
         <Canvas
-          shadows={{ type: THREE.PCFShadowMap }}
+          shadows={{ type: THREE.PCFSoftShadowMap }}
           dpr={dpr}
           gl={{
             antialias: true,

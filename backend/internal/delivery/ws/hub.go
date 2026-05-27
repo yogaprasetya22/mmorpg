@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -104,5 +105,29 @@ func (h *Hub) BroadcastGameState(payload domain.GameStatePayload) {
 	case h.Broadcast <- data:
 	default:
 		// Game loop is producing faster than hub can fan-out — drop frame
+	}
+}
+
+// BroadcastChatMessage sends a text-based JSON chat message to all connected clients immediately.
+func (h *Hub) BroadcastChatMessage(sender string, msg string) {
+	payload := map[string]string{
+		"type": "chat",
+		"name": sender,
+		"msg":  msg,
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+
+	h.clientsMu.RLock()
+	defer h.clientsMu.RUnlock()
+
+	for client := range h.clients {
+		select {
+		case client.Send <- data:
+		default:
+			// Non-blocking send to prevent one slow client from lagging the chat stream
+		}
 	}
 }

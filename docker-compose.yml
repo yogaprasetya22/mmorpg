@@ -35,17 +35,16 @@ services:
       timeout: 5s
       retries: 5
 
-  # 3. Game Server Backend (Go)
-  backend:
+  # 3. API Microservice (GORM, HTTP Configs, Map & Assets Editor)
+  api-service:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: mmorpg-backend
+    container_name: mmorpg-api-service
     restart: always
-    ports:
-      - "18088:8080"
     environment:
-      PORT: "8080"
+      SERVICE_TYPE: "api"
+      API_PORT: "8081"
       DB_HOST: db
       DB_PORT: "5432"
       DB_USER: postgres
@@ -61,7 +60,39 @@ services:
       redis:
         condition: service_healthy
 
-  # 4. Interactive Web Client (Next.js)
+  # 4. Game Microservice (30Hz Authoritative ECS Sync Loop & WS/KCP Gateways)
+  game-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mmorpg-game-service
+    restart: always
+    ports:
+      - "18088:8080"
+      - "9999:9999/udp"
+    environment:
+      SERVICE_TYPE: "game"
+      PORT: "8080"
+      KCP_PORT: "9999"
+      API_SERVICE_URL: "http://api-service:8081"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: root
+      DB_NAME: mmorpg_db
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ""
+      JWT_SECRET: super_secret_jwt_key_mmorpg_123
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api-service:
+        condition: service_started
+
+  # 5. Interactive Web Client (Next.js)
   frontend:
     build:
       context: ./frontend
@@ -75,7 +106,7 @@ services:
     ports:
       - "18033:3000"
     depends_on:
-      - backend
+      - game-service
 
 volumes:
   pgdata:

@@ -173,7 +173,6 @@ export const RemoteMonsterInstance = ({
     if (!groupRef.current) return;
 
     // O(1) Map lookup
-    // O(1) Map lookup
     let data = monsterMapRef.current?.get(monsterId);
     if (!data && _worldMonstersRef.current) {
       // Fallback search to prevent frame-ordering race conditions!
@@ -228,13 +227,13 @@ export const RemoteMonsterInstance = ({
     // ─── Read flat position fields (no nested object allocation) ─────────────
     const x = data.x;
     const z = data.z;
-    // Client-side 3D terrain elevation handles server flat coordinate mapping
     const groundY = terrainY;
 
-    // Push new network state to buffer if it differs from the last pushed state
+    // ─── Step 1: Push incoming network state into the temporal buffer ─────────
     const buf = stateBufferRef.current;
-    if (buf.length === 0 || 
-        buf[buf.length - 1].x !== x || 
+    const incomingTs = (data as any).receivedAt || performance.now();
+    if (buf.length === 0 ||
+        buf[buf.length - 1].x !== x ||
         buf[buf.length - 1].z !== z ||
         buf[buf.length - 1].animation !== (data.animation || "")) {
       buf.push({
@@ -242,14 +241,15 @@ export const RemoteMonsterInstance = ({
         y: groundY,
         z: z,
         animation: data.animation || "",
-        timestamp: (data as any).receivedAt || performance.now()
+        timestamp: incomingTs
       });
-      if (buf.length > 30) buf.shift(); // Limit queue length to 30 frames
+      // Keep only last 8 entries: 20Hz × 160ms delay = 3.2 packets; 8 is safe headroom
+      if (buf.length > 8) buf.shift();
     }
 
-    // Perform Entity Interpolation with a 160ms visual buffer delay to absorb 20Hz network jitter
+    // ─── Step 2: Entity Interpolation — 160ms delay to absorb 20Hz jitter ────
     const renderTime = performance.now() - 160;
-    
+
     let targetX = x;
     let targetY = groundY;
     let targetZ = z;
@@ -258,15 +258,14 @@ export const RemoteMonsterInstance = ({
     if (buf.length >= 2) {
       let i = 0;
       for (; i < buf.length - 1; i++) {
-        if (buf[i].timestamp <= renderTime && buf[i+1].timestamp > renderTime) {
-          break;
-        }
+        if (buf[i].timestamp <= renderTime && buf[i + 1].timestamp > renderTime) break;
       }
 
       if (i < buf.length - 1) {
+        // ── Normal interpolation between two known states ──
         const start = buf[i];
-        const end = buf[i+1];
-        const elapsed = renderTime - start.timestamp;
+        const end   = buf[i + 1];
+        const elapsed  = renderTime - start.timestamp;
         const duration = end.timestamp - start.timestamp;
         const alpha = Math.min(1, Math.max(0, elapsed / (duration || 1)));
 
@@ -275,20 +274,49 @@ export const RemoteMonsterInstance = ({
         targetZ = start.z + (end.z - start.z) * alpha;
         targetAnim = alpha < 0.5 ? start.animation : end.animation;
       } else {
-        targetX = buf[buf.length - 1].x;
-        targetY = buf[buf.length - 1].y;
-        targetZ = buf[buf.length - 1].z;
-        targetAnim = buf[buf.length - 1].animation;
+        // ── Buffer starvation: dead-reckoning — continue last known velocity ──
+        const last = buf[buf.length - 1];
+        const prev = buf[buf.length - 2];
+        const lastDt = Math.max(1, last.timestamp - prev.timestamp);
+        const extAlpha = Math.min((renderTime - last.timestamp) / lastDt, 1.5);
+        targetX = last.x + (last.x - prev.x) * extAlpha;
+        targetY = last.y + (last.y - prev.y) * extAlpha;
+        targetZ = last.z + (last.z - prev.z) * extAlpha;
+        targetAnim = last.animation;
       }
     }
 
-    const meshX = groupRef.current.position.x;
-    const meshZ = groupRef.current.position.z;
+    // ─── Step 3: Apply position — direct assignment for frame-perfect rendering
+    if (!hasInitializedPrevVisual.current) {
+      groupRef.current.position.set(targetX, targetY, targetZ);
+      prevVisualPos.current[0] = targetX;
+      prevVisualPos.current[1] = targetZ;
+      hasInitializedPrevVisual.current = true;
+    } else {
+      groupRef.current.position.set(targetX, targetY, targetZ);
+    }
 
-    const dx = x - meshX;
-    const dz = z - meshZ;
-    const distToTargetSq = dx * dx + dz * dz;
-    const distToTarget = Math.sqrt(distToTargetSq);
+    // ─── Step 4: Measure visual speed AFTER position.set() ───────────────────
+    const currentMeshX = groupRef.current.position.x;
+    const currentMeshZ = groupRef.current.position.z;
+    const visualDx = currentMeshX - prevVisualPos.current[0];
+    const visualDz = currentMeshZ - prevVisualPos.current[1];
+    const visualDistSq = visualDx * visualDx + visualDz * visualDz;
+    const visualDistance = visualDistSq > 0.000001 ? Math.sqrt(visualDistSq) : 0;
+
+    monsterVisualPositions.set(data.id, { x: currentMeshX, z: currentMeshZ });
+    if (!(window as any).monsterVisualPositions) {
+      (window as any).monsterVisualPositions = monsterVisualPositions;
+    }
+
+    prevVisualPos.current[0] = currentMeshX;
+    prevVisualPos.current[1] = currentMeshZ;
+
+    const currentSpeed = visualDistance / Math.max(0.0001, delta);
+    smoothedSpeed.current += (currentSpeed - smoothedSpeed.current) * Math.min(1, 10.0 * delta);
+
+    // isMoving: based on visual frame-delta displacement (not raw server coord diff)
+    isMoving.current = visualDistSq > 0.0001;
 
     // ─── Resolve target position for attack/rotation ──────────────────────────
     let targetPosX = 0, targetPosZ = 0, hasTarget = false;
@@ -310,13 +338,12 @@ export const RemoteMonsterInstance = ({
 
     let isWithinAttackRange = false;
     if (hasTarget) {
-      const tDx = targetPosX - meshX;
-      const tDz = targetPosZ - meshZ;
+      const tDx = targetPosX - currentMeshX;
+      const tDz = targetPosZ - currentMeshZ;
       isWithinAttackRange = (tDx * tDx + tDz * tDz) <= (isBoss ? 4.5 * 4.5 : 3.5 * 3.5);
     }
 
     const serverAnim = (targetAnim || "").toLowerCase();
-    isMoving.current = distToTarget > 0.15;
 
     // ─── Determine desired animation state ───────────────────────────────────
     let desiredState = "idle";
@@ -332,34 +359,6 @@ export const RemoteMonsterInstance = ({
       desiredState = "walk";
     }
 
-    // ─── Highly Responsive Lerp Interpolation ───────────────────
-    if (!hasInitializedPrevVisual.current || distToTarget > 4.0) {
-      groupRef.current.position.set(targetX, targetY, targetZ);
-      prevVisualPos.current[0] = targetX;
-      prevVisualPos.current[1] = targetZ;
-      hasInitializedPrevVisual.current = true;
-    } else {
-      groupRef.current.position.set(targetX, targetY, targetZ);
-    }
-
-    const currentMeshX = groupRef.current.position.x;
-    const currentMeshZ = groupRef.current.position.z;
-    const visualDx = currentMeshX - prevVisualPos.current[0];
-    const visualDz = currentMeshZ - prevVisualPos.current[1];
-    const visualDistSq = visualDx * visualDx + visualDz * visualDz;
-    const visualDistance = visualDistSq > 0.000001 ? Math.sqrt(visualDistSq) : 0;
-
-    monsterVisualPositions.set(data.id, { x: currentMeshX, z: currentMeshZ });
-    if (!(window as any).monsterVisualPositions) {
-      (window as any).monsterVisualPositions = monsterVisualPositions;
-    }
-
-    prevVisualPos.current[0] = currentMeshX;
-    prevVisualPos.current[1] = currentMeshZ;
-
-    const currentSpeed = visualDistance / Math.max(0.0001, delta);
-    smoothedSpeed.current += (currentSpeed - smoothedSpeed.current) * Math.min(1, 10.0 * delta);
-
     // ─── Rotation: face target or movement direction ──────────────────────────
     let targetAngle: number | null = null;
     if (serverAnim === "attack" || (isWithinAttackRange && data.target_player_id)) {
@@ -373,8 +372,9 @@ export const RemoteMonsterInstance = ({
     if (targetAngle !== null) {
       let diff = targetAngle - groupRef.current.rotation.y;
       while (diff < -Math.PI) diff += Math.PI * 2;
-      while (diff > Math.PI)  diff -= Math.PI * 2;
-      groupRef.current.rotation.y += diff * Math.min(1, 24.0 * delta);
+      while (diff >  Math.PI) diff -= Math.PI * 2;
+      // Rotation lerp is intentional — smooth facing looks more natural than direct-set
+      groupRef.current.rotation.y += diff * Math.min(1, 20.0 * delta);
     }
 
     // ─── Animation State Machine (JIT clip name cache initialization) ──────────

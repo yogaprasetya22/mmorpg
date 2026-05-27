@@ -71,8 +71,13 @@ const _fwdVec     = new THREE.Vector3();
 const _fwdAxis        = new THREE.Vector3(0, 0, 1);
 const _tempFwd        = new THREE.Vector3();
 const _tempFwd2       = new THREE.Vector3();
-const _velVec         = new THREE.Vector3();
 const _shoulderOffsetVec = new THREE.Vector3();
+
+// Snappy Jump Gating Math Objects
+const _velVec          = new THREE.Vector3();
+const _downRayOrigin   = new THREE.Vector3();
+const _downRayDir      = new THREE.Vector3(0, -1, 0);
+const _downRaycaster   = new THREE.Raycaster();
 
 
 // ─── ECS BUFFERS (TypedArrays — same-frame, no GC) ───────────────────────────
@@ -170,6 +175,9 @@ export const PlayerController = ({
   const syncAccumulator = useRef(0);
   const lastHpRef = useRef(1000);
   const lastNearestTargetId = useRef<string>("");
+  // Spawn stabilizer: prevent physics from pulling player through un-loaded ground
+  const spawnTime = useRef(performance.now());
+  const spawnStabilized = useRef(false);
 
   // ─── ASSET LOADING ────────────────────────────────────────────────────────
   const { scene, animations } = useGLTF(modelPath, true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
@@ -286,6 +294,23 @@ export const PlayerController = ({
 
   // ─── SINGLE USEFRAME: Camera + Auto-Aim Combat (priority 1 = runs AFTER physics) ──
   useFrame((_, delta) => {
+    // ─── SPAWN STABILIZATION: Hold player still until ground colliders are registered ───
+    if (!spawnStabilized.current) {
+      const elapsed = performance.now() - spawnTime.current;
+      if (elapsed < 1500) {
+        // For the first 1.5s, freeze velocity so physics can't pull us through un-loaded ground
+        if (ecctrlRef.current) {
+          ecctrlRef.current.resetLinVel();
+          // Keep at spawn height until BVH colliders register
+          if (ecctrlRef.current.group.position.y < 20) {
+            ecctrlRef.current.group.position.y = 25;
+          }
+        }
+        return; // Skip entire frame update — no movement, no camera, no combat
+      }
+      spawnStabilized.current = true;
+    }
+
     // ─── CHECK DEATH BLOCK & RESURRECTION TELEPORT ───
     const currentHp = playerStats && typeof playerStats.hp !== 'undefined' ? playerStats.hp : 1000;
 
@@ -366,23 +391,13 @@ export const PlayerController = ({
       }
     } else {
       // Failsafe: Snapping player back up if they fall below the sculpted ground level
-      if (_charPos.y < groundH - 12.0) {
+      if (_charPos.y < groundH - 3.0) {
         if (ecctrlRef.current) {
-          // Give BVHEcctrl float spring enough clearance to settle (avoid re-clipping)
+          // Aggressive snap-back: tighter threshold prevents deep fall-through
           ecctrlRef.current.group.position.y = groundH + 5.0;
           ecctrlRef.current.resetLinVel();
           _charPos.y = groundH + 5.0;
           console.warn("⚠️ Player fell through map! Snapped back to ground height:", groundH + 5.0);
-        }
-      } else if (_charPos.y < groundH - 0.05) {
-        // Real-time anti-penetration: Push player up to terrain surface immediately if they clip
-        if (ecctrlRef.current) {
-          ecctrlRef.current.group.position.y = groundH;
-          _charPos.y = groundH;
-          if (ecctrlRef.current.setLinVel) {
-            const currentVel = characterStatus.linvel;
-            ecctrlRef.current.setLinVel(_velVec.set(currentVel.x, Math.max(0, currentVel.y), currentVel.z));
-          }
         }
       }
     }
@@ -594,7 +609,9 @@ export const PlayerController = ({
     }
     lastNearestTargetId.current = nearestTarget ? nearestTarget.id : "";
 
-    const keys = getKeys();
+    const isChatFocus = document.activeElement && 
+      (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+    const keys = isChatFocus ? {} : getKeys();
     const isMovingInput = keys.forward || keys.backward || keys.leftward || keys.rightward;
     const isAttackInput = keys.action1 || (window as any).hasAttackIntent;
     if ((window as any).hasAttackIntent) {
@@ -1052,6 +1069,45 @@ export const PlayerController = ({
     if (charState[0] === 0) {
       // == STATE: NORMAL ==
 
+      // ─── SNAPPY JUMP GATE FOR GLB STAIRS & INCLINED MOUNTAINS ──────────────
+      const jumpKeys = isChatFocus ? {} : getKeys();
+      if (jumpKeys.jump && ecctrlRef.current) {
+        // If BVHEcctrl is grounded, we let it jump.
+        // If going uphill, BVHEcctrl's internal grounding might fail because of collision push.
+        // We override this by performing a downward raycast against all colliders (terrain + GLBs).
+        let canJumpOverride = characterStatus.isOnGround;
+
+        if (!canJumpOverride) {
+          _downRayOrigin.copy(_charPos);
+          _downRayOrigin.y += 0.5; // offset slightly above feet inside the hips capsule
+          _downRaycaster.set(_downRayOrigin, _downRayDir);
+          _downRaycaster.far = 1.6; // 0.5 hip offset + 1.1 air clearance
+
+          const allColliders = (window as any).globalColliders || [];
+          const hits = _downRaycaster.intersectObjects(allColliders, false);
+          if (hits.length > 0) {
+            canJumpOverride = true;
+          }
+        }
+
+        if (canJumpOverride) {
+          const now = performance.now();
+          if (typeof (window as any).lastJumpTime === 'undefined') {
+            (window as any).lastJumpTime = 0;
+          }
+          if (now - (window as any).lastJumpTime > 300) {
+            (window as any).lastJumpTime = now;
+
+            if (ecctrlRef.current.setLinVel) {
+              const currentVel = characterStatus.linvel;
+              // Snappy jump: set Y velocity to 9.5 for quick Roblox-like upwards thrust!
+              _velVec.set(currentVel.x, 9.5, currentVel.z);
+              ecctrlRef.current.setLinVel(_velVec);
+            }
+          }
+        }
+      }
+
       // ─── FRAME-LOOP ANIMATION SYNCHRONIZER ───
       // Poll animation store directly (no useEffect, no React scheduling latency).
       // This catches state changes on the SAME frame physics transitions happen.
@@ -1128,34 +1184,34 @@ export const PlayerController = ({
       <BVHEcctrl
         ref={ecctrlRef}
         paused={paused || isDead}
-        position={[0, 8, 0]}
-        /* ── Collider (Narrower radius for nimble movement and stair clearance) ── */
-        colliderCapsuleArgs={[0.3, 1.2, 4, 8]}
-        /* ── Float / Ground Detection (Calibrated parameters for smooth stair climbing & stable jumping) ── */
+        position={[0, 25, 0]}
+        /* ── Collider: Slim capsule for nimble stair/slope clearance ── */
+        colliderCapsuleArgs={[0.28, 1.1, 4, 8]}
+        /* ── Float / Ground Detection: Tuned for buttery smooth stair climbing and landing ── */
         floatCheckType="SHAPECAST"
-        floatHeight={0.3}
-        floatPullBackHeight={0.4}
-        floatSensorRadius={0.25}
-        floatSpringK={500}
-        floatDampingC={32}
+        floatHeight={0.35}
+        floatPullBackHeight={0.5}
+        floatSensorRadius={0.32}
+        floatSpringK={220}
+        floatDampingC={40}
         /* ── Movement ── */
         maxWalkSpeed={3.5}
         maxRunSpeed={6.5}
-        acceleration={35}
-        deceleration={25}
-        turnSpeed={20}
-        /* ── Jump / Gravity ── */
-        jumpVel={5}
-        gravity={9.81}
-        fallGravityFactor={3.5}
-        maxFallSpeed={40}
+        acceleration={45}
+        deceleration={35}
+        turnSpeed={22}
+        /* ── Jump / Gravity: Snappy yet smooth Roblox-like jump physics ── */
+        jumpVel={9.5}
+        gravity={24.0}
+        fallGravityFactor={1.8}
+        maxFallSpeed={45}
         mass={1}
-        /* ── Slope (Increased threshold to allow climbing steep stair models) ── */
-        maxSlope={1.2}
-        /* ── Collision ── */
-        collisionCheckIteration={2}
-        collisionPushBackVelocity={1.2}
-        collisionPushBackDamping={0.08}
+        /* ── Slope: Increased limit to recognize steep steps/ramps as grounds for jumping ── */
+        maxSlope={1.45}
+        /* ── Collision: High iteration precision to prevent clipping stair corners ── */
+        collisionCheckIteration={3}
+        collisionPushBackVelocity={1.0}
+        collisionPushBackDamping={0.06}
         collisionPushBackThreshold={0.01}
       >
         <group ref={characterRef} dispose={null} position={[0, -1.3, 0]}>

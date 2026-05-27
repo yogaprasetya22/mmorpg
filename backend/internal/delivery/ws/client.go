@@ -70,6 +70,7 @@ type WSIncomingMessage struct {
 	PlayerItemID string `json:"playerItemId" msgpack:"playerItemId"`
 	SkillID      string `json:"skillId" msgpack:"skillId"`
 	NewClass     string `json:"newClass" msgpack:"newClass"`
+	Msg          string `json:"msg" msgpack:"msg"`
 }
 
 func (c *Client) ReadPump() {
@@ -126,6 +127,8 @@ func (c *Client) ReadPump() {
 			c.Hub.gameUsecase.CastPlayerSkill(c.PlayerID, msg.SkillID, msg.TargetID)
 		case "change_class":
 			c.Hub.gameUsecase.ChangeClass(c.PlayerID, msg.NewClass)
+		case "chat":
+			c.Hub.BroadcastChatMessage(c.Username, msg.Msg)
 		default:
 			if msg.Action == "" {
 				c.Hub.gameUsecase.UpdatePlayerMovement(c.PlayerID, float32(msg.X), float32(msg.Y), float32(msg.Z), float32(msg.Rotation), msg.Animation, msg.TargetID)
@@ -150,22 +153,46 @@ func (c *Client) WritePump() {
 				return
 			}
 
-			// Coalesce: if multiple frames queued, send ONLY the latest state.
-			// This is safe for game state (newer always supersedes older).
-			// Prevents WritePump from falling behind under burst conditions.
 			latestMessage := message
-			n := len(c.Send)
-			for i := 0; i < n; i++ {
-				latestMessage = <-c.Send
+			isChat := len(latestMessage) > 0 && latestMessage[0] == '{'
+			if isChat {
+				w, err := c.Conn.NextWriter(websocket.TextMessage)
+				if err != nil {
+					return
+				}
+				_, _ = w.Write(latestMessage)
+				_ = w.Close()
+				continue
 			}
 
-			// Write as BinaryMessage (MessagePack binary)
-			w, err := c.Conn.NextWriter(websocket.BinaryMessage)
+			// Coalesce binary game states without losing chat messages
+			n := len(c.Send)
+			for i := 0; i < n; i++ {
+				peekMsg := <-c.Send
+				if len(peekMsg) > 0 && peekMsg[0] == '{' {
+					// Found a chat message in queue. Write current game state first.
+					w, err := c.Conn.NextWriter(websocket.BinaryMessage)
+					if err == nil {
+						_, _ = w.Write(latestMessage)
+						_ = w.Close()
+					}
+					// Set latestMessage to the chat message and stop coalescing
+					latestMessage = peekMsg
+					break
+				} else {
+					latestMessage = peekMsg
+				}
+			}
+
+			var msgType = websocket.BinaryMessage
+			if len(latestMessage) > 0 && latestMessage[0] == '{' {
+				msgType = websocket.TextMessage
+			}
+			w, err := c.Conn.NextWriter(msgType)
 			if err != nil {
 				return
 			}
 			_, _ = w.Write(latestMessage)
-
 			if err := w.Close(); err != nil {
 				return
 			}
