@@ -60,10 +60,10 @@ const AssetCard = React.memo(({ asset, isActive, onClick }: { asset: any, isActi
           useGLTF.preload(asset.path);
         }
       }}
-      className={`group relative flex flex-col items-center gap-1 p-1 rounded-lg transition-all duration-200 border ${
+      className={`group relative flex flex-col items-center gap-1.5 p-1.5 rounded-xl transition-all duration-300 border ${
         isActive 
-          ? 'bg-blue-600/30 border-blue-500 shadow shadow-blue-500/10 scale-[0.98]' 
-          : 'bg-zinc-900/50 border-zinc-800 hover:bg-zinc-800/40 hover:border-zinc-700'
+          ? 'bg-indigo-650/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.55)] scale-[0.96] ring-2 ring-indigo-550/20 text-white font-extrabold' 
+          : 'bg-zinc-900/40 border-zinc-850 hover:bg-zinc-800/40 hover:border-zinc-700/60'
       }`}
       style={{ contentVisibility: 'auto', containIntrinsicSize: '0 54px' }}
     >
@@ -71,9 +71,9 @@ const AssetCard = React.memo(({ asset, isActive, onClick }: { asset: any, isActi
         <>
           <div className="aspect-square w-full bg-zinc-950 rounded flex items-center justify-center relative shadow-inner">
             {getThumbnailContent()}
-            <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            <div className="absolute inset-0 bg-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
           </div>
-          <span className={`text-[8px] font-mono tracking-tighter truncate w-full px-0.5 text-center ${isActive ? 'text-white font-bold' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
+          <span className={`text-[8px] font-mono tracking-tighter truncate w-full px-0.5 text-center ${isActive ? 'text-white font-extrabold' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
             {asset.name}
           </span>
         </>
@@ -82,7 +82,7 @@ const AssetCard = React.memo(({ asset, isActive, onClick }: { asset: any, isActi
       )}
     </button>
   );
-}, (prev, next) => prev.asset.id === next.asset.id && prev.isActive === next.isActive);
+}, (prev, next) => (prev.asset.path || prev.asset.id) === (next.asset.path || next.asset.id) && prev.isActive === next.isActive);
 
 AssetCard.displayName = 'AssetCard';
 

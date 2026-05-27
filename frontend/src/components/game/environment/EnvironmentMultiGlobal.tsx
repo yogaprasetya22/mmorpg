@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useStore } from '@/src/state/useStore';
+import { useEditorStore } from '@/src/state/useEditorStore';
 import { StormEnvironment } from './StormEnvironment';
 import { WhimsicalDiorama } from './WhimsicalDiorama';
 
@@ -12,7 +12,7 @@ interface EnvironmentMultiGlobalProps {
 }
 
 export const EnvironmentMultiGlobal = ({ settingsRef, debug = false, onReady }: EnvironmentMultiGlobalProps) => {
-  const environment = useStore((s) => s.environment);
+  const environment = useEditorStore((s) => s.environment);
 
   return environment === 'DIORAMA' ? (
     <WhimsicalDiorama

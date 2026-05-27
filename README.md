@@ -167,3 +167,8 @@ If you are developing this codebase alongside an AI assistant, ensure that the a
 > **DONT-TOUCH ZONE (ZONA SUCI PERFORMA):**
 > Ada 5 komponen kritis arsitektur (termasuk ground physics `SHAPECAST`, decoding MsgPack di main-thread, lock-free Go FSM, 2D Spatial Hash Grid, dan 20Hz WS player send rate) yang **TIDAK BOLEH** diubah demi kestabilan 60 FPS. Panduan lengkap larangan ini wajib dibaca di **[SKILL.md (Bab 10)](SKILL.md#10-dont-touch-zone-sistem-kritis-yang-haram-disenggol)** sebelum menyentuh kode!
 
+> [!CAUTION]
+> **REFERENSI LENGKAP ZONA KRITIS:**
+> Lihat **[DONT_TOUCH.md](DONT_TOUCH.md)** untuk dokumentasi komprehensif mencakup **16 area kritis** (tidak hanya 5) yang tidak boleh diubah — termasuk Three.js patches, ErrorBoundary, LOD thresholds, Object Pools, dan quick-reference tabel error → penyebab.
+
+

@@ -33,11 +33,15 @@ export const FULL_MATERIAL_LIBRARY: MaterialInfo[] = [
     name: "Texture 1",
     diffuse: `${API_BASE_URL}/assets-model/Textures/Textures/texture_1/textures/marble_cliff_03_diff_1k.jpg`,
     displacement: `${API_BASE_URL}/assets-model/Textures/Textures/texture_1/textures/marble_cliff_03_disp_1k.png`,
+    normal: `${API_BASE_URL}/assets-model/Textures/Textures/texture_1/textures/marble_cliff_03_nor_gl_1k.png`,
+    roughness: `${API_BASE_URL}/assets-model/Textures/Textures/texture_1/textures/marble_cliff_03_rough_1k.png`,
   },
   {
     id: "texture_2",
     name: "Texture 2",
     diffuse: `${API_BASE_URL}/assets-model/Textures/Textures/texture_2/textures/rocky_terrain_02_diff_1k.jpg`,
     displacement: `${API_BASE_URL}/assets-model/Textures/Textures/texture_2/textures/rocky_terrain_02_disp_1k.png`,
+    normal: `${API_BASE_URL}/assets-model/Textures/Textures/texture_2/textures/rocky_terrain_02_nor_gl_1k.png`,
+    roughness: `${API_BASE_URL}/assets-model/Textures/Textures/texture_2/textures/rocky_terrain_02_rough_1k.png`,
   },
 ];

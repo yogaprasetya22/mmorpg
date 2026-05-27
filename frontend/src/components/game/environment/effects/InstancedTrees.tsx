@@ -63,14 +63,14 @@ export const InstancedTrees = ({ mode, baseDistance = 24 }: { mode: 'DIORAMA' | 
             // Avoid path
             if (Math.abs(x) < 15 && Math.abs(z) < 60) continue;
 
-            // CRITICAL FIX: Match PlaneGeometry -z rotation mapping
-            const elevation = getTerrainElevation(x, -z, mode, baseDistance);
+            // Match the corrected unmirrored terrain mesh coordinates
+            const elevation = getTerrainElevation(x, z, mode, baseDistance);
             
             // Do not place trees on mountains!
             if (elevation > 0.5) continue;
             
-            // Terrain mesh base position depending on mode
-            const baseHeight = mode === 'DIORAMA' ? -0.6 : -0.3;
+            // Terrain mesh base position is now at [0, 0, 0] for all modes
+            const baseHeight = 0.0;
 
             dummy.position.set(x, elevation + baseHeight, z);
             dummy.rotation.y = rnd() * Math.PI;

@@ -1,6 +1,6 @@
 'use client';
 
-import { Grid, Mountain, Paintbrush, Database, SunMoon, Globe } from 'lucide-react';
+import { Database, SunMoon, Globe, Trash } from 'lucide-react';
 import { useEditorStore } from '@/src/state/useEditorStore';
 
 export const MapSettingsModule = () => {
@@ -9,18 +9,13 @@ export const MapSettingsModule = () => {
     setSelectedMapId,
     mapList,
     saveToDatabase,
-    gridSize,
-    setGridSize,
-    terrainConfig,
-    setTerrainConfig,
-    brushSize,
-    setBrushSize,
     sky,
     setSky,
     environment,
     setEnvironment,
     createNewMap,
     deleteActiveMap,
+    deleteMap,
   } = useEditorStore();
 
   return (
@@ -44,17 +39,59 @@ export const MapSettingsModule = () => {
             ))}
             {mapList.length === 0 && <option value="Starter Zone">Starter Zone</option>}
           </select>
-          {selectedMapId !== "Starter Zone" && (
+          {mapList.length > 1 && (
             <button
               onClick={() => deleteActiveMap()}
               title="Delete Active Workspace"
-              className="px-2.5 bg-rose-600/10 hover:bg-rose-600 border border-rose-500/20 text-rose-455 hover:text-white rounded-md text-[9px] font-extrabold transition-all uppercase tracking-wider flex items-center justify-center cursor-pointer select-none"
+              className="px-2.5 bg-rose-600/10 hover:bg-rose-600 border border-rose-500/20 text-rose-400 hover:text-white rounded-md text-[9px] font-extrabold transition-all uppercase tracking-wider flex items-center justify-center cursor-pointer select-none"
             >
               Delete
             </button>
           )}
         </div>
       </div>
+
+      {/* Saved Workspaces List */}
+      {mapList.length > 1 && (
+        <div className="flex flex-col gap-1 pt-1.5">
+          <span className="text-[8px] font-extrabold text-zinc-500 uppercase tracking-widest pl-0.5">Saved Maps List</span>
+          <div className="flex flex-col gap-1 max-h-24 overflow-y-auto custom-scrollbar bg-zinc-950/20 p-1.5 rounded-lg border border-zinc-900/60">
+            {mapList.map((m: any) => {
+              const isActive = m.id === selectedMapId;
+              return (
+                <div 
+                  key={m.id}
+                  className={`flex items-center justify-between px-2 py-1 rounded border text-[9px] transition-all font-mono ${
+                    isActive 
+                      ? 'bg-blue-950/40 border-blue-500/30 text-zinc-100 shadow-sm' 
+                      : 'bg-zinc-900/20 border-zinc-900/40 hover:bg-zinc-850/30 text-zinc-450'
+                  }`}
+                >
+                  <button 
+                    onClick={() => setSelectedMapId(m.id)}
+                    className="flex-1 text-left font-semibold truncate outline-none cursor-pointer"
+                  >
+                    {m.name} {isActive && <span className="text-[7px] text-blue-400 font-bold ml-1 font-sans uppercase">Active</span>}
+                  </button>
+                  
+                  {mapList.length > 1 && (
+                    <button 
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        await deleteMap(m.id);
+                      }}
+                      title="Delete Map"
+                      className="w-4 h-4 flex items-center justify-center rounded-md hover:bg-rose-950/50 text-zinc-550 hover:text-rose-400 transition-colors cursor-pointer select-none"
+                    >
+                      <Trash className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Create New Map Inline Input */}
       <div className="flex flex-col gap-1 border-t border-zinc-900/40 pt-2.5">
@@ -122,62 +159,6 @@ export const MapSettingsModule = () => {
           <option value="STORM" className="bg-zinc-950">Open World (Storm)</option>
           <option value="DIORAMA" className="bg-zinc-950">Whimsical Diorama</option>
         </select>
-      </div>
-
-      {/* ─── CUSTOM SLIDERS ─── */}
-      <div className="flex flex-col gap-3 pt-2.5 border-t border-zinc-900/40">
-        
-        {/* Slider 1: Grid Snapping */}
-        <div className="flex flex-col gap-1">
-          <div className="flex justify-between items-center text-[8.5px] font-bold text-zinc-500">
-            <span className="uppercase tracking-widest flex items-center gap-1.5">
-              <Grid className="w-3 h-3 text-zinc-400" />
-              Grid Snapping
-            </span>
-            <span className="text-blue-450 font-extrabold">{gridSize}m</span>
-          </div>
-          <input 
-            type="range" min="0.1" max="5" step="0.1" 
-            value={gridSize} 
-            onChange={(e) => setGridSize(parseFloat(e.target.value))}
-            className="w-full accent-blue-500 hover:accent-blue-400 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
-          />
-        </div>
-
-        {/* Slider 2: Peak Height */}
-        <div className="flex flex-col gap-1">
-          <div className="flex justify-between items-center text-[8.5px] font-bold text-zinc-500">
-            <span className="uppercase tracking-widest flex items-center gap-1.5">
-              <Mountain className="w-3 h-3 text-zinc-400" />
-              Peak Heights
-            </span>
-            <span className="text-blue-450 font-extrabold">{terrainConfig.height.toFixed(0)}m</span>
-          </div>
-          <input 
-            type="range" min="0" max="100" step="1" 
-            value={terrainConfig.height} 
-            onChange={(e) => setTerrainConfig({ height: parseFloat(e.target.value) })}
-            className="w-full accent-blue-500 hover:accent-blue-400 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
-          />
-        </div>
-
-        {/* Slider 3: Brush Radius */}
-        <div className="flex flex-col gap-1">
-          <div className="flex justify-between items-center text-[8.5px] font-bold text-zinc-500">
-            <span className="uppercase tracking-widest flex items-center gap-1.5">
-              <Paintbrush className="w-3 h-3 text-zinc-400" />
-              Brush Radius
-            </span>
-            <span className="text-blue-450 font-extrabold">{brushSize}px</span>
-          </div>
-          <input 
-            type="range" min="1" max="150" step="1" 
-            value={brushSize} 
-            onChange={(e) => setBrushSize(parseInt(e.target.value))}
-            className="w-full accent-blue-500 hover:accent-blue-400 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
-          />
-        </div>
-
       </div>
 
       {/* Pill Blue Save Button */}

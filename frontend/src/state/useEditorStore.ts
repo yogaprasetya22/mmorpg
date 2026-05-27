@@ -55,6 +55,7 @@ export interface EditorState {
   fetchMapList: () => Promise<void>;
   createNewMap: (mapId: string) => Promise<void>;
   deleteActiveMap: () => Promise<void>;
+  deleteMap: (mapId: string) => Promise<void>;
 
   // Dynamic Asset States
   dynamicAssets: AssetInfo[];
@@ -134,9 +135,67 @@ export interface EditorState {
   setVegetationDensity: (density: number) => void;
   generateVegetation: () => void;
   clearVegetation: () => void;
+
+  cameraFocusTarget: [number, number, number] | null;
+  setCameraFocusTarget: (target: [number, number, number] | null) => void;
+  vegetationBrushActive: boolean;
+  setVegetationBrushActive: (active: boolean) => void;
+
+  isSaving: boolean;
+  setIsSaving: (saving: boolean) => void;
+
+  // Custom Paint Blueprint Library (Paralives Feature)
+  savedPaintBlueprints: CustomPaintBlueprint[];
+  activePaintBlueprintId: string | null;
+  createPaintBlueprint: (name: string, config: Omit<CustomPaintBlueprint, 'id' | 'name'>) => void;
+  deletePaintBlueprint: (id: string) => void;
+  applyPaintBlueprint: (id: string) => void;
+}
+
+export interface CustomPaintBlueprint {
+  id: string;
+  name: string;
+  maskType: 'softCircle' | 'hardCircle' | 'star' | 'hexagon' | 'starOutline' | 'square';
+  textureId: string | null;
+  brushColor: string;
+  defaultSize: number;
+  defaultIntensity: number;
 }
 
 export const ASSET_LIBRARY = FULL_ASSET_LIBRARY;
+
+/**
+ * Validates that a canvas data string is a proper base64 data URL.
+ * Rejects JSON objects that were accidentally stored in the old layer-based format.
+ * This prevents THREE.js from using an invalid JSON string as a URL path (causing 404 errors).
+ */
+const sanitizeCanvasData = (data: string | null | undefined): string | null => {
+  if (!data || typeof data !== 'string') return null;
+  const trimmed = data.trim();
+  
+  if (trimmed.startsWith('data:image/')) {
+    return trimmed;
+  }
+  
+  // Try to recover the composite image if the data is stored in the old JSON format
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object') {
+        const composite = parsed.composite;
+        if (typeof composite === 'string' && composite.startsWith('data:image/')) {
+          console.log('[EditorStore] Successfully recovered composite canvas data from legacy JSON format.');
+          return composite;
+        }
+      }
+    } catch (e) {
+      // Ignored, proceed to fallback warning
+    }
+  }
+
+  console.warn('[EditorStore] Invalid canvas data format detected and discarded (expected data URL, got:', trimmed.slice(0, 80), '...). Clearing.');
+  return null;
+};
 
 let saveTimeout: any = null;
 const debouncedSave = () => {
@@ -159,7 +218,9 @@ const debouncedSave = () => {
         sunAngle: state.sunAngle,
         fogDensity: state.fogDensity,
         lastUsedScales: state.lastUsedScales,
-        lastUsedRotations: state.lastUsedRotations
+        lastUsedRotations: state.lastUsedRotations,
+        brushTextureId: state.brushTextureId,
+        savedPaintBlueprints: state.savedPaintBlueprints
       }));
       if (state.paintData) {
         localStorage.setItem('world_editor_paint', state.paintData);
@@ -176,6 +237,8 @@ const debouncedSave = () => {
 export const useEditorStore = create<EditorState>((set, get) => ({
   isEditorOpen: false,
   setIsEditorOpen: (open) => set({ isEditorOpen: open }),
+  isSaving: false,
+  setIsSaving: (saving) => set({ isSaving: saving }),
 
   lastUsedScales: {},
   setLastUsedScale: (assetPath, scale) => set((state) => {
@@ -314,7 +377,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           sunAngle: parsed.sunAngle !== undefined ? parsed.sunAngle : 45,
           fogDensity: parsed.fogDensity !== undefined ? parsed.fogDensity : 0.002,
           lastUsedScales: parsed.lastUsedScales || {},
-          lastUsedRotations: parsed.lastUsedRotations || {}
+          lastUsedRotations: parsed.lastUsedRotations || {},
+          brushTextureId: parsed.brushTextureId || null,
+          savedPaintBlueprints: parsed.savedPaintBlueprints || []
         });
       } catch (e) {}
     }
@@ -352,9 +417,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       }
     }
 
-    const paint = localStorage.getItem('world_editor_paint');
+    const paint = sanitizeCanvasData(localStorage.getItem('world_editor_paint'));
     if (paint) set({ paintData: paint });
-    const sculpt = localStorage.getItem('world_editor_sculpt');
+    const sculpt = sanitizeCanvasData(localStorage.getItem('world_editor_sculpt'));
     if (sculpt) set({ sculptData: sculpt });
   },
   
@@ -441,13 +506,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       console.warn("Failed to sync global activeMapId to database:", e);
     }
   },
-  deleteActiveMap: async () => {
-    const mapId = get().selectedMapId;
-    if (mapId === "Starter Zone") {
-      alert("Starter Zone adalah peta sistem bawaan dan tidak dapat dihapus!");
-      return;
-    }
-    
+  deleteMap: async (mapId: string) => {
     if (!confirm(`Apakah Anda yakin ingin menghapus peta "${mapId}" secara permanen? Tindakan ini tidak dapat dibatalkan.`)) {
       return;
     }
@@ -459,18 +518,28 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
       if (res.ok) {
         alert("Peta berhasil dihapus!");
-        // Reset active map selection back to Starter Zone
-        set({ selectedMapId: "Starter Zone" });
-        await get().loadFromDatabase();
+        
+        // Fetch map list first to see what's remaining
         await get().fetchMapList();
+        
+        // Reset active map selection back to first available map and sync with backend
+        if (get().selectedMapId === mapId) {
+          const remaining = get().mapList;
+          if (remaining.length > 0) {
+            await get().setSelectedMapId(remaining[0].id);
+          }
+        }
       } else {
         const data = await res.json();
         alert(`Gagal menghapus peta: ${data.error || "Unknown Error"}`);
       }
     } catch (e) {
-      console.error("Error deleting active map:", e);
+      console.error("Error deleting map:", e);
       alert("Terjadi kesalahan saat menghapus peta!");
     }
+  },
+  deleteActiveMap: async () => {
+    await get().deleteMap(get().selectedMapId);
   },
 
   dynamicAssets: [],
@@ -508,7 +577,26 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   saveToDatabase: async () => {
-    const { selectedMapId, items, gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment, paintData, sculptData, lightIntensity, ambientIntensity, sunAngle, fogDensity } = get();
+    const { selectedMapId, items, gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment, paintData, sculptData, lightIntensity, ambientIntensity, sunAngle, fogDensity, brushTextureId } = get();
+    
+    // Map IDs to specific high-quality PBR PNG filenames for database compatibility
+    let savedMaterialId = terrainMaterialId;
+    if (terrainMaterialId === 'texture_2') {
+      savedMaterialId = 'rocky_terrain_02_nor_gl_1k.png';
+    } else if (terrainMaterialId === 'texture_1') {
+      savedMaterialId = 'marble_cliff_03_nor_gl_1k.png';
+    }
+
+    let savedBrushTextureId = brushTextureId;
+    if (brushTextureId === 'texture_2') {
+      savedBrushTextureId = 'rocky_terrain_02_nor_gl_1k.png';
+    } else if (brushTextureId === 'texture_1') {
+      savedBrushTextureId = 'marble_cliff_03_nor_gl_1k.png';
+    }
+
+    // Set saving active to display the transparent spinner overlay
+    set({ isSaving: true });
+
     // Sanitize item paths to ensure we don't save full URL prefixes to database redundantly
     const sanitizedToSave = items.map(item => {
       let path = item.path;
@@ -524,7 +612,21 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const payload = {
       map_id: selectedMapId,
       items: sanitizedToSave,
-      settings: { gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment, lightIntensity, ambientIntensity, sunAngle, fogDensity },
+      settings: { 
+        gridSize, 
+        gridEnabled, 
+        terrainConfig, 
+        terrainMaterialId: savedMaterialId, 
+        terrainColor, 
+        sky, 
+        environment, 
+        lightIntensity, 
+        ambientIntensity, 
+        sunAngle, 
+        fogDensity,
+        brushTextureId: savedBrushTextureId,
+        savedPaintBlueprints: get().savedPaintBlueprints
+      },
       paintData,
       sculptData
     };
@@ -541,6 +643,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       }
     } catch (e) {
       console.error("Failed to sync map to database", e);
+    } finally {
+      // Deactivate saving overlay after transmission completes
+      setTimeout(() => {
+        set({ isSaving: false });
+      }, 500); // smooth UX fadeout
     }
   },
 
@@ -562,6 +669,21 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const loadedEnv = data.settings?.environment ?? 'STORM';
         useStore.getState().setEnvironment(loadedEnv as any);
 
+        // Reconstruct friendly material IDs from backend PBR EXR paths
+        let loadedMaterialId = data.settings?.terrainMaterialId ?? null;
+        if (loadedMaterialId && (loadedMaterialId.includes('rocky_terrain') || loadedMaterialId === 'texture_2')) {
+          loadedMaterialId = 'texture_2';
+        } else if (loadedMaterialId && (loadedMaterialId.includes('marble_cliff') || loadedMaterialId === 'texture_1')) {
+          loadedMaterialId = 'texture_1';
+        }
+
+        let loadedBrushTextureId = data.settings?.brushTextureId ?? null;
+        if (loadedBrushTextureId && (loadedBrushTextureId.includes('rocky_terrain') || loadedBrushTextureId === 'texture_2')) {
+          loadedBrushTextureId = 'texture_2';
+        } else if (loadedBrushTextureId && (loadedBrushTextureId.includes('marble_cliff') || loadedBrushTextureId === 'texture_1')) {
+          loadedBrushTextureId = 'texture_1';
+        }
+
         set({ 
           items: sanitizedItems, 
           gridSize: data.settings?.gridSize ?? 1.0,
@@ -573,7 +695,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             sharpness: 2.0,
             ...(data.settings?.terrainConfig || {})
           },
-          terrainMaterialId: data.settings?.terrainMaterialId ?? null,
+          terrainMaterialId: loadedMaterialId,
           terrainColor: data.settings?.terrainColor ?? '#3d5c36',
           sky: data.settings?.sky ?? 'sunset',
           environment: loadedEnv,
@@ -581,8 +703,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           ambientIntensity: data.settings?.ambientIntensity !== undefined ? data.settings?.ambientIntensity : null,
           sunAngle: data.settings?.sunAngle !== undefined ? data.settings?.sunAngle : 45,
           fogDensity: data.settings?.fogDensity !== undefined ? data.settings?.fogDensity : 0.002,
-          paintData: data.paintData || null,
-          sculptData: data.sculptData || null,
+          paintData: sanitizeCanvasData(data.paintData) || null,
+          sculptData: sanitizeCanvasData(data.sculptData) || null,
+          brushTextureId: loadedBrushTextureId,
+          savedPaintBlueprints: data.settings?.savedPaintBlueprints || [],
           history: [sanitizedItems],
           historyIndex: 0
         });
@@ -696,6 +820,45 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   brushHoverPos: null,
   setBrushHoverPos: (brushHoverPos) => set({ brushHoverPos }),
 
+  savedPaintBlueprints: [],
+  activePaintBlueprintId: null,
+
+  createPaintBlueprint: (name, config) => {
+    const newBlueprint = {
+      ...config,
+      id: 'blueprint_' + Math.random().toString(36).substr(2, 9),
+      name
+    };
+    set((state) => {
+      const next = [...state.savedPaintBlueprints, newBlueprint];
+      return { savedPaintBlueprints: next, activePaintBlueprintId: newBlueprint.id };
+    });
+    debouncedSave();
+  },
+
+  deletePaintBlueprint: (id) => {
+    set((state) => {
+      const next = state.savedPaintBlueprints.filter(b => b.id !== id);
+      const nextActiveId = state.activePaintBlueprintId === id ? null : state.activePaintBlueprintId;
+      return { savedPaintBlueprints: next, activePaintBlueprintId: nextActiveId };
+    });
+    debouncedSave();
+  },
+
+  applyPaintBlueprint: (id) => {
+    const blueprint = get().savedPaintBlueprints.find(b => b.id === id);
+    if (blueprint) {
+      set({
+        activePaintBlueprintId: id,
+        brushMaskId: blueprint.maskType,
+        brushTextureId: blueprint.textureId,
+        brushColor: blueprint.brushColor,
+        brushSize: blueprint.defaultSize,
+        brushStrength: blueprint.defaultIntensity
+      });
+    }
+  },
+
   // Procedural Vegetation Generator States/Actions
   vegetationTheme: 'pine',
   setVegetationTheme: (theme) => {
@@ -778,7 +941,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       
       // Calculate precise elevation at (x, z) including current sculpt height!
       const terrainH = getTerrainElevation(x, z, "STORM", baseDistance, terrainConfig, false);
-      const y = terrainH - 0.3; // Align with GROUND_Y
+      const y = terrainH; // Align with GROUND_Y (now 0.0)
 
       let modelPath = config.paths[Math.floor(Math.random() * config.paths.length)];
       if (modelPath.startsWith('/')) {
@@ -812,5 +975,25 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const { items } = get();
     const filtered = items.filter(item => item.type !== 'procedural-vegetation');
     get().updateItemsWithHistory(filtered);
-  }
+  },
+
+  cameraFocusTarget: null,
+  setCameraFocusTarget: (target) => set({ cameraFocusTarget: target }),
+  vegetationBrushActive: false,
+  setVegetationBrushActive: (active) => set(() => {
+    if (active) {
+      // Deactivate normal assets carrying and normal paintMode when activating vegetation brush
+      return {
+        vegetationBrushActive: true,
+        paintMode: false,
+        activeAsset: null,
+        selectedId: null,
+        selectedIds: []
+      };
+    } else {
+      return {
+        vegetationBrushActive: false
+      };
+    }
+  })
 }));

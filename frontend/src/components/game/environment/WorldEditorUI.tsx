@@ -25,7 +25,8 @@ export const WorldEditorUI = () => {
     fetchMapList,
     fetchDynamicAssets,
     loadFromDatabase,
-    items
+    items,
+    isSaving
   } = useEditorStore();
 
   const [mounted, setMounted] = useState(false);
@@ -41,10 +42,32 @@ export const WorldEditorUI = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Sync paint mode with the active accordion section in the sidebar
+  // 1. Sync sidebar active section when selectedId changes (from clicking objects in the canvas or hierarchy tree)
+  useEffect(() => {
+    if (selectedId && selectedId !== 'terrain') {
+      if (activeSection !== 'transforms') {
+        setActiveSection('transforms');
+      }
+      setPaintMode(false);
+    } else if (selectedId === 'terrain') {
+      if (activeSection !== 'terrain') {
+        setActiveSection('terrain');
+      }
+      setPaintMode(true);
+    } else if (!selectedId) {
+      if (activeSection === 'terrain') {
+        setActiveSection(null);
+      }
+      setPaintMode(false);
+    }
+  }, [selectedId]);
+
+  // 2. Sync editor state when activeSection changes (from clicking manual accordion headers in the sidebar)
   useEffect(() => {
     if (activeSection === 'terrain') {
-      setSelectedId('terrain');
+      if (selectedId !== 'terrain') {
+        setSelectedId('terrain');
+      }
       setPaintMode(true);
     } else {
       if (selectedId === 'terrain') {
@@ -52,18 +75,7 @@ export const WorldEditorUI = () => {
       }
       setPaintMode(false);
     }
-  }, [activeSection, setPaintMode, setSelectedId]);
-
-  // Automatically expand Transforms section when a placed object is selected
-  useEffect(() => {
-    if (selectedId && selectedId !== 'terrain') {
-      setActiveSection('transforms');
-    } else if (selectedId === 'terrain') {
-      if (activeSection !== 'terrain') {
-        setActiveSection('terrain');
-      }
-    }
-  }, [selectedId, activeSection]);
+  }, [activeSection]);
 
   // Keyboard Nudge & Shortkeys Listener
   useEffect(() => {
@@ -81,8 +93,34 @@ export const WorldEditorUI = () => {
         return;
       }
 
-      const { selectedId, brushSize, setBrushSize, brushStrength, setBrushStrength } = useEditorStore.getState();
+      const { selectedId, brushSize, setBrushSize, brushStrength, setBrushStrength, setBrushMaskId } = useEditorStore.getState();
       if (selectedId === 'terrain') {
+        if (e.key === '1') {
+          setBrushMaskId('softCircle');
+          e.preventDefault();
+          return;
+        } else if (e.key === '2') {
+          setBrushMaskId('hardCircle');
+          e.preventDefault();
+          return;
+        } else if (e.key === '3') {
+          setBrushMaskId('star');
+          e.preventDefault();
+          return;
+        } else if (e.key === '4') {
+          setBrushMaskId('hexagon');
+          e.preventDefault();
+          return;
+        } else if (e.key === '5') {
+          setBrushMaskId('starOutline');
+          e.preventDefault();
+          return;
+        } else if (e.key === '6') {
+          setBrushMaskId('square');
+          e.preventDefault();
+          return;
+        }
+
         if (e.key === '[') {
           setBrushSize(Math.max(1, brushSize - 2));
           e.preventDefault();
@@ -178,6 +216,26 @@ export const WorldEditorUI = () => {
       {/* ─── MODULAR LEFT SIDEBAR DOCK (SHADCN UI SPEC) ─── */}
       {isEditorOpen && (
         <div className="world-editor-ui w-[310px] h-screen bg-zinc-950/90 border-r border-zinc-900 flex flex-col pointer-events-auto z-[9999] shadow-2xl relative overflow-hidden font-sans backdrop-blur-xl">
+          
+          {/* ─── SYNCHRONOUS DATABASE SYNC OVERLAY ─── */}
+          {isSaving && (
+            <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-md z-[10000] flex flex-col items-center justify-center animate-in fade-in duration-350">
+              <div className="relative flex items-center justify-center">
+                {/* Ring 1: Pulse Glow */}
+                <div className="absolute w-16 h-16 rounded-full border border-blue-500/20 animate-ping duration-1000" />
+                {/* Ring 2: Spinning outer border */}
+                <div className="w-12 h-12 rounded-full border-t-2 border-r-2 border-b-2 border-transparent border-t-blue-500 border-r-indigo-500 animate-spin" />
+                {/* Core Center Pulse */}
+                <div className="absolute w-3 h-3 rounded-full bg-blue-500 shadow-[0_0_12px_#3b82f6] animate-pulse" />
+              </div>
+              <span className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-zinc-300 mt-4 animate-pulse">
+                Saving Workspace
+              </span>
+              <span className="text-[7.5px] font-bold text-zinc-500 mt-1 uppercase tracking-widest">
+                Syncing with PostgreSQL...
+              </span>
+            </div>
+          )}
           
           {/* Header Branding */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-900/60 bg-zinc-950/40 flex-shrink-0">

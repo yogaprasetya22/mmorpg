@@ -58,15 +58,14 @@ export const PainterlyGrass = ({ baseDistance = 24, mode }: PainterlyGrassProps)
             // Avoid path/center
             if (Math.abs(x) < 12 && Math.abs(z) < 60) continue;
 
-            // CRITICAL FIX: PlaneGeometry uses (x, y). When rotated -90 on X, geometry.y becomes world.-z.
-            // So to match the terrain mesh elevation, we MUST sample noise at (x, -z).
-            const elevation = getTerrainElevation(x, -z, mode, baseDistance);
+            // Match the corrected unmirrored terrain mesh coordinates
+            const elevation = getTerrainElevation(x, z, mode, baseDistance);
             
             // Do not place grass on mountains!
             if (elevation > 0.5) continue;
             
-            // Terrain mesh is positioned differently depending on mode
-            const baseHeight = mode === 'DIORAMA' ? -0.6 : -0.3;
+            // Terrain mesh is now positioned at [0, 0, 0] for all modes
+            const baseHeight = 0.0;
 
             dummy.position.set(x, elevation + baseHeight, z);
             dummy.rotation.set(0, rnd() * Math.PI, 0);

@@ -29,6 +29,92 @@ import { ModularMap } from "./environment/ModularMap";
 import { SceneAnalyzer } from "./SceneAnalyzer";
 import { AdaptivePerformanceOptimizer } from "./AdaptivePerformanceOptimizer";
 
+// Monkey-patch THREE.DataTextureLoader to fix multiple bugs in Three.js core:
+// 1. If onError is undefined, it attempts to execute the local error object as a function (error(error)).
+// 2. If onError is defined, it runs it but does NOT return, causing a crash at `if ( texData.image !== undefined )` because texData is undefined.
+if (typeof window !== 'undefined' && THREE.DataTextureLoader) {
+  THREE.DataTextureLoader.prototype.load = function (url, onLoad, onProgress, onError) {
+    const scope = this;
+    const texture = new THREE.DataTexture();
+
+    const loader = new THREE.FileLoader(this.manager);
+    loader.setResponseType('arraybuffer');
+    loader.setRequestHeader(this.requestHeader);
+    loader.setPath(this.path);
+    loader.setWithCredentials(scope.withCredentials);
+
+    loader.load(
+      url,
+      function (buffer) {
+        let texData;
+        try {
+          texData = (scope as any).parse(buffer);
+        } catch (error) {
+          if (onError !== undefined) {
+            onError(error);
+          } else {
+            console.error("[THREE.DataTextureLoader] Parse failed:", error);
+          }
+          return; // Fix: Always return when parsing fails!
+        }
+
+        if (texData.image !== undefined) {
+          texture.image = texData.image;
+        } else if (texData.data !== undefined) {
+          texture.image.width = texData.width;
+          texture.image.height = texData.height;
+          texture.image.data = texData.data;
+        }
+
+        texture.wrapS = texData.wrapS !== undefined ? texData.wrapS : THREE.ClampToEdgeWrapping;
+        texture.wrapT = texData.wrapT !== undefined ? texData.wrapT : THREE.ClampToEdgeWrapping;
+
+        texture.magFilter = texData.magFilter !== undefined ? texData.magFilter : THREE.LinearFilter;
+        texture.minFilter = texData.minFilter !== undefined ? texData.minFilter : THREE.LinearFilter;
+
+        texture.anisotropy = texData.anisotropy !== undefined ? texData.anisotropy : 1;
+
+        if (texData.colorSpace !== undefined) {
+          texture.colorSpace = texData.colorSpace;
+        }
+
+        if (texData.flipY !== undefined) {
+          texture.flipY = texData.flipY;
+        }
+
+        if (texData.format !== undefined) {
+          texture.format = texData.format;
+        }
+
+        if (texData.type !== undefined) {
+          texture.type = texData.type;
+        }
+
+        if (texData.mipmaps !== undefined) {
+          texture.mipmaps = texData.mipmaps;
+          texture.minFilter = THREE.LinearMipmapLinearFilter;
+        }
+
+        if (texData.mipmapCount === 1) {
+          texture.minFilter = THREE.LinearFilter;
+        }
+
+        if (texData.generateMipmaps !== undefined) {
+          texture.generateMipmaps = texData.generateMipmaps;
+        }
+
+        texture.needsUpdate = true;
+
+        if (onLoad) onLoad(texture, texData);
+      },
+      onProgress,
+      onError
+    );
+
+    return texture;
+  };
+}
+
 interface GameCanvasProps {
   isCinematic: boolean;
   setMapObstacles: (obs: MapObstacle[]) => void;
@@ -223,7 +309,7 @@ export const GameCanvas = React.memo(({
         </div>
 
         <Canvas
-          shadows="soft"
+          shadows={true}
           dpr={dpr}
           gl={{
             antialias: true,

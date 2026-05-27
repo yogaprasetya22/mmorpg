@@ -1,9 +1,20 @@
 'use client';
 
+/**
+ * PlayerController — MMORPG Edition (Auto-Aim)
+ *
+ * Architecture:
+ * - Auto-aim: Scans unitRegistry each frame for nearest enemy → auto-fire
+ * - Mouse/wheel only for camera control (no click-to-attack)
+ * - Animation transitions driven by BVHEcctrl's animationStatus global
+ * - Single, prioritised useFrame (priority=-1) handles camera + combat
+ * - No useState, no useRef for per-frame values (all in ECS)
+ */
+
 import { useRef, useEffect, useMemo, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useKeyboardControls, useAnimations, useGLTF } from '@react-three/drei';
-import BVHEcctrl, { characterStatus } from 'bvhecctrl';
+import BVHEcctrl, { useAnimationStore, characterStatus } from 'bvhecctrl';
 import * as THREE from 'three';
 import { SkeletonUtils } from 'three-stdlib';
 import { MeshoptDecoder } from 'meshoptimizer';
@@ -13,22 +24,30 @@ import { useStore } from '@/src/state/useStore';
 import { useEditorStore } from '@/src/state/useEditorStore';
 import { getTerrainElevation } from '@/src/core/utils/terrainHeight';
 import { UnitRuntimeData } from '@/src/core/domain/unit.types';
-
-// Buffer and State imports
 import {
-  _charPos,
-  _tempFwd,
-  _fwdAxis,
-  charState,
-} from './PlayerController.buffers';
+  executeClassAttack,
+  executeClassSkill,
+  CombatExecutionContext
+} from '@/src/core/combat/ClassCombatEngine';
 
-// Standalone Hooks imports
-import { usePlayerInput } from './hooks/usePlayerInput';
-import { usePlayerPhysicsGating } from './hooks/usePlayerPhysicsGating';
-import { usePlayerTargeting } from './hooks/usePlayerTargeting';
-import { usePlayerAnimations } from './hooks/usePlayerAnimations';
-import { usePlayerCamera } from './hooks/usePlayerCamera';
-import { usePlayerCombat } from './hooks/usePlayerCombat';
+// ─── ANIMATION MAPS ──────────────────────────────────────────────────────────
+const animationSet = {
+  idle:  'Idle',
+  walk:  'Walk',
+  run:   'Run',
+  jump:  'Jump',
+  shoot: 'Shoot_OneHanded',
+};
+
+const ecctrlAnimationSet: Record<string, string> = {
+  IDLE:       animationSet.idle,
+  WALK:       animationSet.walk,
+  RUN:        animationSet.run,
+  JUMP_START: animationSet.jump,
+  JUMP_IDLE:  animationSet.jump,
+  JUMP_FALL:  animationSet.jump,
+  JUMP_LAND:  animationSet.idle,
+};
 
 export const keyboardMap = [
   { name: 'forward',   keys: ['ArrowUp',    'KeyW'] },
@@ -41,13 +60,83 @@ export const keyboardMap = [
   { name: 'skill',     keys: ['KeyQ', 'Digit1'] },
 ];
 
+// ─── ZERO-ALLOC MATH OBJECTS (module-level = never GC'd) ─────────────────────
+const _charPos    = new THREE.Vector3();
+const _camDesired = new THREE.Vector3();
+const _lookAt     = new THREE.Vector3();
+const _camTarget  = new THREE.Vector3();
+const _camDir     = new THREE.Vector3();
+const _originVec  = new THREE.Vector3();
+const _fwdVec     = new THREE.Vector3();
+const _fwdAxis        = new THREE.Vector3(0, 0, 1);
+const _tempFwd        = new THREE.Vector3();
+const _tempFwd2       = new THREE.Vector3();
+const _shoulderOffsetVec = new THREE.Vector3();
+
+// Snappy Jump Gating Math Objects
+const _velVec          = new THREE.Vector3();
+const _downRayOrigin   = new THREE.Vector3();
+const _downRayDir      = new THREE.Vector3(0, -1, 0);
+const _downRaycaster   = new THREE.Raycaster();
+
+
+// ─── ECS BUFFERS (TypedArrays — same-frame, no GC) ───────────────────────────
+// Camera state
+const camYaw        = new Float32Array(1);   // radians
+const camPitch      = new Float32Array([0.3]);
+const camZoom       = new Float32Array([5.0]);
+const camZoomTarget = new Float32Array([5.0]);
+const camPosX       = new Float32Array(1);
+const camPosY       = new Float32Array(1);
+const camPosZ       = new Float32Array(1);
+const lookAtX       = new Float32Array(1);
+const lookAtY       = new Float32Array(1);
+const lookAtZ       = new Float32Array(1);
+const hasCamInit    = new Uint8Array(1);     // 0=false, 1=true
+
+// Input state (written by DOM events, read by useFrame)
+const isRightClick  = new Uint8Array(1);
+const isLeftClick   = new Uint8Array(1);
+
+// Auto-aim state
+const autoFireTimer  = new Float64Array(1);   // last auto-fire time (ms)
+const aimTargetX     = new Float32Array(1);
+const aimTargetY     = new Float32Array(1);
+const aimTargetZ     = new Float32Array(1);
+const hasTarget      = new Uint8Array(1);     // 0=no target, 1=has target
+
+// Constants
+const ZOOM_MIN   = 1.5;
+const ZOOM_MAX   = 20.0;
+const ZOOM_LERP  = 8.0;
+const EYE_HEIGHT = 1.4; // Slightly lower for better center framing
+const SHOULDER_OFFSET = 0.0; // Perfectly centered horizontally
+const AUTO_FIRE_RATE  = 750;   // ms between auto-shots
+const AUTO_AIM_RADIUS = 40.0;  // world units detection radius (MM Role)
+const AUTO_AIM_RSQ    = AUTO_AIM_RADIUS * AUTO_AIM_RADIUS;
+
+// Camera Collision Check
+const _rayDir = new THREE.Vector3();
+const _rayOrigin = new THREE.Vector3();
+const _raycaster = new THREE.Raycaster();
+
+// ─── MMORPG STATE MACHINE ────────────────────────────────────────────────────
+const charState = new Uint8Array(1);     // 0=NORMAL, 1=ATTACKING, 2=CHASING
+const attackTimer = new Float64Array(1); // Time spent in attack animation
+const ATTACK_DURATION = 600;             // ms animation lock duration
+const _chaseDir = new THREE.Vector3();
+const _camProjDir = new THREE.Vector3();
+const _camRightDir = new THREE.Vector3();
+
+
+// ─── COMPONENT ───────────────────────────────────────────────────────────────
 export const PlayerController = ({
   modelPath = '/assets-model/Chef_Male.glb',
   playerClass = 'Warrior',
   damageQueue,
   settingsRef,
   paused = false,
-  unitRegistry,
+  unitRegistry: _unitRegistry,
   dealPlayerDamage,
   mmSpellsRef,
   spellsRef,
@@ -78,11 +167,17 @@ export const PlayerController = ({
   const ecctrlRef    = useRef<any>(null);
   const characterRef = useRef<THREE.Group>(null!);
   const { camera }   = useThree();
+  const spellsPtr       = useRef(0);
+  const mmSpellPtr      = useRef(0);
+  const fighterSpellPtr = useRef(0);
+  const tankSpellPtr    = useRef(0);
+  const assassinSpellPtr = useRef(0);
   const syncAccumulator = useRef(0);
   const lastHpRef = useRef(1000);
+  const lastNearestTargetId = useRef<string>("");
   const [isSpawning, setIsSpawning] = useState(true);
 
-  // Spawn stabilizer logic
+  // Reset spawn stabilizer when unpaused (e.g. when loading screen fades out)
   useEffect(() => {
     if (!paused) {
       setIsSpawning(true);
@@ -104,12 +199,13 @@ export const PlayerController = ({
     return [0, spawnH + 3.0, 0] as [number, number, number];
   }, [activeEnv, terrainConfig]);
 
-  // GLTF skeletal loading and cloning
+  // ─── ASSET LOADING ────────────────────────────────────────────────────────
   const { scene, animations } = useGLTF(modelPath, true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
   const clone = useMemo(() => {
     const cloned = SkeletonUtils.clone(scene);
     cloned.traverse((child: any) => {
       if (child.isMesh) {
+        // High fidelity shadows for local player character
         child.castShadow = true;
         child.receiveShadow = true;
         child.geometry?.computeBoundingSphere?.();
@@ -117,56 +213,117 @@ export const PlayerController = ({
     });
     return cloned;
   }, [scene]);
+  const { actions }           = useAnimations(animations, characterRef);
+  const activeAction          = useRef<THREE.AnimationAction | null>(null);
 
-  const { actions }  = useAnimations(animations, characterRef);
-  const activeAction = useRef<THREE.AnimationAction | null>(null);
-
-  // Sync isEditorOpen
+  // --- RESET CAMERA ON GAME START ---
   const gameState = useStore(s => s.gameState);
   useEffect(() => {
-    // Reset camera snap on state change
-    const hasCamInitBuffer = require('./PlayerController.buffers').hasCamInit;
-    hasCamInitBuffer[0] = 0;
+    hasCamInit[0] = 0; // Force camera snap on game state change (Play/Setup)
   }, [gameState]);
+
+  // ─── ANIMATION SYNC — Frame-Loop Synchronizer ─────────────────────────────
+  // OPTIMIZATION: The old approach used a useEffect subscribed to useAnimationStore.
+  // This added 1-2 frame scheduling latency (~16-33ms) — especially visible on JUMP.
+  // Fix: Poll useAnimationStore.getState() directly inside useFrame so the animation
+  // transition fires on the EXACT same frame that physics detects the jump start.
+  // prevAnimStatus tracks the last seen status so we only crossfade on actual changes.
+  const prevAnimStatus = useRef<string>("");
+
+  // ─── DOM EVENT LISTENERS (write to ECS buffers, not React state) ──────────
+  useEffect(() => {
+    // Mouse look (right-drag)
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isRightClick[0]) return;
+      const s = settingsRef.current?.mouseSensitivity ?? 0.002;
+      camYaw[0]   -= e.movementX * s;
+      camPitch[0] -= e.movementY * s;
+      camPitch[0]  = Math.max(-0.4, Math.min(1.1, camPitch[0]));
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 0) {
+        // Only clear target or trigger if clicked INSIDE the 3D Canvas itself (not on UI buttons / HUD)
+        const isCanvas = e.target && (e.target as HTMLElement)?.tagName?.toLowerCase() === 'canvas';
+        if (isCanvas) {
+          isLeftClick[0] = 1;
+          // Clear target if clicked on empty ground/space (not on a monster)
+          setTimeout(() => {
+            if (!(window as any).monsterClickedThisFrame) {
+              (window as any).clickedTargetId = null;
+              (window as any).hasAttackIntent = false;
+            }
+            (window as any).monsterClickedThisFrame = false;
+          }, 30);
+        }
+      }
+      if (e.button === 2) isRightClick[0] = 1;
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 0) isLeftClick[0] = 0;
+      if (e.button === 2) isRightClick[0] = 0;
+    };
+    const preventContext = (e: MouseEvent) => { if (e.button === 2) e.preventDefault(); };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        (window as any).clickedTargetId = null;
+        (window as any).pendingSkillExecution = false;
+      }
+    };
+
+    // Zoom (mouse wheel)
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      camZoomTarget[0] = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX,
+        camZoomTarget[0] + e.deltaY * 0.01 * 2.0
+      ));
+    };
+
+    // Pointer lock: when locked treat any movement as camera look
+    const onPointerLockMove = (e: MouseEvent) => {
+      if (!document.pointerLockElement) return;
+      const s = settingsRef.current?.mouseSensitivity ?? 0.002;
+      camYaw[0]   -= e.movementX * s;
+      camPitch[0] -= e.movementY * s;
+      camPitch[0]  = Math.max(-0.4, Math.min(1.1, camPitch[0]));
+    };
+
+    document.addEventListener('mousemove',   onMouseMove);
+    document.addEventListener('mousemove',   onPointerLockMove);
+    document.addEventListener('mousedown',   onMouseDown);
+    document.addEventListener('mouseup',     onMouseUp);
+    document.addEventListener('keydown',     onKeyDown);
+    document.addEventListener('contextmenu', preventContext);
+    window.addEventListener('wheel', onWheel, { passive: false });
+
+    return () => {
+      document.removeEventListener('mousemove',   onMouseMove);
+      document.removeEventListener('mousemove',   onPointerLockMove);
+      document.removeEventListener('mousedown',   onMouseDown);
+      document.removeEventListener('mouseup',     onMouseUp);
+      document.removeEventListener('keydown',     onKeyDown);
+      document.removeEventListener('contextmenu', preventContext);
+      window.removeEventListener('wheel', onWheel);
+    };
+  }, [settingsRef]);
 
   const { spawnVFX } = useVFX();
   const [, getKeys]  = useKeyboardControls();
 
   const isDead = playerStats && typeof playerStats.hp !== 'undefined' && playerStats.hp <= 0;
 
-  // Initialize standalone helper hooks
-  usePlayerInput(settingsRef);
-  const physicsGating = usePlayerPhysicsGating(ecctrlRef);
-  const targeting = usePlayerTargeting(unitRegistry);
-  const animationSystem = usePlayerAnimations(actions, activeAction, playerClass);
-  const cameraSystem = usePlayerCamera(camera);
-  const combatSystem = usePlayerCombat({
-    playerClass,
-    playerStats,
-    dealPlayerDamage,
-    spawnVFX,
-    camera,
-    simTimeRef,
-    mmSpellsRef,
-    spellsRef,
-    fighterSpellsRef,
-    tankSpellsRef,
-    assassinSpellsRef,
-    poolRef,
-    ecctrlRef,
-    characterRef,
-  });
-
-  // Unified Frame-Loop Orchestrator
+  // ─── SINGLE USEFRAME: Camera + Auto-Aim Combat (priority 1 = runs AFTER physics) ──
   useFrame((_, delta) => {
+
+    // ─── CHECK DEATH BLOCK & RESURRECTION TELEPORT ───
     const currentHp = playerStats && typeof playerStats.hp !== 'undefined' ? playerStats.hp : 1000;
 
-    // Resurrection Teleport logic
+    // Resurrection Teleport on client side when HP resets to full
     if (lastHpRef.current <= 0 && currentHp > 0) {
       if (ecctrlRef.current) {
-        const env = useEditorStore.getState().environment;
-        const conf = useEditorStore.getState().terrainConfig;
-        const spawnH = getTerrainElevation(0, 0, env, 24, conf);
+        const activeEnv = useEditorStore.getState().environment;
+        const terrainConfig = useEditorStore.getState().terrainConfig;
+        const spawnH = getTerrainElevation(0, 0, activeEnv, 24, terrainConfig);
         ecctrlRef.current.group.position.set(0, spawnH + 3.0, 0);
         ecctrlRef.current.resetLinVel();
         console.log("🛡️ Player resurrected! Teleporting back to starter town center above ground height:", spawnH + 3.0);
@@ -174,7 +331,7 @@ export const PlayerController = ({
     }
     lastHpRef.current = currentHp;
 
-    // Setup positions and world rotations
+    // === CAMERA SYSTEM ===
     _charPos.copy(characterStatus.position as THREE.Vector3);
     (window as any).localPlayerPos = _charPos;
     if (characterRef.current) {
@@ -186,41 +343,80 @@ export const PlayerController = ({
       (window as any).localPlayerRotation = Math.atan2(fwd.x, fwd.z);
     }
 
-    // Determine current ground elevation height
     let groundH = _charPos.y;
     if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
       const raycastH = (window as any).getGroundHeight(_charPos.x, _charPos.z, -999);
       if (raycastH !== -999) {
         groundH = raycastH;
       } else {
-        const env = useEditorStore.getState().environment;
-        const conf = useEditorStore.getState().terrainConfig;
-        const baseDistance = (env === "STORM" || env === "RAIN" || env === "THUNDER" || env === "CLEAR") ? 45.0 : 35.0;
-        groundH = getTerrainElevation(_charPos.x, _charPos.z, env, baseDistance, conf);
+        const activeEnv = useEditorStore.getState().environment;
+        const terrainConfig = useEditorStore.getState().terrainConfig;
+        const baseDistance = (activeEnv === "STORM" || activeEnv === "RAIN" || activeEnv === "THUNDER" || activeEnv === "CLEAR") ? 45.0 : 35.0;
+        groundH = getTerrainElevation(_charPos.x, _charPos.z, activeEnv, baseDistance, terrainConfig);
       }
     } else {
-      const env = useEditorStore.getState().environment;
-      const conf = useEditorStore.getState().terrainConfig;
-      const baseDistance = (env === "STORM" || env === "RAIN" || env === "THUNDER" || env === "CLEAR") ? 45.0 : 35.0;
-      groundH = getTerrainElevation(_charPos.x, _charPos.z, env, baseDistance, conf);
+      const activeEnv = useEditorStore.getState().environment;
+      const terrainConfig = useEditorStore.getState().terrainConfig;
+      const baseDistance = (activeEnv === "STORM" || activeEnv === "RAIN" || activeEnv === "THUNDER" || activeEnv === "CLEAR") ? 45.0 : 35.0;
+      groundH = getTerrainElevation(_charPos.x, _charPos.z, activeEnv, baseDistance, terrainConfig);
     }
 
+
+
     if (isDead) {
+      // Force zero velocity and lock to ground to prevent gliding
       if (ecctrlRef.current) {
         ecctrlRef.current.resetLinVel();
         ecctrlRef.current.setMovement?.({ joystick: { x: 0, y: 0 } });
         ecctrlRef.current.group.position.y = groundH;
       }
-      charState[0] = 0;
+      
+      charState[0] = 0; // Return to normal state
+      
+      // Play death animation if available, otherwise fallback to idle animation loop
+      let deathAnim = 'Death';
+      if (!actions[deathAnim] && actions['death']) deathAnim = 'death';
+      if (!actions[deathAnim] && actions['Death_B']) deathAnim = 'Death_B';
+      
+      const deathAction = actions[deathAnim];
+      if (deathAction) {
+        if (deathAction !== activeAction.current) {
+          deathAction.reset().setLoop(THREE.LoopOnce, 1);
+          deathAction.clampWhenFinished = true;
+          deathAction.fadeIn(0.15).play();
+          if (activeAction.current) activeAction.current.crossFadeTo(deathAction, 0.2, true);
+          activeAction.current = deathAction;
+        }
+      } else {
+        const idleAction = actions[animationSet.idle];
+        if (idleAction && idleAction !== activeAction.current) {
+          idleAction.reset().fadeIn(0.2).play();
+          if (activeAction.current) activeAction.current.crossFadeTo(idleAction, 0.2, true);
+          activeAction.current = idleAction;
+        }
+      }
+    } else {
+      // Failsafe: Snapping player back up if they fall below the sculpted ground level
+      if (_charPos.y < groundH - 3.0) {
+        if (ecctrlRef.current) {
+          // Aggressive snap-back: tighter threshold prevents deep fall-through
+          ecctrlRef.current.group.position.y = groundH + 5.0;
+          ecctrlRef.current.resetLinVel();
+          _charPos.y = groundH + 5.0;
+          console.warn("⚠️ Player fell through map! Snapped back to ground height:", groundH + 5.0);
+        }
+      }
     }
 
+    // Update player position in store (for enemy AI targeting)
     useStore.getState().setPlayerPosition([_charPos.x, _charPos.y, _charPos.z]);
-
-    // WebSocket state synchronization
+    
+    // Sync real-time high-fidelity position, world rotation, and animations over WebSocket
     syncAccumulator.current += delta;
     if (syncAccumulator.current >= 0.033) {
       syncAccumulator.current = 0;
       if (sendPlayerState && characterRef.current) {
+        // Calculate exact world rotation from character mesh
         const fwd = _tempFwd.copy(_fwdAxis);
         fwd.applyQuaternion(characterRef.current.quaternion);
         if (characterRef.current.parent) {
@@ -228,15 +424,15 @@ export const PlayerController = ({
         }
         const worldRot = Math.atan2(fwd.x, fwd.z);
 
+        // Get exact animation status
         let anim = "Idle";
         if (charState[0] === 1) {
           anim = "Attack";
         } else if (performance.now() - ((window as any).lastSkillTime || 0) < 1000) {
           anim = "Skill";
         } else {
-          const status = require('bvhecctrl').useAnimationStore.getState().animationStatus;
-          const mappings = require('./hooks/usePlayerAnimations').ecctrlAnimationSet;
-          anim = mappings[status] ?? "Idle";
+          const status = useAnimationStore.getState().animationStatus;
+          anim = ecctrlAnimationSet[status] ?? animationSet.idle;
         }
 
         sendPlayerState({
@@ -245,30 +441,744 @@ export const PlayerController = ({
           z: _charPos.z,
           rotation: worldRot,
           animation: anim,
-          targetId: anim === "Attack" || anim === "Skill" ? targeting.lastNearestTargetId.current : "",
+          targetId: anim === "Attack" || anim === "Skill" ? lastNearestTargetId.current : "",
         });
       }
     }
 
-    // 1. Process physics gating failsafes and snappy jump gating
-    const isChatFocus = !!(document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA'));
-    physicsGating.tick(groundH, getKeys, isChatFocus);
+    // Lerp zoom (ECS buffers → no allocation)
+    camZoom[0] += (camZoomTarget[0] - camZoom[0]) * Math.min(1, ZOOM_LERP * delta);
 
-    // 2. Perform auto-aim targeting scan
-    const target = targeting.tick();
+    const cosPitch = Math.cos(camPitch[0]);
+    const sinPitch = Math.sin(camPitch[0]);
+    
+    // --- 1. CALCULATE IDEAL CAMERA POSITION ---
+    // Offset the target slightly to the shoulder for premium look
+    _fwdVec.set(Math.sin(camYaw[0]), 0, Math.cos(camYaw[0])).normalize();
+    const shoulderOffset = _shoulderOffsetVec.set(Math.cos(camYaw[0]), 0, -Math.sin(camYaw[0])).multiplyScalar(SHOULDER_OFFSET);
+    
+    _camTarget.copy(_charPos).add(shoulderOffset);
+    _camTarget.y += EYE_HEIGHT;
 
-    // 3. Update combat sequences, states, cooldowns, and locks
+    _camDesired.set(
+      _camTarget.x - Math.sin(camYaw[0]) * cosPitch * camZoom[0],
+      _camTarget.y + sinPitch * camZoom[0],
+      _camTarget.z - Math.cos(camYaw[0]) * cosPitch * camZoom[0],
+    );
+
+    // --- 2. CAMERA COLLISION (Ghost Busting Walls/Trees) ---
+    _rayOrigin.copy(_camTarget);
+    _rayDir.subVectors(_camDesired, _rayOrigin).normalize();
+    _raycaster.set(_rayOrigin, _rayDir);
+    _raycaster.far = camZoom[0];
+
+    const colliders = (window as any).globalNonInstancedColliders || [];
+    const intersects = _raycaster.intersectObjects(colliders, false);
+
+    if (intersects.length > 0) {
+      // Push camera forward to hit point (minus buffer to prevent near-plane clipping)
+      const hitDist = intersects[0].distance;
+      const safeDist = Math.max(0.4, hitDist - 0.4); 
+      _camDesired.copy(_rayOrigin).add(_rayDir.multiplyScalar(safeDist));
+      
+      // INSTANT SNAP: If we are colliding, don't lerp slowly into the character
+      // This prevents the "slow zoom" feel when hitting a tree
+      camPosX[0] = _camDesired.x;
+      camPosY[0] = _camDesired.y;
+      camPosZ[0] = _camDesired.z;
+    }
+
+    // --- 3. PREVENT UNDERWORLD CAMERA (Hard Floor) ---
+    // Only check ground if colliders are actually loaded to prevent flickering at start
+    if (colliders.length > 0) {
+      const terrainHeightAtCam = (window as any).getGroundHeight ? (window as any).getGroundHeight(_camDesired.x, _camDesired.z, -1) : -1;
+      if (_camDesired.y < terrainHeightAtCam + 0.6) {
+        _camDesired.y = terrainHeightAtCam + 0.6;
+        camPosY[0] = _camDesired.y; 
+      }
+    }
+
+    if (!hasCamInit[0]) {
+      camPosX[0] = _camDesired.x;
+      camPosY[0] = _camDesired.y;
+      camPosZ[0] = _camDesired.z;
+      lookAtX[0] = _camTarget.x;
+      lookAtY[0] = _camTarget.y;
+      lookAtZ[0] = _camTarget.z;
+      hasCamInit[0] = 1;
+    }
+
+    // Lerp camera pos (write to ECS floats first, then push to Three.js once)
+    const lerpT = Math.min(1, 15 * delta);
+    camPosX[0] += (_camDesired.x - camPosX[0]) * lerpT;
+    camPosY[0] += (_camDesired.y - camPosY[0]) * lerpT;
+    camPosZ[0] += (_camDesired.z - camPosZ[0]) * lerpT;
+
+    // Apply Camera Shake decay and offset for dynamic impact feedback
+    if (typeof (window as any).shakeIntensity === 'undefined') {
+      (window as any).shakeIntensity = 0.0;
+    }
+    const shake = (window as any).shakeIntensity;
+    let shakeOffsetX = 0;
+    let shakeOffsetY = 0;
+    let shakeOffsetZ = 0;
+    if (shake > 0.01) {
+      shakeOffsetX = (Math.random() - 0.5) * shake;
+      shakeOffsetY = (Math.random() - 0.5) * shake;
+      shakeOffsetZ = (Math.random() - 0.5) * shake;
+      (window as any).shakeIntensity = shake * 0.88; // decay shake
+    }
+
+    if (typeof (window as any).cameraShake !== 'function') {
+      (window as any).cameraShake = (intensity: number) => {
+        (window as any).shakeIntensity = intensity;
+      };
+    }
+
+    camera.position.set(
+      camPosX[0] + shakeOffsetX, 
+      camPosY[0] + shakeOffsetY, 
+      camPosZ[0] + shakeOffsetZ
+    );
+
+    // Lerp lookAt
+    const lookT = Math.min(1, 20 * delta);
+    lookAtX[0] += (_camTarget.x  - lookAtX[0]) * lookT;
+    lookAtY[0] += (_camTarget.y  - lookAtY[0]) * lookT;
+    lookAtZ[0] += (_camTarget.z  - lookAtZ[0]) * lookT;
+    _lookAt.set(lookAtX[0], lookAtY[0], lookAtZ[0]);
+    camera.lookAt(_lookAt);
+
+    if (!isDead) {
+      // Get dynamic attack range squared based on class
+      let activeRangeSq = 81.0; // Default Marksman / MM (9.0m)
+      if (playerClass === "Warrior") {
+        activeRangeSq = 12.25;    // Fighter (Melee 3.5 meters) - sync with backend monster attack range!
+      } else if (playerClass === "Thief") {
+        activeRangeSq = 10.89;    // Assassin (Melee 3.3 meters)
+      } else if (playerClass === "Priest") {
+        activeRangeSq = 14.44;    // Tank (Melee 3.8 meters)
+      } else if (playerClass === "Mage") {
+        activeRangeSq = 64.0;    // Mage (Ranged 8.0 meters)
+      } else if (playerClass === "Beginner") {
+        activeRangeSq = 81.0;    // Marksman / MM (Ranged 9.0 meters)
+      }
+
+      const now = performance.now();
+
+    // ── Find target (manual clicked target prioritized, then auto-aim) ──
+    hasTarget[0] = 0;
+    let nearestTarget: UnitRuntimeData | null = null;
+    const grid = (window as any).battleGrid;
+
+    // First prioritize manual clicked target
+    const clickedId = (window as any).clickedTargetId;
+    let clickedTarget: UnitRuntimeData | null = null;
+    if (clickedId) {
+      const units = _unitRegistry?.current || [];
+      const found = units.find(u => u.id === clickedId && u.type === 'enemy' && u.isActive && !u.isDying);
+      if (found) {
+        clickedTarget = found;
+      } else {
+        (window as any).clickedTargetId = null; // Clear if target is dead/inactive
+      }
+    }
+
+    if (clickedTarget) {
+      aimTargetX[0] = clickedTarget.position[0];
+      aimTargetY[0] = clickedTarget.position[1] + 1.2;
+      aimTargetZ[0] = clickedTarget.position[2];
+      hasTarget[0] = 1;
+      nearestTarget = clickedTarget;
+    } else if (grid) {
+      const nearby = grid.queryRadius(_charPos.x, _charPos.z, AUTO_AIM_RADIUS);
+      let closestDistSq = AUTO_AIM_RSQ;
+
+      for (let i = 0; i < nearby.length; i++) {
+        const u = nearby[i];
+        if (u.type !== 'enemy' || !u.isActive || u.isDying) continue;
+
+        const dx = _charPos.x - u.position[0];
+        const dz = _charPos.z - u.position[2];
+        const dSq = dx * dx + dz * dz;
+
+        // Prioritize the closest enemy unit within the valid auto-aim radius
+        if (dSq < closestDistSq) {
+          closestDistSq = dSq;
+          aimTargetX[0] = u.position[0];
+          aimTargetY[0] = u.position[1] + 1.2;
+          aimTargetZ[0] = u.position[2];
+          hasTarget[0] = 1;
+          nearestTarget = u;
+        }
+      }
+    }
+    lastNearestTargetId.current = nearestTarget ? nearestTarget.id : "";
+
+    const isChatFocus = document.activeElement && 
+      (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
     const keys = isChatFocus ? {} : getKeys();
-    const isMovingInput = !!(keys.forward || keys.backward || keys.leftward || keys.rightward);
-    combatSystem.tick(delta, keys, target, isMovingInput);
+    const isMovingInput = keys.forward || keys.backward || keys.leftward || keys.rightward;
+    const isAttackInput = keys.action1 || (window as any).hasAttackIntent;
+    if ((window as any).hasAttackIntent) {
+      (window as any).hasAttackIntent = false;
+    }
 
-    // 4. Update camera follow positioning, collisions, and shaking
-    cameraSystem.tick(delta);
+    // ── Execute Attack Function (Delegated to Strategy Design Pattern in ClassCombatEngine) ──
+    const executeAttack = (target: UnitRuntimeData | null) => {
+      _originVec.set(_charPos.x, _charPos.y + 1.35, _charPos.z);
+      camera.getWorldDirection(_camDir);
+      
+      if (target) {
+        _camDir.set(
+          aimTargetX[0] - _charPos.x,
+          aimTargetY[0] - (_charPos.y + 1.35),
+          aimTargetZ[0] - _charPos.z,
+        ).normalize();
+      } else {
+        _camDir.y = 0;
+        _camDir.normalize();
+      }
 
-    // 5. Sync mesh animation playback speeds to movements
-    animationSystem.tick(delta, isDead);
-  }, 1);
+      _fwdVec.copy(_camDir).multiplyScalar(0.7);
+      _originVec.add(_fwdVec);
 
+      // 3-Hit Spell Combo System Index Ticker
+      if (typeof (window as any).comboIndex === 'undefined') {
+        (window as any).comboIndex = 0;
+      }
+      const combo = (window as any).comboIndex;
+      (window as any).comboIndex = (combo + 1) % 3;
+
+      const ctx: CombatExecutionContext = {
+        charPos: _charPos,
+        originVec: _originVec,
+        camDir: _camDir,
+        combo,
+        playerStats,
+        dealPlayerDamage,
+        spawnVFX,
+        camera,
+        simTimeRef,
+        mmSpellsRef,
+        mmSpellPtr,
+        fighterSpellsRef,
+        fighterSpellPtr,
+        assassinSpellsRef,
+        assassinSpellPtr,
+        tankSpellsRef,
+        tankSpellPtr,
+        spellsRef,
+        spellsPtr,
+        poolRef,
+        grid,
+        ecctrlRef,
+        cameraShake: (window as any).cameraShake,
+      };
+
+      executeClassAttack(playerClass, target as any, ctx);
+    };
+
+    // ── MMORPG STATE MACHINE ──
+    const isSkillInput = keys.skill;
+    const SKILL_COOLDOWN = 8000; // 8 seconds active skill cooldown
+    if (typeof (window as any).lastSkillTime === 'undefined') {
+      (window as any).lastSkillTime = 0;
+    }
+    const lastSkillTime = (window as any).lastSkillTime;
+
+    // ── Execute Active Class Skill (Q / 1 Key) ──
+    if (isSkillInput && now - lastSkillTime > SKILL_COOLDOWN) {
+      if (!hasTarget[0] || !nearestTarget) {
+        const alertBox = document.getElementById("no-target-alert");
+        if (alertBox) {
+          alertBox.style.opacity = "1";
+          if ((window as any)._targetAlertTimeout) {
+            clearTimeout((window as any)._targetAlertTimeout);
+          }
+          (window as any)._targetAlertTimeout = setTimeout(() => {
+            alertBox.style.opacity = "0";
+          }, 1200);
+        }
+        return;
+      }
+
+      // Check if we are facing the target first before starting skill animation / damage
+      const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
+      const fwd = _tempFwd.copy(_fwdAxis);
+      fwd.applyQuaternion(characterRef.current.quaternion);
+      if (characterRef.current.parent) {
+        fwd.applyQuaternion(characterRef.current.parent.quaternion);
+      }
+      const worldRot = Math.atan2(fwd.x, fwd.z);
+      let angleDiff = worldTargetAngle - worldRot;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+
+      if (Math.abs(angleDiff) < 0.6) {
+        (window as any).lastSkillTime = now;
+
+        const ctx: CombatExecutionContext = {
+          charPos: _charPos,
+          originVec: _originVec,
+          camDir: _camDir,
+          combo: 0,
+          playerStats,
+          dealPlayerDamage,
+          spawnVFX,
+          camera,
+          simTimeRef,
+          mmSpellsRef,
+          mmSpellPtr,
+          fighterSpellsRef,
+          fighterSpellPtr,
+          assassinSpellsRef,
+          assassinSpellPtr,
+          tankSpellsRef,
+          tankSpellPtr,
+          spellsRef,
+          spellsPtr,
+          poolRef,
+          grid,
+          ecctrlRef,
+          cameraShake: (window as any).cameraShake,
+        };
+
+        executeClassSkill(playerClass, nearestTarget as any, ctx);
+      } else {
+        // Must turn to face the target first
+        (window as any).pendingSkillExecution = true;
+        charState[0] = 3; // TURNING_TO_TARGET
+        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+        const toast = document.getElementById("facing-alignment-alert");
+        if (toast) {
+          toast.style.opacity = "1";
+        }
+      }
+    }
+
+    // Cooldown overlay DOM synchronizer
+    const overlay = document.getElementById("skill-cooldown-overlay");
+    if (overlay) {
+      const elapsed = now - (window as any).lastSkillTime;
+      if (elapsed < SKILL_COOLDOWN) {
+        const remaining = ((SKILL_COOLDOWN - elapsed) / 1000).toFixed(1);
+        overlay.innerText = `${remaining}S`;
+        overlay.style.transform = "translateY(0%)";
+      } else {
+        overlay.style.transform = "translateY(100%)";
+      }
+    }
+
+    // ── Passive System Ticks (runs every 3s but decoupled from render loop) ──
+    // FIX: spawnVFX caused a React state update INSIDE useFrame which generated a mini-stutter.
+    // Solution: set a flag inside useFrame, then process it via setTimeout(0) to defer state mutation.
+    if (typeof (window as any).lastPassiveTick === 'undefined') {
+      (window as any).lastPassiveTick = 0;
+    }
+    if (now - (window as any).lastPassiveTick > 3000) {
+      (window as any).lastPassiveTick = now;
+      // Defer VFX spawn to next idle tick — do NOT call spawnVFX inside useFrame
+      const snapPos: [number, number, number] = [_charPos.x, _charPos.y + 1.2, _charPos.z];
+      const snapClass = playerClass;
+      const snapHasTarget = !!aimTargetX[0];
+      setTimeout(() => {
+        if (snapClass === "Priest") {
+          spawnVFX(snapPos, "magic", "#10b981");
+        } else if (snapClass === "Warrior" && snapHasTarget) {
+          spawnVFX(snapPos, "magic", "#f97316");
+        }
+      }, 0);
+    }
+
+    // Check Input triggers
+    if (isAttackInput && now - autoFireTimer[0] > AUTO_FIRE_RATE) {
+      if (hasTarget[0]) {
+        const dx = aimTargetX[0] - _charPos.x;
+        const dz = aimTargetZ[0] - _charPos.z;
+        const distSq = dx*dx + dz*dz;
+        
+        // Use standard range to initiate chase from normal input
+        if (distSq > activeRangeSq) {
+          // 4. Otomatis Mengejar Musuh
+          charState[0] = 2; // CHASING
+        } else {
+          // Check if facing target first
+          const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
+          const fwd = _tempFwd.copy(_fwdAxis);
+          fwd.applyQuaternion(characterRef.current.quaternion);
+          if (characterRef.current.parent) {
+            fwd.applyQuaternion(characterRef.current.parent.quaternion);
+          }
+          const worldRot = Math.atan2(fwd.x, fwd.z);
+          let angleDiff = worldTargetAngle - worldRot;
+          while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+          while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+
+          if (Math.abs(angleDiff) < 0.6) {
+            // 2. Combo Diam di Tempat (Reset timer jika serang lagi)
+            charState[0] = 1; // ATTACKING
+            attackTimer[0] = now;
+            autoFireTimer[0] = now;
+            ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+            // Hide toast — attack is firing normally
+            const toastOk = document.getElementById("facing-alignment-alert");
+            if (toastOk) toastOk.style.opacity = "0";
+            executeAttack(nearestTarget);
+          } else {
+            // Need to rotate/turn to face target first
+            charState[0] = 3; // TURNING_TO_TARGET
+            ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+            const toast = document.getElementById("facing-alignment-alert");
+            if (toast) {
+              toast.style.opacity = "1";
+            }
+          }
+        }
+      } else {
+        // Memukul angin
+        charState[0] = 1; // ATTACKING
+        attackTimer[0] = now;
+        autoFireTimer[0] = now;
+        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+        executeAttack(null);
+      }
+    }
+
+    // Process Active States
+    if (charState[0] === 1) { 
+      // == STATE: ATTACKING ==
+      if (isMovingInput || keys.jump) {
+        // 3. Batal Memukul Jika Bergerak atau Melompat (Cancel/Override)
+        charState[0] = 0; 
+      } else {
+        // 1. Berhenti Saat Menyerang (Animation Lock)
+        // Lock horizontal velocity — let BVH gravity & float spring handle Y
+        const vel = characterStatus.linvel;
+        ecctrlRef.current?.setLinVel({ x: 0, y: vel.y, z: 0 } as any);
+        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+        
+        // Face target dynamically
+        if (hasTarget[0]) {
+          const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
+          const fwd = _tempFwd.copy(_fwdAxis);
+          fwd.applyQuaternion(characterRef.current.quaternion);
+          if (characterRef.current.parent) {
+            fwd.applyQuaternion(characterRef.current.parent.quaternion);
+          }
+          const worldRot = Math.atan2(fwd.x, fwd.z);
+          let diff = worldTargetAngle - worldRot;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          characterRef.current.rotation.y += diff * 15 * delta;
+        }
+
+        // Force Shoot / Melee Animation
+        let targetAnim = animationSet.shoot;
+        if (playerClass === "Warrior" || playerClass === "Thief" || playerClass === "Beginner") {
+          if (actions['SwordSlash']) targetAnim = 'SwordSlash';
+          else if (actions['1H_Melee_Attack_Chop']) targetAnim = '1H_Melee_Attack_Chop';
+        }
+        const shootAction = actions[targetAnim] || actions[animationSet.shoot];
+        if (shootAction && shootAction !== activeAction.current) {
+          shootAction.reset().play();
+          if (activeAction.current) activeAction.current.crossFadeTo(shootAction, 0.1, true);
+          activeAction.current = shootAction;
+        }
+
+        // Check if animation lock is over
+        if (now - attackTimer[0] > ATTACK_DURATION) {
+          charState[0] = 0; // Return to normal
+        }
+      }
+    } else if (charState[0] === 2) { 
+      // == STATE: CHASING ==
+      if (isMovingInput || keys.jump) {
+        // Cancel chase if player moves manually or jumps
+        charState[0] = 0;
+        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+      } else if (hasTarget[0]) {
+        const dx = aimTargetX[0] - _charPos.x;
+        const dz = aimTargetZ[0] - _charPos.z;
+        const distSq = dx*dx + dz*dz;
+        
+        // While chasing, allow 50% more range area tolerance to immediately trigger melee attack swing without infinite chasing run lag
+        const effectiveRangeSq = activeRangeSq * 1.5;
+        if (distSq <= effectiveRangeSq) {
+          // Reached Target! Check if facing target first
+          const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
+          const fwd = _tempFwd.copy(_fwdAxis);
+          fwd.applyQuaternion(characterRef.current.quaternion);
+          if (characterRef.current.parent) {
+            fwd.applyQuaternion(characterRef.current.parent.quaternion);
+          }
+          const worldRot = Math.atan2(fwd.x, fwd.z);
+          let angleDiff = worldTargetAngle - worldRot;
+          while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+          while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+
+          if (Math.abs(angleDiff) < 0.6) {
+            // Reached Target! Stop and Attack
+            charState[0] = 1;
+            attackTimer[0] = now;
+            autoFireTimer[0] = now;
+            ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+            const toastOk2 = document.getElementById("facing-alignment-alert");
+            if (toastOk2) toastOk2.style.opacity = "0";
+            executeAttack(nearestTarget);
+          } else {
+            // Reached target but not facing! Turn to face them first
+            charState[0] = 3; // TURNING_TO_TARGET
+            ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+            const toast = document.getElementById("facing-alignment-alert");
+            if (toast) {
+              toast.style.opacity = "1";
+            }
+          }
+        } else {
+          // Keep Chasing (Spoof Joystick Input to run to target)
+          _chaseDir.set(dx, 0, dz).normalize();
+          
+          camera.getWorldDirection(_camProjDir);
+          _camProjDir.y = 0;
+          _camProjDir.normalize();
+          
+          // Calculate standard right vector based on camera
+          _camRightDir.set(1, 0, 0).applyQuaternion(camera.quaternion);
+          _camRightDir.y = 0;
+          _camRightDir.normalize();
+          
+          // Project world direction onto camera's local axes to fake joystick
+          const moveY = _chaseDir.dot(_camProjDir);
+          const moveX = _chaseDir.dot(_camRightDir);
+          
+          ecctrlRef.current?.setMovement({ 
+            joystick: { x: moveX, y: moveY },
+            run: true // Force run mode while chasing
+          });
+          
+          // Reset rotation offset to 0 so character faces movement direction
+          const resetLerpT = Math.min(1, 10 * delta);
+          characterRef.current.rotation.y += (0 - characterRef.current.rotation.y) * resetLerpT;
+        }
+      } else {
+        // Target lost
+        charState[0] = 0;
+        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+      }
+    } else if (charState[0] === 3) {
+      // == STATE: TURNING_TO_TARGET ==
+      if (isMovingInput || keys.jump) {
+        charState[0] = 0; // Cancel turning/attack if player moves manually or jumps
+        (window as any).pendingSkillExecution = false;
+        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+        const toast = document.getElementById("facing-alignment-alert");
+        if (toast) toast.style.opacity = "0";
+      } else if (hasTarget[0]) {
+        // Lock horizontal velocity
+        const vel = characterStatus.linvel;
+        ecctrlRef.current?.setLinVel({ x: 0, y: vel.y, z: 0 } as any);
+        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+        
+        // Rotate towards target
+        const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
+        const fwd = _tempFwd.copy(_fwdAxis);
+        fwd.applyQuaternion(characterRef.current.quaternion);
+        if (characterRef.current.parent) {
+          fwd.applyQuaternion(characterRef.current.parent.quaternion);
+        }
+        const worldRot = Math.atan2(fwd.x, fwd.z);
+        
+        let diff = worldTargetAngle - worldRot;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        
+        characterRef.current.rotation.y += diff * 18 * delta;
+
+        // Check if we are facing the target now
+        const fwdAfter = _tempFwd2.copy(_fwdAxis);
+        fwdAfter.applyQuaternion(characterRef.current.quaternion);
+        if (characterRef.current.parent) {
+          fwdAfter.applyQuaternion(characterRef.current.parent.quaternion);
+        }
+        const worldRotAfter = Math.atan2(fwdAfter.x, fwdAfter.z);
+        let angleDiff = worldTargetAngle - worldRotAfter;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        
+        if (Math.abs(angleDiff) < 0.6) {
+          // Hide toast
+          const toast = document.getElementById("facing-alignment-alert");
+          if (toast) toast.style.opacity = "0";
+
+          // Check if we wanted to execute a skill
+          if ((window as any).pendingSkillExecution && nearestTarget) {
+            (window as any).pendingSkillExecution = false;
+            (window as any).lastSkillTime = performance.now();
+            
+            // Build the execution context
+            _originVec.set(_charPos.x, _charPos.y + 1.35, _charPos.z);
+            camera.getWorldDirection(_camDir);
+            _camDir.set(
+              aimTargetX[0] - _charPos.x,
+              aimTargetY[0] - (_charPos.y + 1.35),
+              aimTargetZ[0] - _charPos.z,
+            ).normalize();
+            _fwdVec.copy(_camDir).multiplyScalar(0.7);
+            _originVec.add(_fwdVec);
+            
+            const ctx: CombatExecutionContext = {
+              charPos: _charPos,
+              originVec: _originVec,
+              camDir: _camDir,
+              combo: 0,
+              playerStats,
+              dealPlayerDamage,
+              spawnVFX,
+              camera,
+              simTimeRef,
+              mmSpellsRef,
+              mmSpellPtr,
+              fighterSpellsRef,
+              fighterSpellPtr,
+              assassinSpellsRef,
+              assassinSpellPtr,
+              tankSpellsRef,
+              tankSpellPtr,
+              spellsRef,
+              spellsPtr,
+              poolRef,
+              grid,
+              ecctrlRef,
+              cameraShake: (window as any).cameraShake,
+            };
+            executeClassSkill(playerClass, nearestTarget as any, ctx);
+            charState[0] = 0; // Skill executes and goes to normal
+          } else {
+            // Normal attack
+            charState[0] = 1; // Transition to ATTACKING
+            attackTimer[0] = performance.now();
+            autoFireTimer[0] = performance.now();
+            executeAttack(nearestTarget);
+          }
+        }
+      } else {
+        // Target lost
+        charState[0] = 0;
+        (window as any).pendingSkillExecution = false;
+        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+        const toast = document.getElementById("facing-alignment-alert");
+        if (toast) toast.style.opacity = "0";
+      }
+    } 
+
+    if (charState[0] === 0) {
+      // == STATE: NORMAL ==
+
+      // ─── SNAPPY JUMP GATE FOR GLB STAIRS & INCLINED MOUNTAINS ──────────────
+      const jumpKeys = isChatFocus ? {} : getKeys();
+      if (jumpKeys.jump && ecctrlRef.current) {
+        // If BVHEcctrl is grounded, we let it jump.
+        // If going uphill, BVHEcctrl's internal grounding might fail because of collision push.
+        // We override this by performing a downward raycast against all colliders (terrain + GLBs).
+        let canJumpOverride = characterStatus.isOnGround;
+
+        if (!canJumpOverride) {
+          _downRayOrigin.copy(_charPos);
+          _downRayOrigin.y += 0.5; // offset slightly above feet inside the hips capsule
+          _downRaycaster.set(_downRayOrigin, _downRayDir);
+          _downRaycaster.far = 1.6; // 0.5 hip offset + 1.1 air clearance
+
+          const allColliders = (window as any).globalColliders || [];
+          const hits = _downRaycaster.intersectObjects(allColliders, false);
+          if (hits.length > 0) {
+            canJumpOverride = true;
+          }
+        }
+
+        if (canJumpOverride) {
+          const now = performance.now();
+          if (typeof (window as any).lastJumpTime === 'undefined') {
+            (window as any).lastJumpTime = 0;
+          }
+          if (now - (window as any).lastJumpTime > 300) {
+            (window as any).lastJumpTime = now;
+
+            if (ecctrlRef.current.setLinVel) {
+              const currentVel = characterStatus.linvel;
+              // Snappy jump: set Y velocity to 9.5 for quick Roblox-like upwards thrust!
+              _velVec.set(currentVel.x, 9.5, currentVel.z);
+              ecctrlRef.current.setLinVel(_velVec);
+            }
+          }
+        }
+      }
+
+      // ─── FRAME-LOOP ANIMATION SYNCHRONIZER ───
+      // Poll animation store directly (no useEffect, no React scheduling latency).
+      // This catches state changes on the SAME frame physics transitions happen.
+      const currentAnimStatus = useAnimationStore.getState().animationStatus;
+      if (currentAnimStatus !== prevAnimStatus.current) {
+        prevAnimStatus.current = currentAnimStatus;
+
+        const animName   = ecctrlAnimationSet[currentAnimStatus] ?? animationSet.idle;
+        const nextAction = actions[animName];
+
+        if (nextAction && nextAction !== activeAction.current) {
+          const isJump = animName.toLowerCase().includes('jump');
+          // Ultra-fast transition for jump (0.04s) so it feels instant;
+          // standard crossfade (0.12s) for walk/run/idle to remain smooth.
+          const crossfadeDuration = isJump ? 0.04 : 0.12;
+
+          nextAction.reset().play();
+          if (activeAction.current) {
+            activeAction.current.crossFadeTo(nextAction, crossfadeDuration, true);
+          } else {
+            nextAction.fadeIn(crossfadeDuration);
+          }
+          activeAction.current = nextAction;
+        }
+      }
+
+      // Revert animation if stuck in shoot or melee attack pose
+      const isStuckAttack = activeAction.current === actions[animationSet.shoot] ||
+                            (actions['SwordSlash'] && activeAction.current === actions['SwordSlash']) ||
+                            (actions['1H_Melee_Attack_Chop'] && activeAction.current === actions['1H_Melee_Attack_Chop']);
+      if (isStuckAttack) {
+        const animName   = ecctrlAnimationSet[currentAnimStatus ?? useAnimationStore.getState().animationStatus] ?? animationSet.idle;
+        const nextAction = actions[animName];
+        if (nextAction && nextAction !== activeAction.current) {
+          nextAction.reset().fadeIn(0.1).play();
+          if (activeAction.current) activeAction.current.crossFadeTo(nextAction, 0.12, true);
+          activeAction.current = nextAction;
+        }
+      }
+
+      // Revert local rotation offset
+      const resetLerpT = Math.min(1, 10 * delta);
+      characterRef.current.rotation.y += (0 - characterRef.current.rotation.y) * resetLerpT;
+    }
+
+    // Adjust animation timescale dynamically to match actual physics velocity
+    if (activeAction.current) {
+      // Reuse prevAnimStatus.current — already synced from the frame-loop synchronizer above (zero extra getState() call)
+      const desired = (ecctrlAnimationSet[prevAnimStatus.current] ?? animationSet.idle).toLowerCase();
+
+      const linvel = characterStatus.linvel;
+      const horizontalSpeed = Math.sqrt(linvel.x * linvel.x + linvel.z * linvel.z);
+
+      if (desired.includes("walk")) {
+        activeAction.current.timeScale = Math.max(0.4, Math.min(1.2, horizontalSpeed / 3.0));
+      } else if (desired.includes("run")) {
+        activeAction.current.timeScale = Math.max(0.4, Math.min(1.4, horizontalSpeed / 5.5));
+      } else {
+        activeAction.current.timeScale = 1.0;
+      }
+    }
+    }
+  }, 1); // priority 1: runs AFTER physics tick so characterStatus is fresh
+
+  // ─── RENDER ──────────────────────────────────────────────────────────────
   return (
     <>
       <ProjectilePool 
@@ -281,24 +1191,30 @@ export const PlayerController = ({
         ref={ecctrlRef}
         paused={paused || isSpawning || isDead}
         position={spawnPosition}
+        /* ── Collider: Slim capsule for nimble stair/slope clearance ── */
         colliderCapsuleArgs={[0.28, 1.1, 4, 8]}
+        /* ── Float / Ground Detection: Tuned for buttery smooth stair climbing and landing ── */
         floatCheckType="SHAPECAST"
         floatHeight={0.35}
         floatPullBackHeight={0.5}
         floatSensorRadius={0.32}
         floatSpringK={220}
         floatDampingC={40}
+        /* ── Movement ── */
         maxWalkSpeed={3.5}
         maxRunSpeed={6.5}
         acceleration={45}
         deceleration={35}
         turnSpeed={22}
+        /* ── Jump / Gravity: Snappy yet smooth Roblox-like jump physics ── */
         jumpVel={9.5}
         gravity={24.0}
         fallGravityFactor={1.8}
         maxFallSpeed={45}
         mass={1}
+        /* ── Slope: Increased limit to recognize steep steps/ramps as grounds for jumping ── */
         maxSlope={1.45}
+        /* ── Collision: High iteration precision to prevent clipping stair corners ── */
         collisionCheckIteration={3}
         collisionPushBackVelocity={1.0}
         collisionPushBackDamping={0.06}

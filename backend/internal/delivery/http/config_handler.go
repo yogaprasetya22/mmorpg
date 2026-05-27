@@ -491,8 +491,18 @@ func (h *ConfigHandler) ListMaps(c *gin.Context) {
 // DeleteMap deletes the specified MapConfig and MapItems from GORM
 func (h *ConfigHandler) DeleteMap(c *gin.Context) {
 	mapID := c.Query("map_id")
-	if mapID == "" || mapID == "Starter Zone" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Peta tidak valid atau dilindungi"})
+	if mapID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID peta tidak boleh kosong"})
+		return
+	}
+
+	var totalMaps int64
+	if err := h.db.Model(&domain.MapConfig{}).Count(&totalMaps).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal memeriksa jumlah peta: " + err.Error()})
+		return
+	}
+	if totalMaps <= 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Tidak dapat menghapus peta terakhir. Harus ada minimal satu peta di sistem."})
 		return
 	}
 
@@ -502,6 +512,20 @@ func (h *ConfigHandler) DeleteMap(c *gin.Context) {
 		}
 		if err := tx.Where("id = ?", mapID).Delete(&domain.MapConfig{}).Error; err != nil {
 			return err
+		}
+
+		// Update simulation settings if the deleted map was active
+		var settings domain.SimulationSetting
+		if err := tx.Where("id = ?", "default").First(&settings).Error; err == nil {
+			if settings.ActiveMapID == mapID {
+				var fallbackMap domain.MapConfig
+				if err := tx.Where("id != ?", mapID).First(&fallbackMap).Error; err == nil {
+					settings.ActiveMapID = fallbackMap.ID
+					if err := tx.Save(&settings).Error; err != nil {
+						return err
+					}
+				}
+			}
 		}
 		return nil
 	})
@@ -577,7 +601,8 @@ func (h *ConfigHandler) AIGenerateEnvironment(c *gin.Context) {
 
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 	if apiKey == "" {
-		apiKey = "sk-642fd8bd9fa3445aa9b336e136e4e380"
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "DeepSeek API Key (DEEPSEEK_API_KEY) tidak ditemukan di konfigurasi env. Silakan tambahkan ke backend/.env"})
+		return
 	}
 
 	// Format available assets list to give LLM high context accuracy

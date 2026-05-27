@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef, memo, Suspense, Component, ErrorInfo, ReactNode } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
-import { TransformControls, useGLTF } from '@react-three/drei';
+import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { useEditorStore, MapItem } from '@/src/state/useEditorStore';
+import { getTerrainElevation } from '@/src/core/utils/terrainHeight';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -36,6 +37,57 @@ class SafeErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState
   }
 }
 
+// Foliage Theme assets matching useEditorStore procedural forest generator
+const themeAssets: Record<string, { paths: string[], colors?: string[] }> = {
+  pine: {
+    paths: [
+      "/assets-tree/converted/Tree Type0 01.glb",
+      "/assets-tree/converted/Tree Type0 02.glb",
+      "/assets-tree/converted/Tree Type0 03.glb",
+      "/assets-tree/converted/Tree Type1 01.glb",
+      "/assets-tree/converted/Tree Type1 02.glb",
+      "/kingdom/rocks-large.glb",
+      "/kingdom/rocks-small.glb"
+    ]
+  },
+  cherry: {
+    paths: [
+      "/assets-tree/converted/Tree Type2 01.glb",
+      "/assets-tree/converted/Tree Type2 02.glb",
+      "/assets-tree/converted/Tree Type2 03.glb",
+      "/assets-tree/converted/Tree Type3 01.glb",
+      "/assets-tree/converted/Tree Type3 02.glb"
+    ],
+    colors: ["#fda4af", "#f472b6", "#ec4899", "#db2777"]
+  },
+  autumn: {
+    paths: [
+      "/assets-tree/converted/Tree Type4 01.glb",
+      "/assets-tree/converted/Tree Type4 02.glb",
+      "/assets-tree/converted/Tree Type5 01.glb",
+      "/assets-tree/converted/Tree Type5 02.glb"
+    ],
+    colors: ["#f59e0b", "#d97706", "#b45309", "#ea580c", "#ca8a04"]
+  },
+  desert: {
+    paths: [
+      "/kingdom/tree-log.glb",
+      "/kingdom/tree-trunk.glb",
+      "/kingdom/rocks-large.glb",
+      "/kingdom/rocks-small.glb"
+    ],
+    colors: ["#a1a1aa", "#71717a", "#b45309", "#78350f"]
+  },
+  clover: {
+    paths: [
+      "/kingdom/tree-large.glb",
+      "/kingdom/tree-small.glb",
+      "/assets-tree/converted/Tree Type6 01.glb",
+      "/assets-tree/converted/Tree Type6 02.glb"
+    ],
+    colors: ["#34d399", "#059669", "#10b981", "#047857"]
+  }
+};
 
 // A highly aesthetic semi-transparent 3D preview of the model being placed
 const GhostPreview = ({ path, position, scale, rotation }: { path: string, position: THREE.Vector3, scale: number | [number, number, number], rotation: [number, number, number] }) => {
@@ -48,9 +100,9 @@ const GhostPreview = ({ path, position, scale, rotation }: { path: string, posit
         node.material.transparent = true;
         node.material.opacity = 0.45;
         node.material.depthWrite = false;
-        node.material.color.set('#6366f1'); // High-tech neon indigo glow!
+        node.material.color.set('#818cf8'); // High-tech neon indigo glow!
         node.material.emissive = new THREE.Color('#4f46e5');
-        node.material.emissiveIntensity = 0.5;
+        node.material.emissiveIntensity = 0.6;
       }
     });
     return clone;
@@ -58,49 +110,314 @@ const GhostPreview = ({ path, position, scale, rotation }: { path: string, posit
 
   const sca: [number, number, number] = Array.isArray(scale) ? scale : [scale, scale, scale];
 
-  return <primitive object={ghost} position={position} rotation={rotation} scale={sca} />;
+  // Poin 3: Hitung offset Y agar bagian bawah model/alas selalu menempel di atas tanah
+  const pivotToBottomY = useMemo(() => {
+    const tempGroup = new THREE.Group();
+    const clonedGhost = ghost.clone();
+    tempGroup.add(clonedGhost);
+    tempGroup.scale.set(...sca);
+    tempGroup.rotation.set(...rotation);
+    tempGroup.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(tempGroup);
+    return -box.min.y;
+  }, [ghost, sca, rotation]);
+
+  const adjustedPosition = useMemo(() => {
+    return new THREE.Vector3(position.x, position.y + pivotToBottomY, position.z);
+  }, [position, pivotToBottomY]);
+
+  return <primitive object={ghost} position={adjustedPosition} rotation={rotation} scale={sca} />;
 };
 
-// A highly robust wrapper for TransformControls that handles unmounting and detached objects gracefully
-const SafeTransformControls = ({ object, ...props }: any) => {
-  const [isAttached, setIsAttached] = useState(false);
+// Sleek minimal selection ring replacing the old RGB coordinate arrows
+const SleekSelectionRing = memo(({ radius, isDragging }: { radius: number, isDragging: boolean }) => {
+  return (
+    <group position-y={0.02}>
+      {/* Pulsing neon indigo ring */}
+      <mesh rotation-x={-Math.PI / 2}>
+        <ringGeometry args={[radius - 0.04, radius, 64]} />
+        <meshBasicMaterial 
+          color={isDragging ? "#6366f1" : "#818cf8"} 
+          transparent 
+          opacity={0.85} 
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      {/* Ground soft aura glow */}
+      <mesh rotation-x={-Math.PI / 2}>
+        <ringGeometry args={[0, radius]} />
+        <meshBasicMaterial 
+          color={isDragging ? "#4f46e5" : "#6366f1"} 
+          transparent 
+          opacity={isDragging ? 0.22 : 0.12} 
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+    </group>
+  );
+});
 
-  useEffect(() => {
-    if (!object) {
-      setIsAttached(false);
-      return;
+// Sleek minimal hover ring
+const SleekHoverRing = memo(({ radius }: { radius: number }) => {
+  return (
+    <mesh rotation-x={-Math.PI / 2} position-y={0.02}>
+      <ringGeometry args={[radius - 0.03, radius, 64]} />
+      <meshBasicMaterial 
+        color="#fbbf24" // Beautiful warm amber hover glow!
+        transparent 
+        opacity={0.65} 
+        depthWrite={false}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  );
+});
+
+// ─── HOLOGRAPHIC BRUSH MASK PROJECTION COMPONENT ───
+const HolographicBrushProjection = memo(({ maskId, size, strength, position }: {
+  maskId: 'softCircle' | 'hardCircle' | 'star' | 'hexagon' | 'starOutline' | 'square';
+  size: number;
+  strength: number;
+  position: [number, number, number];
+}) => {
+  const radius = size; // Accurate absolute meters scale!
+
+  // Star Points calculation
+  const starPoints = useMemo(() => {
+    const pts = [];
+    const spikes = 5;
+    const outerRadius = radius;
+    const innerRadius = radius * 0.45;
+    let rot = (Math.PI / 2) * 3;
+    const step = Math.PI / spikes;
+    for (let i = 0; i < spikes * 2; i++) {
+      const r = i % 2 === 0 ? outerRadius : innerRadius;
+      pts.push(new THREE.Vector3(Math.cos(rot) * r, Math.sin(rot) * r, 0));
+      rot += step;
     }
+    return new Float32Array(pts.flatMap(p => [p.x, p.y, p.z]));
+  }, [radius]);
 
-    const checkAttachment = () => {
-      let root = object;
-      while (root.parent) {
-        root = root.parent;
-      }
-      setIsAttached(root.type === 'Scene');
-    };
+  return (
+    <group position={[position[0], position[1] + 0.15, position[2]]} rotation={[-Math.PI / 2, 0, 0]}>
+      {/* 1. SOFT CIRCLE (Inner Core + Fading Outer Ring) */}
+      {maskId === 'softCircle' && (
+        <group>
+          {/* Outer Boundary Ring */}
+          <mesh>
+            <ringGeometry args={[radius - 0.04, radius, 64]} />
+            <meshBasicMaterial color="#3b82f6" transparent opacity={0.35} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+          {/* Inner Solid Core (representing the feathering strength ratio) */}
+          <mesh>
+            <ringGeometry args={[0, radius * strength, 64]} />
+            <meshBasicMaterial color="#3b82f6" transparent opacity={0.25} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+          <mesh>
+            <ringGeometry args={[Math.max(0, radius * strength - 0.04), radius * strength, 64]} />
+            <meshBasicMaterial color="#3b82f6" transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
 
-    checkAttachment();
-    
-    // Periodically double check to catch rapid React state updates
-    const interval = setInterval(checkAttachment, 50);
-    return () => clearInterval(interval);
-  }, [object]);
+      {/* 2. HARD CIRCLE */}
+      {maskId === 'hardCircle' && (
+        <group>
+          <mesh>
+            <ringGeometry args={[radius - 0.05, radius, 64]} />
+            <meshBasicMaterial color="#3b82f6" transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+          <mesh>
+            <ringGeometry args={[0, radius, 64]} />
+            <meshBasicMaterial color="#3b82f6" transparent opacity={0.15} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
 
-  if (!isAttached || !object || !object.parent) return null;
+      {/* 3. STAR */}
+      {maskId === 'star' && (
+        <group>
+          <lineLoop>
+            <bufferGeometry>
+              <float32BufferAttribute attach="attributes-position" args={[starPoints, 3]} />
+            </bufferGeometry>
+            <lineBasicMaterial color="#3b82f6" linewidth={2} transparent opacity={0.9} depthWrite={false} />
+          </lineLoop>
+          {/* Light center glow */}
+          <mesh>
+            <ringGeometry args={[0, radius * 0.4, 32]} />
+            <meshBasicMaterial color="#3b82f6" transparent opacity={0.12} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
 
-  return <TransformControls object={object} {...props} />;
-};
+      {/* 4. HEXAGON (Regular Hexagon) */}
+      {maskId === 'hexagon' && (
+        <group>
+          <mesh>
+            <ringGeometry args={[radius - 0.05, radius, 6]} />
+            <meshBasicMaterial color="#3b82f6" transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+          <mesh>
+            <ringGeometry args={[0, radius, 6]} />
+            <meshBasicMaterial color="#3b82f6" transparent opacity={0.12} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
 
-// --- EDITOR COMPONENT (3D Scene Only) ---
+      {/* 5. STAR OUTLINE (Double Concentric Thin Rings) */}
+      {maskId === 'starOutline' && (
+        <group>
+          {/* Outer Ring */}
+          <mesh>
+            <ringGeometry args={[radius - 0.03, radius, 64]} />
+            <meshBasicMaterial color="#3b82f6" transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+          {/* Inner Ring */}
+          <mesh>
+            <ringGeometry args={[radius * 0.7 - 0.03, radius * 0.7, 64]} />
+            <meshBasicMaterial color="#3b82f6" transparent opacity={0.65} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
+
+      {/* 6. SQUARE (4 segments rotated 45deg) */}
+      {maskId === 'square' && (
+        <group rotation-z={Math.PI / 4}>
+          <mesh>
+            <ringGeometry args={[radius - 0.05, radius, 4]} />
+            <meshBasicMaterial color="#3b82f6" transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+          <mesh>
+            <ringGeometry args={[0, radius, 4]} />
+            <meshBasicMaterial color="#3b82f6" transparent opacity={0.12} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
+    </group>
+  );
+});
+
+// ─── PLACED MASK PROJECTION COMPONENT ───
+const PlacedMaskProjection = memo(({ item, isSelected, isHovered, onPointerOver, onPointerOut }: {
+  item: MapItem;
+  isSelected: boolean;
+  isHovered: boolean;
+  onPointerOver: (e: any) => void;
+  onPointerOut: (e: any) => void;
+}) => {
+  const { pos, rot, sca, path: maskId, color } = item;
+  const radius = sca[0]; // Scale stores size in absolute meters
+
+  // Star Points calculation
+  const starPoints = useMemo(() => {
+    const pts = [];
+    const spikes = 5;
+    const outerRadius = radius;
+    const innerRadius = radius * 0.45;
+    let rotVal = (Math.PI / 2) * 3;
+    const step = Math.PI / spikes;
+    for (let i = 0; i < spikes * 2; i++) {
+      const r = i % 2 === 0 ? outerRadius : innerRadius;
+      pts.push(new THREE.Vector3(Math.cos(rotVal) * r, Math.sin(rotVal) * r, 0));
+      rotVal += step;
+    }
+    return new Float32Array(pts.flatMap(p => [p.x, p.y, p.z]));
+  }, [radius]);
+
+  const outlineColor = isSelected ? '#fbbf24' : isHovered ? '#60a5fa' : color || '#3b82f6';
+  const filledColor = color || '#3b82f6';
+
+  return (
+    <group 
+      name={item.id} 
+      position={[pos[0], pos[1] + 0.08, pos[2]]} 
+      rotation={[-Math.PI / 2, 0, rot[1]]}
+      scale={[1, 1, 1]}
+      onPointerOver={onPointerOver}
+      onPointerOut={onPointerOut}
+    >
+      {/* Selection Aura */}
+      {isSelected && (
+        <mesh>
+          <ringGeometry args={[radius, radius + 0.15, 64]} />
+          <meshBasicMaterial color="#fbbf24" transparent opacity={0.35} side={THREE.DoubleSide} depthWrite={false} />
+        </mesh>
+      )}
+
+      {/* 1. STAR */}
+      {maskId === 'star' && (
+        <group>
+          <lineLoop>
+            <bufferGeometry>
+              <float32BufferAttribute attach="attributes-position" args={[starPoints, 3]} />
+            </bufferGeometry>
+            <lineBasicMaterial color={outlineColor} linewidth={2.5} transparent opacity={0.9} depthWrite={false} />
+          </lineLoop>
+          <mesh>
+            <ringGeometry args={[0, radius * 0.4, 32]} />
+            <meshBasicMaterial color={filledColor} transparent opacity={0.2} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
+
+      {/* 2. HEXAGON */}
+      {maskId === 'hexagon' && (
+        <group>
+          <mesh>
+            <ringGeometry args={[radius - 0.05, radius, 6]} />
+            <meshBasicMaterial color={outlineColor} transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+          <mesh>
+            <ringGeometry args={[0, radius, 6]} />
+            <meshBasicMaterial color={filledColor} transparent opacity={0.15} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
+
+      {/* 3. STAR OUTLINE (Double Ring) */}
+      {maskId === 'starOutline' && (
+        <group>
+          <mesh>
+            <ringGeometry args={[radius - 0.03, radius, 64]} />
+            <meshBasicMaterial color={outlineColor} transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+          <mesh>
+            <ringGeometry args={[radius * 0.7 - 0.03, radius * 0.7, 64]} />
+            <meshBasicMaterial color={outlineColor} transparent opacity={0.65} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
+
+      {/* 4. SQUARE */}
+      {maskId === 'square' && (
+        <group rotation-z={Math.PI / 4}>
+          <mesh>
+            <ringGeometry args={[radius - 0.05, radius, 4]} />
+            <meshBasicMaterial color={outlineColor} transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+          <mesh>
+            <ringGeometry args={[0, radius, 4]} />
+            <meshBasicMaterial color={filledColor} transparent opacity={0.15} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
+    </group>
+  );
+});
+
+// --- WORLD EDITOR 3D CANVAS INTERACTION COMPONENT ---
 export const WorldEditor = () => {
   const { scene, raycaster, mouse, camera, gl } = useThree();
   const {
     items,
+    setItems,
     selectedId,
     setSelectedId,
     selectedIds,
     toggleSelectedId,
-    mode,
     activeAsset,
     setActiveAsset,
     isEditorOpen,
@@ -111,30 +428,63 @@ export const WorldEditor = () => {
     gridSize,
     gridEnabled,
     paintMode,
+    brushSize,
     brushHoverPos,
     setBrushHoverPos,
+    brushMaskId,
+    brushStrength,
+    setBrushStrength,
+    terrainMode,
+    brushRotation,
+    brushColor,
     lastUsedScales,
     setLastUsedScale,
     lastUsedRotations,
     setLastUsedRotation,
+    environment,
+    terrainConfig,
+
+    // Vegetation Spray States
+    vegetationBrushActive,
+    setVegetationBrushActive,
+    vegetationTheme,
+    vegetationDensity,
+
+    // Smooth panning states
+    cameraFocusTarget,
+    setCameraFocusTarget
   } = useEditorStore();
 
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState<THREE.Vector3 | null>(null);
   const [isOverUI, setIsOverUI] = useState(false);
 
-  // Store start states of all selected objects when dragging begins
-  const dragStartStatesRef = useRef<Map<string, { pos: [number, number, number], rot: [number, number, number], sca: [number, number, number] }>>(new Map());
+  // Direct dragging ID state
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const isDraggingVegetationRef = useRef(false);
+  const lastSprayTimeRef = useRef(0);
+
+  // Cache starting coordinates to support cancellation
+  const dragStartRef = useRef<{
+    pos: [number, number, number];
+    rot: [number, number, number];
+    sca: [number, number, number];
+  } | null>(null);
+
+  // Smooth hover pos and target dragging pos
+  const smoothHoverPosRef = useRef<THREE.Vector3>(new THREE.Vector3());
+  const targetDragPosRef = useRef<THREE.Vector3>(new THREE.Vector3());
 
   // Track initial pointer down coordinates and timestamp to distinguish taps from camera drags
   const pointerStartRef = useRef<{ time: number; x: number; y: number } | null>(null);
+  const lastDraggedIdRef = useRef<string | null>(null);
 
   // Load from local storage on mount
   useEffect(() => {
     loadFromStorage();
   }, [loadFromStorage]);
 
-  // Pre-load active asset dynamically when selected in the palette to warm up browser and Drei cache
+  // Pre-load active asset dynamically when selected in the palette to warm up Drei cache
   useEffect(() => {
     if (activeAsset) {
       useGLTF.preload(activeAsset.path);
@@ -146,13 +496,87 @@ export const WorldEditor = () => {
     return Math.round(val / gridSize) * gridSize;
   }, [gridEnabled, gridSize]);
 
+  // Commit placement logic
+  const commitPlacement = useCallback((id: string) => {
+    const obj = scene.getObjectByName(id);
+    if (!obj) return;
+
+    updateItemsWithHistory(prev => prev.map(i => {
+      if (i.id === id) {
+        return {
+          ...i,
+          pos: [obj.position.x, obj.position.y, obj.position.z],
+          rot: [obj.rotation.x, obj.rotation.y, obj.rotation.z],
+          sca: [obj.scale.x, obj.scale.y, obj.scale.z]
+        };
+      }
+      return i;
+    }));
+
+    setDraggedId(null);
+    dragStartRef.current = null;
+    console.log(`[PARALIVES INTERACTION] Item committed at coordinates: X=${obj.position.x.toFixed(2)}, Y=${obj.position.y.toFixed(2)}, Z=${obj.position.z.toFixed(2)}`);
+  }, [updateItemsWithHistory, scene]);
+
+  // Cancel dragging or active placement
+  const cancelActiveDragOrPlacement = useCallback(() => {
+    if (draggedId) {
+      const start = dragStartRef.current;
+      const activeId = draggedId;
+      setDraggedId(null);
+      dragStartRef.current = null;
+
+      if (start) {
+        // Revert 3D object back to starting coordinates
+        const obj = scene.getObjectByName(activeId);
+        if (obj) {
+          obj.position.set(...start.pos);
+          obj.rotation.set(...start.rot);
+          obj.scale.set(...start.sca);
+        }
+        // Revert Zustand store
+        setItems(items.map(i => {
+          if (i.id === activeId) {
+            return {
+              ...i,
+              pos: start.pos,
+              rot: start.rot,
+              sca: start.sca
+            };
+          }
+          return i;
+        }));
+      }
+      console.log(`[PARALIVES INTERACTION] Dragging canceled for item ${activeId}. Reverted to starting coordinates.`);
+    } else if (activeAsset) {
+      setActiveAsset(null);
+      console.log(`[PARALIVES INTERACTION] Placement blueprint canceled.`);
+    } else if (selectedId) {
+      setSelectedId(null);
+    }
+    if (vegetationBrushActive) {
+      setVegetationBrushActive(false);
+    }
+  }, [draggedId, activeAsset, selectedId, items, setItems, scene, setActiveAsset, setSelectedId, vegetationBrushActive, setVegetationBrushActive]);
+
   const spawnAtPoint = useCallback((point: THREE.Vector3) => {
-    if (!activeAsset || paintMode) return;
+    if (!activeAsset || paintMode || vegetationBrushActive) return;
+
+    // Direct Snapping: Auto locks to deforming terrain elevation Y coordinate!
+    const snappedX = snap(point.x);
+    const snappedZ = snap(point.z);
+    let snapY = getTerrainElevation(snappedX, snappedZ, environment, 24, terrainConfig);
+    if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
+      const raycastH = (window as any).getGroundHeight(snappedX, snappedZ, -999);
+      if (raycastH !== -999) {
+        snapY = raycastH;
+      }
+    }
 
     const snappedPos: [number, number, number] = [
-      snap(point.x),
-      point.y,
-      snap(point.z)
+      snappedX,
+      snapY,
+      snappedZ
     ];
 
     const cachedScale = lastUsedScales[activeAsset.path] || [1, 1, 1];
@@ -166,21 +590,51 @@ export const WorldEditor = () => {
       rot: cachedRotation,
       sca: cachedScale,
     };
+
     updateItemsWithHistory(prev => [...prev, newItem]);
+    
+    // Select newly spawned item and immediately pick it up in direct drag mode!
     setSelectedId(newItem.id);
-  }, [activeAsset, updateItemsWithHistory, setSelectedId, snap, lastUsedScales, lastUsedRotations]);
+    setDraggedId(newItem.id);
+    dragStartRef.current = {
+      pos: snappedPos,
+      rot: cachedRotation,
+      sca: cachedScale
+    };
+
+    setActiveAsset(null); // Clear blueprint placement mode
+    console.log(`[PARALIVES INTERACTION] Spawned new ${activeAsset.name} and picked up in Drag Mode.`);
+  }, [activeAsset, updateItemsWithHistory, setSelectedId, snap, lastUsedScales, lastUsedRotations, paintMode, vegetationBrushActive, environment, terrainConfig]);
 
   const deleteSelected = useCallback(() => {
     if (selectedIds.length > 0) {
       updateItemsWithHistory(prev => prev.filter(i => !selectedIds.includes(i.id)));
       setSelectedId(null);
+      setDraggedId(null);
+      dragStartRef.current = null;
     }
   }, [selectedIds, updateItemsWithHistory, setSelectedId]);
 
-  // Keyboard shortcuts
+  // Block context menus inside editing mode
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      if (isEditorOpen) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('contextmenu', handleContextMenu);
+    return () => window.removeEventListener('contextmenu', handleContextMenu);
+  }, [isEditorOpen]);
+
+  // keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!isEditorOpen) return;
+      
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelActiveDragOrPlacement();
+      }
       if (e.ctrlKey && e.key === 'z') {
         e.preventDefault();
         undo();
@@ -197,8 +651,139 @@ export const WorldEditor = () => {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isEditorOpen, undo, redo, selectedIds, deleteSelected]);
+  }, [isEditorOpen, undo, redo, selectedIds, deleteSelected, cancelActiveDragOrPlacement]);
 
+  // Scroll wheel rotation & Shift + Scroll scaling
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      const activeId = draggedId || selectedId;
+      const direction = e.deltaY > 0 ? -1 : 1;
+      const isShift = e.shiftKey;
+      const isCtrl = e.ctrlKey;
+
+      // Ctrl + Scroll: adjust feathering (brush strength) when terrain editing is active
+      if (isCtrl && selectedId === 'terrain') {
+        e.preventDefault();
+        const strengthStep = 0.05 * direction;
+        const nextStrength = Math.max(0.01, Math.min(1.0, brushStrength + strengthStep));
+        setBrushStrength(nextStrength);
+        return;
+      }
+
+      if (!activeId && !activeAsset) return;
+
+      e.preventDefault(); // Prevent standard window scrolling
+
+      if (isShift) {
+        // Shift + Scroll: Scale size
+        const scaleStep = 0.05 * direction;
+        
+        if (activeId) {
+          const item = items.find(i => i.id === activeId);
+          if (item) {
+            updateItemsWithHistory(prev => prev.map(i => {
+              if (i.id === activeId) {
+                const nextSca = Math.max(0.1, i.sca[0] + scaleStep);
+                setLastUsedScale(i.path, [nextSca, nextSca, nextSca]);
+                
+                // Directly scale the 3D model in real time
+                const obj = scene.getObjectByName(activeId);
+                if (obj) obj.scale.set(nextSca, nextSca, nextSca);
+
+                return { ...i, sca: [nextSca, nextSca, nextSca] };
+              }
+              return i;
+            }));
+          }
+        } else if (activeAsset) {
+          const current = lastUsedScales[activeAsset.path] || [1, 1, 1];
+          const nextVal = Math.max(0.1, current[0] + scaleStep);
+          setLastUsedScale(activeAsset.path, [nextVal, nextVal, nextVal]);
+        }
+      } else {
+        // Scroll: Rotate Yaw Y-axis
+        const rotStep = (Math.PI / 24) * direction; // ~7.5 degrees step
+
+        if (activeId) {
+          const item = items.find(i => i.id === activeId);
+          if (item) {
+            updateItemsWithHistory(prev => prev.map(i => {
+              if (i.id === activeId) {
+                const nextYaw = i.rot[1] + rotStep;
+                setLastUsedRotation(i.path, [i.rot[0], nextYaw, i.rot[2]]);
+                
+                // Directly rotate the 3D model in real time
+                const obj = scene.getObjectByName(activeId);
+                if (obj) obj.rotation.y = nextYaw;
+
+                return { ...i, rot: [i.rot[0], nextYaw, i.rot[2]] };
+              }
+              return i;
+            }));
+          }
+        } else if (activeAsset) {
+          const current = lastUsedRotations[activeAsset.path] || [0, 0, 0];
+          const nextVal = current[1] + rotStep;
+          setLastUsedRotation(activeAsset.path, [current[0], nextVal, current[2]]);
+        }
+      }
+    };
+
+    const el = gl.domElement;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [draggedId, selectedId, activeAsset, items, updateItemsWithHistory, setLastUsedScale, setLastUsedRotation, lastUsedScales, lastUsedRotations, gl, scene, brushStrength, setBrushStrength]);
+
+  // Handle local vegetation spray brush points adding
+  const handleSprayVegetation = useCallback((center: [number, number, number]) => {
+    const now = Date.now();
+    if (now - lastSprayTimeRef.current < 90) return; // limit frequency to 90ms intervals
+    lastSprayTimeRef.current = now;
+
+    const [cx, , cz] = center;
+    const radius = brushSize * 0.12; // visual scaling for 3D units
+    const count = Math.max(1, Math.round(vegetationDensity / 12));
+
+    const theme = themeAssets[vegetationTheme] || themeAssets.pine;
+    const newTrees: MapItem[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const r = Math.sqrt(Math.random()) * radius; // uniform distribution
+      const theta = Math.random() * Math.PI * 2;
+      const px = cx + Math.cos(theta) * r;
+      const pz = cz + Math.sin(theta) * r;
+
+      // Perfectly calculates high-low elevation Y coordinate matching mountain slope contours
+      let py = getTerrainElevation(px, pz, environment, 24, terrainConfig);
+      if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
+        const raycastH = (window as any).getGroundHeight(px, pz, -999);
+        if (raycastH !== -999) {
+          py = raycastH;
+        }
+      }
+
+      const modelPath = theme.paths[Math.floor(Math.random() * theme.paths.length)];
+      const color = theme.colors ? theme.colors[Math.floor(Math.random() * theme.colors.length)] : undefined;
+      const scaleRatio = 0.55 + Math.random() * 0.9;
+      const rotY = Math.random() * Math.PI * 2;
+
+      newTrees.push({
+        id: `procedural-veg-${vegetationTheme}-${now}-${i}-${Math.random()}`,
+        type: 'procedural-vegetation',
+        path: modelPath,
+        pos: [px, py, pz],
+        rot: [0, rotY, 0],
+        sca: [scaleRatio, scaleRatio, scaleRatio],
+        color
+      });
+    }
+
+    if (newTrees.length > 0) {
+      updateItemsWithHistory([...items, ...newTrees]);
+    }
+  }, [brushSize, vegetationDensity, vegetationTheme, environment, terrainConfig, items, updateItemsWithHistory]);
+
+  // Set up pointer event handlers
   useEffect(() => {
     if (!isEditorOpen) return;
 
@@ -214,7 +799,7 @@ export const WorldEditor = () => {
     };
 
     const onDown = (e: PointerEvent) => {
-      if (e.button !== 0 || isOverUI || paintMode) return;
+      if (isOverUI) return;
       
       const target = e.target as HTMLElement;
       if (
@@ -224,7 +809,13 @@ export const WorldEditor = () => {
         ['BUTTON', 'INPUT', 'SELECT', 'LABEL'].includes(target.tagName)
       ) return;
 
-      // Capture pointer start coordinates and time
+      if (vegetationBrushActive) {
+        if (e.button === 0) {
+          isDraggingVegetationRef.current = true;
+        }
+        return;
+      }
+
       pointerStartRef.current = {
         time: Date.now(),
         x: e.clientX,
@@ -233,24 +824,64 @@ export const WorldEditor = () => {
     };
 
     const onUp = (e: PointerEvent) => {
-      if (e.button !== 0 || isOverUI || paintMode || !pointerStartRef.current) return;
-      
-      const target = e.target as HTMLElement;
-      if (
-        target.closest('.world-editor-ui') || 
-        target.closest('[data-leva]') || 
-        target.closest('#leva__root') ||
-        ['BUTTON', 'INPUT', 'SELECT', 'LABEL'].includes(target.tagName)
-      ) {
-        pointerStartRef.current = null;
+      if (isOverUI) return;
+
+      if (vegetationBrushActive) {
+        if (e.button === 0) {
+          isDraggingVegetationRef.current = false;
+        }
         return;
       }
 
+      if (paintMode) {
+        // If terrainMode is paint and selected mask is persistent shape, spawn mask node object!
+        if (e.button === 0 && terrainMode === 'paint' && ['star', 'hexagon', 'square', 'starOutline'].includes(brushMaskId)) {
+          if (!pointerStartRef.current) return;
+          const elapsed = Date.now() - pointerStartRef.current.time;
+          const dist = Math.hypot(e.clientX - pointerStartRef.current.x, e.clientY - pointerStartRef.current.y);
+          pointerStartRef.current = null;
+          if (elapsed > 300 || dist > 5) return;
+
+          const rect = gl.domElement.getBoundingClientRect();
+          const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+          const exactMouse = new THREE.Vector2(ndcX, ndcY);
+
+          raycaster.setFromCamera(exactMouse, camera);
+          const intersects = raycaster.intersectObjects(scene.children, true);
+          const terrainHit = intersects.find(i => i.object.name === 'terrain');
+          if (terrainHit) {
+            const hitPoint = terrainHit.point;
+            const newItem: MapItem = {
+              id: "item_mask_" + Math.random().toString(36).substr(2, 9),
+              type: "mask_projection",
+              path: brushMaskId,
+              pos: [hitPoint.x, hitPoint.y, hitPoint.z],
+              rot: [0, (brushRotation * Math.PI) / 180, 0],
+              sca: [brushSize, brushSize, brushSize],
+              color: brushColor,
+            };
+            updateItemsWithHistory(prev => [...prev, newItem]);
+            console.log(`[PERSISTENT MASK] Placed dynamic mask object ${brushMaskId} at`, hitPoint);
+          }
+        }
+        return;
+      }
+
+      // Right click cancels selection or dragging
+      if (e.button === 2) {
+        e.preventDefault();
+        cancelActiveDragOrPlacement();
+        return;
+      }
+
+      if (e.button !== 0 || !pointerStartRef.current) return;
+      
       const elapsed = Date.now() - pointerStartRef.current.time;
       const dist = Math.hypot(e.clientX - pointerStartRef.current.x, e.clientY - pointerStartRef.current.y);
       pointerStartRef.current = null;
 
-      // Tap-to-drag validation threshold: 300 ms hold or 5px displacement separates camera pan/rotation from click selection
+      // Tap-to-drag validation threshold: hold or camera movement ignores selection
       if (elapsed > 300 || dist > 5) return;
 
       const rect = gl.domElement.getBoundingClientRect();
@@ -260,24 +891,28 @@ export const WorldEditor = () => {
 
       raycaster.setFromCamera(exactMouse, camera);
       const intersects = raycaster.intersectObjects(scene.children, true);
+      const filteredIntersects = draggedId 
+        ? intersects.filter(i => {
+            let cur: any = i.object;
+            while (cur) {
+              if (cur.name === draggedId) return false;
+              cur = cur.parent;
+            }
+            return true;
+          })
+        : intersects;
       
-      if (intersects.length === 0) {
-        setSelectedId(null);
+      if (filteredIntersects.length === 0) {
+        if (draggedId) {
+          commitPlacement(draggedId);
+        } else {
+          setSelectedId(null);
+        }
         return;
       }
 
-      // 1. Priority: Check if we hit the Gizmo or an Item
-      const gizmoHit = intersects.find(i => {
-        let cur: any = i.object;
-        while(cur) {
-          if (cur.type === 'TransformControlsPlane' || cur.name?.includes('gizmo')) return true;
-          cur = cur.parent;
-        }
-        return false;
-      });
-      if (gizmoHit) return; // Ignore clicks on gizmo
-
-      const itemHit = intersects.find(i => {
+      // Check if we hit an Item
+      const itemHit = filteredIntersects.find(i => {
         let cur: any = i.object;
         while(cur) {
           if(cur.name?.startsWith('item_')) return true;
@@ -290,17 +925,45 @@ export const WorldEditor = () => {
         let cur: any = itemHit.object;
         while(cur) {
           if(cur.name?.startsWith('item_')) {
-            setSelectedId(cur.name);
-            // If we hit an item, we should clear the active asset to enter "Edit Mode"
-            if (activeAsset) setActiveAsset(null);
+            const hitId = cur.name;
+            
+            if (draggedId) {
+              commitPlacement(draggedId);
+            } else if (selectedId === hitId) {
+              // Click selected item again to pick it up in direct drag mode!
+              const it = items.find(i => i.id === hitId);
+              if (it) {
+                setDraggedId(hitId);
+                dragStartRef.current = {
+                  pos: [...it.pos],
+                  rot: [...it.rot],
+                  sca: [...it.sca]
+                };
+                console.log(`[PARALIVES INTERACTION] Picked up ${it.type} in Drag Mode.`);
+              }
+            } else {
+              // Select item and immediately pick it up in direct drag mode!
+              setSelectedId(hitId);
+              const it = items.find(i => i.id === hitId);
+              if (it) {
+                setDraggedId(hitId);
+                dragStartRef.current = {
+                  pos: [...it.pos],
+                  rot: [...it.rot],
+                  sca: [...it.sca]
+                };
+                console.log(`[PARALIVES INTERACTION] Selected and picked up ${it.type} in Drag Mode.`);
+              }
+              if (activeAsset) setActiveAsset(null);
+            }
             return;
           }
           cur = cur.parent;
         }
       }
 
-      // 2. Handle ground click
-      const groundHit = intersects.find(i => 
+      // Handle ground / terrain click
+      const groundHit = filteredIntersects.find(i => 
         i.object.name && (
           i.object.name.toLowerCase().includes('terrain') || 
           i.object.name.toLowerCase().includes('ground')
@@ -308,27 +971,53 @@ export const WorldEditor = () => {
       );
       
       if (groundHit) {
-        if (activeAsset) {
-          // In "Placement Mode": Click ground = Spawn
+        if (draggedId) {
+          // Committing placement
+          commitPlacement(draggedId);
+        } else if (activeAsset) {
+          // Spawn new blueprint
           spawnAtPoint(groundHit.point);
         } else {
-          // In "Selection Mode": Click ground = Deselect
+          // Deselect selected item
           setSelectedId(null);
         }
       }
     };
 
     window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointerdown', onDown, { passive: true });
     window.addEventListener('pointerup', onUp);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerdown', onDown);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [isEditorOpen, isOverUI, selectedId, activeAsset, paintMode, setActiveAsset, scene, camera, gl, raycaster, spawnAtPoint, setSelectedId]);
+  }, [isEditorOpen, isOverUI, selectedId, draggedId, activeAsset, paintMode, vegetationBrushActive, setActiveAsset, scene, camera, gl, raycaster, spawnAtPoint, setSelectedId, commitPlacement, cancelActiveDragOrPlacement, items]);
 
-  useFrame(() => {
+  // Frame Loop logic
+  useFrame((_, delta) => {
+    // ─── 0. CAMERA FOCUS TARGET LERPING ───
+    if (cameraFocusTarget) {
+      const controls = (_.controls || (camera as any).controls) as any;
+      if (controls) {
+        const targetVec = new THREE.Vector3(...cameraFocusTarget);
+        
+        // Smoothly interpolate orbit controls focus target Y-level elevations
+        controls.target.lerp(targetVec, 1 - Math.exp(-8 * delta));
+        
+        // Isometric offsets offset for perfect framing perspective
+        const cameraOffset = new THREE.Vector3(14, 11, 14);
+        const desiredCamPos = targetVec.clone().add(cameraOffset);
+        
+        camera.position.lerp(desiredCamPos, 1 - Math.exp(-8 * delta));
+        
+        // Once cameras settle closely to focus vectors, free constraints controls
+        if (controls.target.distanceTo(targetVec) < 0.1) {
+          setCameraFocusTarget(null);
+        }
+      }
+    }
+
     if (!isEditorOpen || isOverUI) {
       if (hoverPos) setHoverPos(null);
       if (hoveredId) setHoveredId(null);
@@ -340,7 +1029,44 @@ export const WorldEditor = () => {
     raycaster.setFromCamera(mouse, camera);
     const intersects = raycaster.intersectObjects(scene.children, true);
     
-    // If paintMode is active, perform specialized high-frequency terrain hover tracking
+    // Vegetation Spray Brush Mode
+    if (vegetationBrushActive) {
+      const terrainHit = intersects.find(i => 
+        i.object.name && (
+          i.object.name.toLowerCase().includes('terrain') || 
+          i.object.name.toLowerCase().includes('ground')
+        )
+      );
+      if (terrainHit) {
+        const p = terrainHit.point;
+        setBrushHoverPos([p.x, p.y, p.z]);
+        
+        if (isDraggingVegetationRef.current) {
+          handleSprayVegetation([p.x, p.y, p.z]);
+          
+          // Disable orbit controls while dragging to prevent rotation issues
+          const controls = _.controls as any;
+          if (controls && controls.enabled) {
+            controls.enabled = false;
+          }
+        } else {
+          // Re-enable controls when not active spraying
+          const controls = _.controls as any;
+          if (controls && !controls.enabled && !draggedId) {
+            controls.enabled = true;
+          }
+        }
+      } else {
+        setBrushHoverPos(null);
+      }
+      
+      if (hoverPos) setHoverPos(null);
+      if (hoveredId) setHoveredId(null);
+      document.body.style.cursor = 'cell';
+      return;
+    }
+
+    // Terrain Paint Mode
     if (paintMode) {
       const terrainHit = intersects.find(i => i.object.name === 'terrain');
       if (terrainHit) {
@@ -348,15 +1074,122 @@ export const WorldEditor = () => {
       } else {
         setBrushHoverPos(null);
       }
-      
-      // Clean up normal interaction states while in paint mode
       if (hoverPos) setHoverPos(null);
       if (hoveredId) setHoveredId(null);
-      document.body.style.cursor = 'crosshair'; // Visual feedback for painting
+      document.body.style.cursor = 'crosshair';
       return;
     }
 
-    // 1. Check for Items first (Interaction priority)
+    // Poin 1: Abaikan objek yang sedang diseret (Raycast Target Filtering)
+    const filteredIntersects = draggedId 
+      ? intersects.filter(i => {
+          let cur: any = i.object;
+          while (cur) {
+            if (cur.name === draggedId) return false;
+            cur = cur.parent;
+          }
+          return true;
+        })
+      : intersects;
+
+    // Retrieve terrain coordinates
+    const terrainHit = filteredIntersects.find(i => 
+      i.object.name && (
+        i.object.name.toLowerCase().includes('terrain') || 
+        i.object.name.toLowerCase().includes('ground')
+      )
+    );
+
+    let pivotToBottomY = 0;
+    if (draggedId) {
+      const obj = scene.getObjectByName(draggedId);
+      if (obj) {
+        // Inisialisasi target posisi seret di awal agar tidak meloncat
+        if (lastDraggedIdRef.current !== draggedId) {
+          targetDragPosRef.current.copy(obj.position);
+          lastDraggedIdRef.current = draggedId;
+        }
+
+        // Poin 3: Hitung offset Y agar bagian bawah model/alas selalu duduk manis di atas tanah (Pivot Bottom Alignment)
+        const box = new THREE.Box3().setFromObject(obj);
+        pivotToBottomY = obj.position.y - box.min.y;
+
+        // Kalibrasi dragStartRef Y koordinat jika baru dimulai agar penghentian (revert) tidak tenggelam
+        if (dragStartRef.current) {
+          const startX = dragStartRef.current.pos[0];
+          const startZ = dragStartRef.current.pos[2];
+          let terrainYAtStart = getTerrainElevation(startX, startZ, environment, 24, terrainConfig);
+          if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
+            const raycastH = (window as any).getGroundHeight(startX, startZ, -999);
+            if (raycastH !== -999) {
+              terrainYAtStart = raycastH;
+            }
+          }
+          if (Math.abs(dragStartRef.current.pos[1] - terrainYAtStart) < 0.01) {
+            dragStartRef.current.pos[1] = terrainYAtStart + pivotToBottomY;
+          }
+        }
+      }
+    } else {
+      if (lastDraggedIdRef.current !== null) {
+        lastDraggedIdRef.current = null;
+      }
+    }
+
+    if (terrainHit) {
+      // Langkah A: Tangkap koordinat mouse di tanah
+      const rawPos = terrainHit.point;
+      
+      // Langkah B: Bulatkan koordinat X dan Z ke grid terdekat
+      const snapX = snap(rawPos.x);
+      const snapZ = snap(rawPos.z);
+      
+      // Langkah C: Ambil tinggi permukaan tanah tepat di koordinat X dan Z yang sudah dibulatkan
+      let snapY = getTerrainElevation(snapX, snapZ, environment, 24, terrainConfig);
+      if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
+        const raycastH = (window as any).getGroundHeight(snapX, snapZ, -999);
+        if (raycastH !== -999) {
+          snapY = raycastH;
+        }
+      }
+      
+      // Langkah D: Gabungkan dengan offset pivot untuk menempelkan bagian bawah objek di permukaan tanah
+      const snappedPoint = new THREE.Vector3(snapX, snapY + pivotToBottomY, snapZ);
+      
+      // Poin 4: Perhalus pergerakan lerp target posisi saat meluncur di grid dan tebing/lereng curam
+      targetDragPosRef.current.lerp(snappedPoint, 1 - Math.exp(-24 * delta));
+
+      // Smooth blueprint ghost glide
+      smoothHoverPosRef.current.lerp(new THREE.Vector3(snapX, snapY, snapZ), 1 - Math.exp(-18 * delta));
+      setHoverPos(smoothHoverPosRef.current);
+    } else {
+      setHoverPos(null);
+    }
+
+    // Direct object dragging movement and smoothing
+    if (draggedId) {
+      const obj = scene.getObjectByName(draggedId);
+      if (obj) {
+        // Lerp coordinates for absolute Paralives sliding feel!
+        obj.position.lerp(targetDragPosRef.current, 1 - Math.exp(-15 * delta));
+        
+        // Disable orbit controls while dragging to prevent rotation issues
+        const controls = _.controls as any;
+        if (controls && controls.enabled) {
+          controls.enabled = false;
+        }
+      }
+      document.body.style.cursor = 'move';
+      return;
+    } else {
+      // Re-enable orbit controls when not dragging
+      const controls = _.controls as any;
+      if (controls && !controls.enabled && !isDraggingVegetationRef.current) {
+        controls.enabled = true;
+      }
+    }
+
+    // Item Hover Highlighting
     const itemHit = intersects.find(i => {
       let cur: any = i.object;
       while(cur) {
@@ -370,8 +1203,8 @@ export const WorldEditor = () => {
       let cur: any = itemHit.object;
       while(cur) {
         if(cur.name?.startsWith('item_')) {
-          if (hoveredId !== cur.name) setHoveredId(cur.name);
-          setHoverPos(null); // Hide ground ring when hovering item
+          const hitId = cur.name;
+          if (hoveredId !== hitId) setHoveredId(hitId);
           document.body.style.cursor = 'pointer';
           return;
         }
@@ -382,50 +1215,60 @@ export const WorldEditor = () => {
         setHoveredId(null);
         document.body.style.cursor = 'auto';
       }
-
-      // 2. Check for Ground (Placement)
-      if (!selectedId) {
-        const groundHit = intersects.find(i => i.object.name === 'terrain');
-        if (groundHit) {
-          setHoverPos(groundHit.point);
-        } else {
-          setHoverPos(null);
-        }
-      } else {
-        setHoverPos(null);
-      }
     }
   });
-
-  const controls = useThree((state) => state.controls) as any;
 
   const normalItems = useMemo(() => items.filter(i => i.type !== 'procedural-vegetation'), [items]);
   const proceduralItems = useMemo(() => items.filter(i => i.type === 'procedural-vegetation'), [items]);
 
   return (
     <group>
-      {/* Ground Placement Cursor / 3D Ghost Preview */}
-      {hoverPos && (
-        activeAsset ? (
-          <Suspense fallback={
-            <mesh position={[hoverPos.x, hoverPos.y + 0.15, hoverPos.z]} rotation-x={-Math.PI/2}>
-              <ringGeometry args={[0.4, 0.5, 32]} />
-              <meshBasicMaterial color="#fbbf24" transparent opacity={0.8} />
-            </mesh>
-          }>
-            <GhostPreview 
-              path={activeAsset.path} 
-              position={hoverPos} 
-              scale={lastUsedScales[activeAsset.path] || [1, 1, 1]} 
-              rotation={lastUsedRotations[activeAsset.path] || [0, 0, 0]}
-            />
-          </Suspense>
-        ) : (
-          <mesh position={[hoverPos.x, hoverPos.y + 0.1, hoverPos.z]} rotation-x={-Math.PI/2}>
+      {/* Visual blueprint placement or ground projection cursor */}
+      {hoverPos && activeAsset && (
+        <Suspense fallback={
+          <mesh position={[hoverPos.x, hoverPos.y + 0.15, hoverPos.z]} rotation-x={-Math.PI/2}>
             <ringGeometry args={[0.4, 0.5, 32]} />
-            <meshBasicMaterial color="#4f46e5" transparent opacity={0.5} />
+            <meshBasicMaterial color="#fbbf24" transparent opacity={0.8} />
           </mesh>
-        )
+        }>
+          <GhostPreview 
+            path={activeAsset.path} 
+            position={hoverPos} 
+            scale={lastUsedScales[activeAsset.path] || [1, 1, 1]} 
+            rotation={lastUsedRotations[activeAsset.path] || [0, 0, 0]}
+          />
+        </Suspense>
+      )}
+
+      {/* ─── VEGETATION SPRAY BRUSH RADIAL RING ─── */}
+      {vegetationBrushActive && brushHoverPos && (
+        <mesh 
+          position={[brushHoverPos[0], brushHoverPos[1] + 0.15, brushHoverPos[2]]} 
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <ringGeometry args={[
+            Math.max(0.1, brushSize * 0.12 - 0.3), 
+            brushSize * 0.12 + 0.3, 
+            64
+          ]} />
+          <meshBasicMaterial 
+            color="#10b981" // Vibrant Forest Emerald Green!
+            transparent 
+            opacity={0.75} 
+            side={THREE.DoubleSide} 
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+
+      {/* ─── PAINT SPLAT HOLOGRAPHIC MASK PROJECTION ─── */}
+      {paintMode && brushHoverPos && (
+        <HolographicBrushProjection 
+          maskId={brushMaskId} 
+          size={brushSize} 
+          strength={brushStrength} 
+          position={brushHoverPos} 
+        />
       )}
       
       {normalItems.map((item) => (
@@ -446,123 +1289,51 @@ export const WorldEditor = () => {
               </mesh>
             }
           >
-            <EditorItem 
-              item={item} 
-              isSelected={selectedIds.includes(item.id)} 
-              isHovered={hoveredId === item.id}
-              onClick={(e) => {
-                if (!isEditorOpen) return;
-                const isShift = e.shiftKey || e.nativeEvent?.shiftKey;
-                if (isShift) {
-                  toggleSelectedId(item.id);
-                } else {
-                  setSelectedId(item.id);
-                }
-              }}
-            />
+            {item.type === 'mask_projection' ? (
+              <PlacedMaskProjection 
+                item={item}
+                isSelected={selectedIds.includes(item.id)}
+                isHovered={hoveredId === item.id}
+                onPointerOver={(e) => {
+                  if (activeAsset || paintMode || vegetationBrushActive) return;
+                  e.stopPropagation();
+                  setHoveredId(item.id);
+                }}
+                onPointerOut={(e) => {
+                  e.stopPropagation();
+                  if (hoveredId === item.id) setHoveredId(null);
+                }}
+              />
+            ) : (
+              <EditorItem 
+                item={item} 
+                isSelected={selectedIds.includes(item.id)} 
+                isHovered={hoveredId === item.id}
+                isDragging={draggedId === item.id}
+                onClick={(e) => {
+                  if (!isEditorOpen) return;
+                  const isShift = e.shiftKey || e.nativeEvent?.shiftKey;
+                  if (isShift) {
+                    toggleSelectedId(item.id);
+                  } else {
+                    setSelectedId(item.id);
+                  }
+                }}
+              />
+            )}
           </Suspense>
         </SafeErrorBoundary>
       ))}
       <ProceduralVegetationLayer items={proceduralItems} />
-
-      {isEditorOpen && selectedId && selectedId !== 'terrain' && scene.getObjectByName(selectedId) && (
-        <SafeTransformControls 
-          object={scene.getObjectByName(selectedId) as any} 
-          mode={mode} 
-          translationSnap={gridEnabled ? gridSize : null}
-          onMouseDown={() => {
-            if (controls) controls.enabled = false;
-
-            // Capture drag start states for all selected items
-            const startStates = new Map<string, { pos: [number, number, number], rot: [number, number, number], sca: [number, number, number] }>();
-            selectedIds.forEach(id => {
-              const item = items.find(i => i.id === id);
-              if (item) {
-                startStates.set(id, { pos: [...item.pos], rot: [...item.rot], sca: [...item.sca] });
-              }
-            });
-            dragStartStatesRef.current = startStates;
-          }}
-          onMouseUp={() => {
-            if (controls) controls.enabled = true;
-
-            const obj = scene.getObjectByName(selectedId);
-            const startState = dragStartStatesRef.current.get(selectedId);
-            if (obj && startState) {
-              const item = items.find(i => i.id === selectedId);
-              if (item) {
-                setLastUsedScale(item.path, [obj.scale.x, obj.scale.y, obj.scale.z]);
-                setLastUsedRotation(item.path, [obj.rotation.x, obj.rotation.y, obj.rotation.z]);
-              }
-              const deltaPos = [
-                obj.position.x - startState.pos[0],
-                obj.position.y - startState.pos[1],
-                obj.position.z - startState.pos[2]
-              ];
-              const deltaRot = [
-                obj.rotation.x - startState.rot[0],
-                obj.rotation.y - startState.rot[1],
-                obj.rotation.z - startState.rot[2]
-              ];
-              const deltaSca = [
-                obj.scale.x / startState.sca[0],
-                obj.scale.y / startState.sca[1],
-                obj.scale.z / startState.sca[2]
-              ];
-
-              updateItemsWithHistory(prev => prev.map(i => {
-                if (selectedIds.includes(i.id)) {
-                  if (i.id === selectedId) {
-                    // Primary object: absolute snap
-                    return {
-                      ...i,
-                      pos: [
-                        snap(obj.position.x),
-                        obj.position.y,
-                        snap(obj.position.z)
-                      ],
-                      rot: [obj.rotation.x, obj.rotation.y, obj.rotation.z],
-                      sca: [obj.scale.x, obj.scale.y, obj.scale.z]
-                    };
-                  } else {
-                    // Secondary objects: relative delta offset
-                    const orig = dragStartStatesRef.current.get(i.id);
-                    if (orig) {
-                      return {
-                        ...i,
-                        pos: [
-                          snap(orig.pos[0] + deltaPos[0]),
-                          orig.pos[1] + deltaPos[1],
-                          snap(orig.pos[2] + deltaPos[2])
-                        ],
-                        rot: [
-                          orig.rot[0] + deltaRot[0],
-                          orig.rot[1] + deltaRot[1],
-                          orig.rot[2] + deltaRot[2]
-                        ],
-                        sca: [
-                          orig.sca[0] * deltaSca[0],
-                          orig.sca[1] * deltaSca[1],
-                          orig.sca[2] * deltaSca[2]
-                        ]
-                      };
-                    }
-                  }
-                }
-                return i;
-              }));
-            }
-          }}
-        />
-      )}
     </group>
   );
 };
 
-const EditorItem = memo(({ item, isSelected, isHovered, onClick }: { 
+const EditorItem = memo(({ item, isSelected, isHovered, isDragging, onClick }: { 
   item: MapItem; 
   isSelected: boolean; 
   isHovered: boolean;
+  isDragging: boolean;
   onClick: (e: any) => void;
 }) => {
   const { scene: gltfScene } = useGLTF(item.path);
@@ -583,6 +1354,15 @@ const EditorItem = memo(({ item, isSelected, isHovered, onClick }: {
     return c;
   }, [gltfScene, item.id, item.color]);
 
+  // Dynamically compute absolute mesh radius using bounding dimensions
+  const radius = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(cloned);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const r = Math.max(size.x, size.z) * 0.65;
+    return Math.max(0.4, r);
+  }, [cloned]);
+
   return (
     <primitive 
       object={cloned} 
@@ -596,16 +1376,10 @@ const EditorItem = memo(({ item, isSelected, isHovered, onClick }: {
       }}
     >
       {isSelected && (
-        <mesh rotation-x={-Math.PI / 2} position-y={0.05}>
-          <ringGeometry args={[0.5, 0.6, 32]} />
-          <meshBasicMaterial color="#6366f1" transparent opacity={0.8} depthTest={false} />
-        </mesh>
+        <SleekSelectionRing radius={radius} isDragging={isDragging} />
       )}
       {isHovered && !isSelected && (
-        <mesh rotation-x={-Math.PI / 2} position-y={0.05}>
-          <ringGeometry args={[0.5, 0.55, 32]} />
-          <meshBasicMaterial color="#fbbf24" transparent opacity={0.6} depthTest={false} />
-        </mesh>
+        <SleekHoverRing radius={radius} />
       )}
     </primitive>
   );
@@ -613,6 +1387,7 @@ const EditorItem = memo(({ item, isSelected, isHovered, onClick }: {
   return prev.item.id === next.item.id &&
          prev.isSelected === next.isSelected &&
          prev.isHovered === next.isHovered &&
+         prev.isDragging === next.isDragging &&
          prev.item.pos[0] === next.item.pos[0] &&
          prev.item.pos[1] === next.item.pos[1] &&
          prev.item.pos[2] === next.item.pos[2] &&
@@ -649,11 +1424,8 @@ const ProceduralVegetationLayer = memo(({ items }: { items: MapItem[] }) => {
 const InstancedVegetationModel = memo(({ path, instances }: { path: string, instances: MapItem[] }) => {
   const { scene } = useGLTF(path) as any;
 
-  // Extract all meshes from the GLB scene
   const meshes = useMemo(() => {
     const extracted: { geometry: THREE.BufferGeometry, material: THREE.Material, localMatrix: THREE.Matrix4 }[] = [];
-    
-    // Ensure world matrices are updated before extracting
     scene.updateMatrixWorld(true);
 
     scene.traverse((child: any) => {
@@ -661,7 +1433,7 @@ const InstancedVegetationModel = memo(({ path, instances }: { path: string, inst
         extracted.push({
           geometry: child.geometry,
           material: child.material.clone(),
-          localMatrix: child.matrixWorld.clone() // Save its local offset inside the GLB
+          localMatrix: child.matrixWorld.clone()
         });
       }
     });
@@ -692,22 +1464,19 @@ const InstancedMeshPart = ({ meshData, instances }: { meshData: any, instances: 
     const color = new THREE.Color();
 
     instances.forEach((item, i) => {
-      // 1. Set the world position from the editor
       tempObj.position.set(item.pos[0], item.pos[1], item.pos[2]);
       tempObj.rotation.set(item.rot[0], item.rot[1], item.rot[2]);
       tempObj.scale.set(item.sca[0], item.sca[1], item.sca[2]);
       tempObj.updateMatrix();
 
-      // 2. Combine world transform with the mesh's local offset
       tempMatrix.multiplyMatrices(tempObj.matrix, meshData.localMatrix);
       meshRef.current.setMatrixAt(i, tempMatrix);
 
-      // 3. Apply custom color if requested
       if (item.color) {
         color.set(item.color);
         meshRef.current.setColorAt(i, color);
       } else {
-        color.set(0xffffff); // Default
+        color.set(0xffffff);
         meshRef.current.setColorAt(i, color);
       }
     });
