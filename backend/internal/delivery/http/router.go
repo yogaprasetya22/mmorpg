@@ -147,7 +147,6 @@ func SetupGameRouter(wsHandler *ws.GameHandler, apiServiceURL string) *gin.Engin
 	
 	r.Use(gin.Recovery())
 	r.Use(gin.Logger())
-	r.Use(CORSMiddleware())
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -177,9 +176,10 @@ func SetupGameRouter(wsHandler *ws.GameHandler, apiServiceURL string) *gin.Engin
 	}
 
 	// Real-Time WS Sync
-	r.GET("/ws", wsHandler.ServeWS)
+	r.GET("/ws", CORSMiddleware(), wsHandler.ServeWS)
 
 	api := r.Group("/api")
+	api.Use(CORSMiddleware())
 	{
 		api.GET("/player/profile", wsHandler.ServeProfile)
 	}
