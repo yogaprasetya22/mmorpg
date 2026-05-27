@@ -11,7 +11,7 @@
  * - No useState, no useRef for per-frame values (all in ECS)
  */
 
-import { useRef, useEffect, useMemo } from 'react';
+import { useRef, useEffect, useMemo, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useKeyboardControls, useAnimations, useGLTF } from '@react-three/drei';
 import BVHEcctrl, { useAnimationStore, characterStatus } from 'bvhecctrl';
@@ -175,9 +175,29 @@ export const PlayerController = ({
   const syncAccumulator = useRef(0);
   const lastHpRef = useRef(1000);
   const lastNearestTargetId = useRef<string>("");
-  // Spawn stabilizer: prevent physics from pulling player through un-loaded ground
-  const spawnTime = useRef(performance.now());
-  const spawnStabilized = useRef(false);
+  const [isSpawning, setIsSpawning] = useState(true);
+
+  // Reset spawn stabilizer when unpaused (e.g. when loading screen fades out)
+  useEffect(() => {
+    if (!paused) {
+      setIsSpawning(true);
+      const timer = setTimeout(() => {
+        setIsSpawning(false);
+        console.log("🎮 Spawn stabilization complete! Unpausing physics.");
+      }, 1500);
+      return () => clearTimeout(timer);
+    } else {
+      setIsSpawning(true);
+    }
+  }, [paused]);
+
+  const activeEnv = useEditorStore((s) => s.environment);
+  const terrainConfig = useEditorStore((s) => s.terrainConfig);
+
+  const spawnPosition = useMemo(() => {
+    const spawnH = getTerrainElevation(0, 0, activeEnv, 24, terrainConfig);
+    return [0, spawnH + 3.0, 0] as [number, number, number];
+  }, [activeEnv, terrainConfig]);
 
   // ─── ASSET LOADING ────────────────────────────────────────────────────────
   const { scene, animations } = useGLTF(modelPath, true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
@@ -294,22 +314,6 @@ export const PlayerController = ({
 
   // ─── SINGLE USEFRAME: Camera + Auto-Aim Combat (priority 1 = runs AFTER physics) ──
   useFrame((_, delta) => {
-    // ─── SPAWN STABILIZATION: Hold player still until ground colliders are registered ───
-    if (!spawnStabilized.current) {
-      const elapsed = performance.now() - spawnTime.current;
-      if (elapsed < 1500) {
-        // For the first 1.5s, freeze velocity so physics can't pull us through un-loaded ground
-        if (ecctrlRef.current) {
-          ecctrlRef.current.resetLinVel();
-          // Keep at spawn height until BVH colliders register
-          if (ecctrlRef.current.group.position.y < 20) {
-            ecctrlRef.current.group.position.y = 25;
-          }
-        }
-        return; // Skip entire frame update — no movement, no camera, no combat
-      }
-      spawnStabilized.current = true;
-    }
 
     // ─── CHECK DEATH BLOCK & RESURRECTION TELEPORT ───
     const currentHp = playerStats && typeof playerStats.hp !== 'undefined' ? playerStats.hp : 1000;
@@ -356,6 +360,8 @@ export const PlayerController = ({
       const baseDistance = (activeEnv === "STORM" || activeEnv === "RAIN" || activeEnv === "THUNDER" || activeEnv === "CLEAR") ? 45.0 : 35.0;
       groundH = getTerrainElevation(_charPos.x, _charPos.z, activeEnv, baseDistance, terrainConfig);
     }
+
+
 
     if (isDead) {
       // Force zero velocity and lock to ground to prevent gliding
@@ -1183,8 +1189,8 @@ export const PlayerController = ({
 
       <BVHEcctrl
         ref={ecctrlRef}
-        paused={paused || isDead}
-        position={[0, 25, 0]}
+        paused={paused || isSpawning || isDead}
+        position={spawnPosition}
         /* ── Collider: Slim capsule for nimble stair/slope clearance ── */
         colliderCapsuleArgs={[0.28, 1.1, 4, 8]}
         /* ── Float / Ground Detection: Tuned for buttery smooth stair climbing and landing ── */

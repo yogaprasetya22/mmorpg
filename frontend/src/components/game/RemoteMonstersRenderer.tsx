@@ -17,8 +17,8 @@ const _sharedBox3 = new THREE.Box3();
 // ─── Shared scratch vectors to avoid per-frame allocations ───────────────────
 const _v3 = new THREE.Vector3();
 // ─── Module-level LOD thresholds (hoisted out of useFrame to avoid re-eval every frame) ─
-const MONSTER_FAR_SQ     = 55 * 55;  // > 55 units: cull completely
-const MONSTER_MED_FAR_SQ = 35 * 35;  // > 35 units: hide billboard + text (much further distance!)
+const MONSTER_FAR_SQ     = 100 * 100; // > 100 units: cull completely (farther distance for better visuals)
+const MONSTER_MED_FAR_SQ = 70 * 70;   // > 70 units: hide billboard + text (much further distance!)
 
 
 // ─── Global visual position registry (module-level Map, not window) ────────────
@@ -65,6 +65,8 @@ export const RemoteMonsterInstance = ({
   visibleMonsterIdsRef
 }: RemoteMonsterInstanceProps) => {
   void camera;
+
+  const isEditorOpen = useEditorStore((s) => s.isEditorOpen);
 
   const isBoss = useMemo(() => {
     const data = monsterMapRef.current?.get(monsterId);
@@ -189,7 +191,7 @@ export const RemoteMonsterInstance = ({
 
     // ─── Density Culling — limit maximum rendered monster count when gathered ──────
     // Disable density culling if overall monster count is low to prevent desync hiding
-    const isDensityCulled = (_worldMonstersRef.current && _worldMonstersRef.current.length > 12) &&
+    const isDensityCulled = !isEditorOpen && (_worldMonstersRef.current && _worldMonstersRef.current.length > 12) &&
       visibleMonsterIdsRef && visibleMonsterIdsRef.current && !visibleMonsterIdsRef.current.has(monsterId);
 
     // ─── Distance Culling — avoids full skeleton update for far monsters ──────
@@ -198,7 +200,7 @@ export const RemoteMonsterInstance = ({
     _v3.sub(state.camera.position);
     const camDistSq = _v3.lengthSq();
 
-    const isCurrentlyVisible = !isDensityCulled && camDistSq <= MONSTER_FAR_SQ;
+    const isCurrentlyVisible = isEditorOpen || (!isDensityCulled && camDistSq <= MONSTER_FAR_SQ);
 
     // Get client terrain elevation to map server's flat 2D movement cleanly onto 3D sculpted landscape
     const activeEnv = useStore.getState().environment;
@@ -419,9 +421,9 @@ export const RemoteMonsterInstance = ({
       else                              activeAction.current.timeScale = 1.0;
     }
 
-    // ─── Billboard & HP UI (hidden beyond MED_FAR_SQ) ────────────────────────
+    // ─── Billboard & HP UI (hidden beyond MONSTER_MED_FAR_SQ) ────────────────────────
     if (billboardGroupRef.current) {
-      if (camDistSq > MONSTER_MED_FAR_SQ) {
+      if (!isEditorOpen && camDistSq > MONSTER_MED_FAR_SQ) {
         billboardGroupRef.current.visible = false;
       } else {
         billboardGroupRef.current.visible = true;
@@ -597,9 +599,11 @@ export const RemoteMonstersRenderer = ({
 
       scratch.sort((a, b) => a.distSq - b.distSq);
 
+      const isEditorOpen = useEditorStore.getState().isEditorOpen;
       // Adaptive cap: aggressively reduce skeleton updates under heavy load
       // 80+ monsters: cap 5 (combined with 40 bots = very heavy), 40+: cap 8, otherwise 12
-      const densityCap = list.length > 60 ? 5 : list.length > 40 ? 8 : 12;
+      // Editor Bypass: no density culling when in the World Editor
+      const densityCap = isEditorOpen ? Infinity : (list.length > 60 ? 5 : list.length > 40 ? 8 : 12);
       const limit = Math.min(scratch.length, densityCap);
 
       // Reuse visibleMonsterIdsRef Set in-place — no new Set() allocation

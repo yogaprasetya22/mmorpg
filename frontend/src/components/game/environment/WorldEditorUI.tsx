@@ -8,11 +8,11 @@ import { useEditorStore } from '@/src/state/useEditorStore';
 import { MapSettingsModule } from './editor/MapSettingsModule';
 import { AssetsLibraryModule } from './editor/AssetsLibraryModule';
 import { TransformsModule } from './editor/TransformsModule';
-import { TerrainSculptModule } from './editor/TerrainSculptModule';
-import { TerrainPaintModule } from './editor/TerrainPaintModule';
+import { TerrainEditorModule } from './editor/TerrainEditorModule';
 import { VegetationModule } from './editor/VegetationModule';
 import { SystemModule } from './editor/SystemModule';
 import { LightingSettingsModule } from './editor/LightingSettingsModule';
+import { AIPromptWidget } from './editor/AIPromptWidget';
 
 export const WorldEditorUI = () => {
   const {
@@ -22,7 +22,6 @@ export const WorldEditorUI = () => {
     setSelectedId,
     toggleSelectedId,
     setPaintMode,
-    setTerrainMode,
     fetchMapList,
     fetchDynamicAssets,
     loadFromDatabase,
@@ -42,15 +41,10 @@ export const WorldEditorUI = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Sync paint mode and terrainMode with the active accordion section in the sidebar
+  // Sync paint mode with the active accordion section in the sidebar
   useEffect(() => {
-    if (activeSection === 'paint') {
+    if (activeSection === 'terrain') {
       setSelectedId('terrain');
-      setTerrainMode('paint');
-      setPaintMode(true);
-    } else if (activeSection === 'sculpt') {
-      setSelectedId('terrain');
-      setTerrainMode('sculpt');
       setPaintMode(true);
     } else {
       if (selectedId === 'terrain') {
@@ -58,18 +52,18 @@ export const WorldEditorUI = () => {
       }
       setPaintMode(false);
     }
-  }, [activeSection, setPaintMode, setSelectedId, setTerrainMode]);
+  }, [activeSection, setPaintMode, setSelectedId]);
 
   // Automatically expand Transforms section when a placed object is selected
   useEffect(() => {
     if (selectedId && selectedId !== 'terrain') {
       setActiveSection('transforms');
     } else if (selectedId === 'terrain') {
-      if (activeSection !== 'paint' && activeSection !== 'sculpt') {
-        setActiveSection('paint');
+      if (activeSection !== 'terrain') {
+        setActiveSection('terrain');
       }
     }
-  }, [selectedId]);
+  }, [selectedId, activeSection]);
 
   // Keyboard Nudge & Shortkeys Listener
   useEffect(() => {
@@ -149,15 +143,15 @@ export const WorldEditorUI = () => {
   const SECTIONS = [
     { id: 'elements', label: 'Asset blueprints', component: <AssetsLibraryModule /> },
     { id: 'transforms', label: 'Mesh transforms', component: <TransformsModule /> },
-    { id: 'sculpt', label: 'Terrain sculpting', component: <TerrainSculptModule /> },
-    { id: 'paint', label: 'Terrain painting', component: <TerrainPaintModule /> },
+    { id: 'terrain', label: 'Terrain sculpt & paint', component: <TerrainEditorModule /> },
     { id: 'vegetation', label: 'Vegetation spawner', component: <VegetationModule /> },
     { id: 'lighting', label: 'Atmosphere & Lighting', component: <LightingSettingsModule /> },
     { id: 'system', label: 'Workspace operations', component: <SystemModule /> }
   ];
 
   return (
-    <div className="fixed inset-0 z-[9999] pointer-events-none flex select-none text-zinc-200">
+    <div className="fixed inset-0 z-[9999] pointer-events-none flex justify-between select-none text-zinc-200">
+      
       
       {/* ─── INITIALIZING LOADING OVERLAY ─── */}
       {isEditorOpen && isInitializing && (
@@ -183,21 +177,21 @@ export const WorldEditorUI = () => {
 
       {/* ─── MODULAR LEFT SIDEBAR DOCK (SHADCN UI SPEC) ─── */}
       {isEditorOpen && (
-        <div className="world-editor-ui w-[320px] h-screen bg-zinc-950 border-r border-zinc-900/80 flex flex-col pointer-events-auto z-[9999] shadow-2xl relative overflow-hidden font-sans">
+        <div className="world-editor-ui w-[310px] h-screen bg-zinc-950/90 border-r border-zinc-900 flex flex-col pointer-events-auto z-[9999] shadow-2xl relative overflow-hidden font-sans backdrop-blur-xl">
           
           {/* Header Branding */}
-          <div className="flex items-center justify-between px-4 py-3.5 border-b border-zinc-900 bg-zinc-950 flex-shrink-0">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-900/60 bg-zinc-950/40 flex-shrink-0">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6] animate-pulse" />
-              <h3 className="text-xs font-semibold tracking-wider text-zinc-100 uppercase">
-                Seal-M Map Studio
+              <h3 className="text-[11px] font-extrabold tracking-[0.15em] text-zinc-100 uppercase">
+                SEAL-M MAP STUDIO
               </h3>
             </div>
             
             {/* Quick Exit */}
             <button 
               onClick={() => setIsEditorOpen(false)}
-              className="p-1.5 hover:bg-zinc-900 rounded-md text-zinc-550 hover:text-white transition-colors outline-none"
+              className="p-1 hover:bg-zinc-900 rounded-md text-zinc-500 hover:text-white transition-all duration-200 outline-none cursor-pointer"
               title="Close Workspace"
             >
               <X className="w-3.5 h-3.5" />
@@ -213,20 +207,20 @@ export const WorldEditorUI = () => {
             {/* Accordion List (Elements, Light, Water, etc.) */}
             <div className="flex flex-col border-t border-zinc-900">
               {SECTIONS.map((sec) => (
-                <div key={sec.id} className="border-b border-zinc-900/70">
+                <div key={sec.id} className="border-b border-zinc-900/40">
                   <button
                     onClick={() => toggleSection(sec.id)}
-                    className={`w-full text-left px-4 py-3 text-[11px] font-medium tracking-wide transition-all flex items-center justify-between outline-none ${
+                    className={`w-full text-left px-4 py-2.5 text-[10px] font-semibold tracking-wider transition-all duration-200 flex items-center justify-between outline-none cursor-pointer ${
                       activeSection === sec.id 
                         ? 'bg-zinc-900/40 text-blue-400 border-l-2 border-blue-500 font-bold' 
-                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/20 border-l-2 border-transparent'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/10 border-l-2 border-transparent'
                     }`}
                   >
-                    <span>{sec.label}</span>
-                    <ChevronRight className={`w-3.5 h-3.5 text-zinc-500 transition-transform duration-200 ${activeSection === sec.id ? 'rotate-90 text-blue-500' : ''}`} />
+                    <span className="uppercase">{sec.label}</span>
+                    <ChevronRight className={`w-3 h-3 text-zinc-500 transition-transform duration-200 ${activeSection === sec.id ? 'rotate-90 text-blue-500' : ''}`} />
                   </button>
                   {activeSection === sec.id && (
-                    <div className="px-4 pb-4 pt-1 bg-zinc-950/40 border-t border-zinc-900/50 animate-in fade-in duration-200">
+                    <div className="px-4 pb-4 pt-1 bg-zinc-950/20 border-t border-zinc-900/30 animate-in fade-in duration-200">
                       {sec.component}
                     </div>
                   )}
@@ -237,12 +231,12 @@ export const WorldEditorUI = () => {
           </div>
 
           {/* Telemetry diagnostics footer */}
-          <div className="px-4 py-3 bg-zinc-950 border-t border-zinc-900 flex items-center justify-between text-[9px] font-medium tracking-wide text-zinc-500 flex-shrink-0">
-            <span className="flex items-center gap-1.5 text-zinc-400 font-mono">
+          <div className="px-4 py-2.5 bg-zinc-950/80 border-t border-zinc-900/60 flex items-center justify-between text-[9px] font-semibold tracking-wider text-zinc-500 flex-shrink-0">
+            <span className="flex items-center gap-1.5 text-zinc-400">
               <Package className="w-3.5 h-3.5 text-blue-500" />
-              Placed layers: {items.length}
+              PLACED LAYERS: {items.length}
             </span>
-            <span className="text-emerald-500 font-mono flex items-center gap-1">
+            <span className="text-emerald-500 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
               OPTIMAL
             </span>
@@ -250,6 +244,9 @@ export const WorldEditorUI = () => {
 
         </div>
       )}
+
+      {/* ─── MODULAR RIGHT SIDEBAR DOCK (DEEPSEEK AI) ─── */}
+      <AIPromptWidget />
 
     </div>
   );

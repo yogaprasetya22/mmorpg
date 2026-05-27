@@ -51,6 +51,8 @@ export const RemotePlayerInstance = ({
   unitRegistry,
   visiblePlayerIdsRef
 }: RemotePlayerInstanceProps) => {
+  const isEditorOpen = useEditorStore((s) => s.isEditorOpen);
+
   // Pre-select model based on actual character Class + Gender from backend registry
   const modelPath = useMemo(() => {
     if (gameConfig && gameConfig.character_models) {
@@ -115,7 +117,7 @@ export const RemotePlayerInstance = ({
 
     // ─── Density Culling — limit maximum rendered player count when gathered ──────
     // Disable density culling if overall player count is low to prevent desync hiding
-    const isDensityCulled = (_connectedPlayersRef.current && _connectedPlayersRef.current.length > 12) &&
+    const isDensityCulled = !isEditorOpen && (_connectedPlayersRef.current && _connectedPlayersRef.current.length > 12) &&
       visiblePlayerIdsRef.current && !visiblePlayerIdsRef.current.has(id);
 
     // ─── Distance Culling — avoids full skeleton/animation ticks for far players ──────
@@ -124,10 +126,10 @@ export const RemotePlayerInstance = ({
     const dzCam = state.camera.position.z - data.z;
     const camDistSq = dxCam * dxCam + dyCam * dyCam + dzCam * dzCam;
 
-    const FAR_SQ = 60 * 60;     // > 60 units: cull completely
-    const MED_FAR_SQ = 40 * 40; // > 40 units: hide name tag
+    const FAR_SQ = 110 * 110;   // > 110 units: cull completely
+    const MED_FAR_SQ = 80 * 80; // > 80 units: hide name tag
 
-    const isCurrentlyVisible = !isDensityCulled && camDistSq <= FAR_SQ;
+    const isCurrentlyVisible = isEditorOpen || (!isDensityCulled && camDistSq <= FAR_SQ);
 
     // Get client terrain elevation to map desynced or flat server coordinates cleanly onto 3D sculpted landscape
     const activeEnv = useStore.getState().environment;
@@ -246,7 +248,7 @@ export const RemotePlayerInstance = ({
 
     // ─── Billboard & HP UI (hidden beyond MED_FAR_SQ) ────────────────────────
     if (billboardGroupRef.current) {
-      if (camDistSq > MED_FAR_SQ) {
+      if (!isEditorOpen && camDistSq > MED_FAR_SQ) {
         billboardGroupRef.current.visible = false;
       } else {
         billboardGroupRef.current.visible = true;
@@ -814,8 +816,10 @@ export const RemotePlayersRenderer = ({
 
       scratch.sort((a, b) => a.distSq - b.distSq);
 
+      const isEditorOpen = useEditorStore.getState().isEditorOpen;
       // Adaptive cap: when loadtest saturates server with 40 bots, limit to 8 closest player skeletons
-      const playerCap = players.length > 20 ? 8 : 12;
+      // Editor Bypass: no density culling when in the World Editor
+      const playerCap = isEditorOpen ? Infinity : (players.length > 20 ? 8 : 12);
       const visibleSet = visiblePlayerIdsRef.current;
       visibleSet.clear();
 

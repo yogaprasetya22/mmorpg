@@ -740,21 +740,63 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
       let centerZ = 0;
       
       const isEditorOpen = useEditorStore.getState().isEditorOpen;
+      const cam = lightRef.current.shadow.camera;
+      
+      const rad = (useEditorStore.getState().sunAngle * Math.PI) / 180;
+      const ox = Math.cos(rad) * 15.0;
+      const oz = Math.sin(rad) * 15.0;
+
       if (isEditorOpen) {
-        centerX = state.camera.position.x;
-        centerY = state.camera.position.y;
-        centerZ = state.camera.position.z;
+        // 1. Raycast from camera center to ground plane (y=0) to center shadows exactly where the editor is focusing
+        const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(state.camera.quaternion);
+        if (dir.y < -0.01) {
+          const t = -state.camera.position.y / dir.y;
+          centerX = state.camera.position.x + dir.x * t;
+          centerY = 0;
+          centerZ = state.camera.position.z + dir.z * t;
+        } else {
+          // Fallback if camera is looking horizontal or up
+          centerX = state.camera.position.x;
+          centerY = 0;
+          centerZ = state.camera.position.z;
+        }
+
+        // 2. Scale shadow frustum adaptively based on editor zoom/height to preserve shadow crispness
+        const heightFactor = Math.max(60, state.camera.position.y * 1.6);
+        const frustumSize = Math.min(400, heightFactor);
+        
+        if (cam.left !== -frustumSize || cam.far !== 1000) {
+          cam.left = -frustumSize;
+          cam.right = frustumSize;
+          cam.top = frustumSize;
+          cam.bottom = -frustumSize;
+          cam.far = 1000; // Set to a massive safe value to prevent any ground clipping/occlusion by the shadow camera frustum!
+          cam.updateProjectionMatrix();
+        }
+
+        // 3. Place light high to capture shadows of tall structures and mountains
+        const lightY = Math.max(150, state.camera.position.y + 100);
+        lightRef.current.position.set(centerX + ox * 3.0, lightY, centerZ + oz * 3.0);
       } else {
+        // Standard gameplay
         const pos = useStore.getState().playerPosition;
         centerX = pos[0];
         centerY = pos[1];
         centerZ = pos[2];
+
+        // Restore standard compact frustum for high gameplay performance
+        if (cam.left !== -35) {
+          cam.left = -35;
+          cam.right = 35;
+          cam.top = 35;
+          cam.bottom = -35;
+          cam.far = 120;
+          cam.updateProjectionMatrix();
+        }
+
+        lightRef.current.position.set(centerX + ox, centerY + 45, centerZ + oz);
       }
 
-      const rad = (useEditorStore.getState().sunAngle * Math.PI) / 180;
-      const ox = Math.cos(rad) * 15.0;
-      const oz = Math.sin(rad) * 15.0;
-      lightRef.current.position.set(centerX + ox, centerY + 45, centerZ + oz);
       lightRef.current.target.position.set(centerX, centerY, centerZ);
       lightRef.current.target.updateMatrixWorld();
       lightRef.current.shadow.camera.updateProjectionMatrix();

@@ -78,6 +78,8 @@ func SetupRouter(authHandler *AuthHandler, wsHandler *ws.GameHandler, configHand
 		api.GET("/world-editor/maps", configHandler.ListMaps)
 		api.GET("/world-editor/load", configHandler.LoadMap)
 		api.POST("/world-editor/save", configHandler.SaveMap)
+		api.DELETE("/world-editor/delete", configHandler.DeleteMap)
+		api.POST("/world-editor/ai-generate", configHandler.AIGenerateEnvironment)
 
 		// Authoritative Game Endpoints (Resolved by Backend)
 		api.POST("/game/spawn-resolve", configHandler.ResolveSpawn)
@@ -129,6 +131,8 @@ func SetupAPIRouter(authHandler *AuthHandler, configHandler *ConfigHandler) *gin
 		api.GET("/world-editor/maps", configHandler.ListMaps)
 		api.GET("/world-editor/load", configHandler.LoadMap)
 		api.POST("/world-editor/save", configHandler.SaveMap)
+		api.DELETE("/world-editor/delete", configHandler.DeleteMap)
+		api.POST("/world-editor/ai-generate", configHandler.AIGenerateEnvironment)
 
 		api.POST("/game/spawn-resolve", configHandler.ResolveSpawn)
 		api.POST("/game/kill-event", configHandler.RegisterKillEvent)

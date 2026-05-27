@@ -14,7 +14,7 @@ import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-
 (THREE.Mesh.prototype as any).raycast = acceleratedRaycast;
 
 export const ModularMap = ({ debug }: { debug?: boolean }) => {
-  const { items, selectedMapId, loadFromDatabase } = useEditorStore();
+  const { items, selectedMapId, loadFromDatabase, isEditorOpen } = useEditorStore();
 
   useEffect(() => {
     loadFromDatabase();
@@ -34,7 +34,7 @@ export const ModularMap = ({ debug }: { debug?: boolean }) => {
     return groups;
   }, [allItems]);
 
-  if (allItems.length === 0) return null;
+  if (allItems.length === 0 || isEditorOpen) return null;
 
   return (
     <>

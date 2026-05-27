@@ -54,6 +54,7 @@ export interface EditorState {
   mapList: { id: string; name: string; updated_at: string }[];
   fetchMapList: () => Promise<void>;
   createNewMap: (mapId: string) => Promise<void>;
+  deleteActiveMap: () => Promise<void>;
 
   // Dynamic Asset States
   dynamicAssets: AssetInfo[];
@@ -251,8 +252,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   historyIndex: -1,
   
   updateItemsWithHistory: (newItems) => {
+    console.log("=== [ZUSTAND STORE] updateItemsWithHistory CALLED ===");
     const { items, history, historyIndex } = get();
     const updated = typeof newItems === 'function' ? newItems(items) : newItems;
+    console.log("Previous items count in store:", items.length);
+    console.log("Next items count to set:", updated.length);
     
     const nextH = history.slice(0, historyIndex + 1);
     const newHistory = [...nextH, updated].slice(-50);
@@ -262,6 +266,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       history: newHistory, 
       historyIndex: newHistory.length - 1 
     });
+    console.log("After set(), items count in store is now:", get().items.length);
     
     debouncedSave();
   },
@@ -436,6 +441,37 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       console.warn("Failed to sync global activeMapId to database:", e);
     }
   },
+  deleteActiveMap: async () => {
+    const mapId = get().selectedMapId;
+    if (mapId === "Starter Zone") {
+      alert("Starter Zone adalah peta sistem bawaan dan tidak dapat dihapus!");
+      return;
+    }
+    
+    if (!confirm(`Apakah Anda yakin ingin menghapus peta "${mapId}" secara permanen? Tindakan ini tidak dapat dibatalkan.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/world-editor/delete?map_id=${encodeURIComponent(mapId)}`, {
+        method: "DELETE"
+      });
+
+      if (res.ok) {
+        alert("Peta berhasil dihapus!");
+        // Reset active map selection back to Starter Zone
+        set({ selectedMapId: "Starter Zone" });
+        await get().loadFromDatabase();
+        await get().fetchMapList();
+      } else {
+        const data = await res.json();
+        alert(`Gagal menghapus peta: ${data.error || "Unknown Error"}`);
+      }
+    } catch (e) {
+      console.error("Error deleting active map:", e);
+      alert("Terjadi kesalahan saat menghapus peta!");
+    }
+  },
 
   dynamicAssets: [],
   fetchDynamicAssets: async () => {
@@ -445,11 +481,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const assets: { name: string; path: string }[] = await res.json();
         const mapped: AssetInfo[] = assets.map(item => {
           let category: 'kingdom' | 'env' | 'tree' = 'env';
-          if (item.path.includes('/kingdom/')) {
+          const lowerPath = item.path.toLowerCase();
+          const lowerName = item.name.toLowerCase();
+          
+          if (lowerPath.includes('/kingdom/') || lowerName.includes('wall') || lowerName.includes('tower') || lowerName.includes('gate') || lowerName.includes('stairs') || lowerName.includes('castle') || lowerName.includes('fortress') || lowerName.includes('bridge')) {
             category = 'kingdom';
-          } else if (item.path.includes('/assets-tree/')) {
+          } else if (lowerPath.includes('/assets-tree/') || lowerPath.includes('/asset-enverement/') || lowerName.includes('tree') || lowerName.includes('pine') || lowerName.includes('birch') || lowerName.includes('oak') || lowerName.includes('grass') || lowerName.includes('flora')) {
             category = 'tree';
           }
+          
           const path = `${API_BASE_URL}${item.path}`;
           const name = item.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
 

@@ -96,18 +96,23 @@ interface AdaptivePerformanceOptimizerProps {
   settingsRef: React.RefObject<any>;
   adaptivePotatoMode: boolean;
   setAdaptivePotatoMode: React.Dispatch<React.SetStateAction<boolean>>;
+  isEditor?: boolean;
 }
 
 const AdaptivePerformanceOptimizer = ({
   settingsRef,
   adaptivePotatoMode,
-  setAdaptivePotatoMode
+  setAdaptivePotatoMode,
+  isEditor = false
 }: AdaptivePerformanceOptimizerProps) => {
   const { gl } = useThree();
   const lastTime = useRef(performance.now());
   const frameCount = useRef(0);
   const struggleSeconds = useRef(0);
   const healthySeconds = useRef(0);
+
+  // If we are in the editor, completely bypass auto-potato downscaling to keep shadows beautiful!
+  if (isEditor) return null;
 
   useFrame(() => {
     const now = performance.now();
@@ -124,12 +129,12 @@ const AdaptivePerformanceOptimizer = ({
         settingsRef.current.telemetry.fps = Math.round(fps);
       }
 
-      if (fps < 53) {
+      if (fps < 45) {
         struggleSeconds.current++;
         healthySeconds.current = 0;
 
-        // After 3 seconds of struggling FPS, scale down graphics properties
-        if (struggleSeconds.current >= 3 && !adaptivePotatoMode) {
+        // After 15 seconds of sustained struggling FPS, scale down graphics properties
+        if (struggleSeconds.current >= 15 && !adaptivePotatoMode) {
           console.warn(`⚠️ Adaptive Graphics: Performance drop detected (~${Math.round(fps)} FPS). Dynamic scaling active: Disabling Bloom and Shadows.`);
           setAdaptivePotatoMode(true);
           gl.shadowMap.enabled = false;
@@ -182,6 +187,13 @@ export const GameCanvas = React.memo(({
   useEffect(() => {
     setEnvReady(false);
   }, [selectedMapId]);
+
+  // Sync isEditorOpen in the editor store automatically when mounting the editor canvas
+  useEffect(() => {
+    if (isEditor) {
+      useEditorStore.getState().setIsEditorOpen(true);
+    }
+  }, [isEditor]);
 
   // Helper to persist updated simulation settings directly into the GORM PostgreSQL backend
   const syncSettingsToBackend = async (updates: Partial<any>) => {
@@ -243,12 +255,17 @@ export const GameCanvas = React.memo(({
   const DiagnosticsBridge = () => {
     const lastUpdate = useRef(0);
     useFrame((state) => {
+      if (!debug) return; // Skip updating Leva diagnostics if debug panel is closed to prevent culling warnings
+      
       const now = state.clock.elapsedTime * 1000;
       if (now - lastUpdate.current > 1000) {
         lastUpdate.current = now;
         if (settingsRef.current.telemetry) {
           const { engineMs, bottleneck } = settingsRef.current.telemetry;
-          setDiag({ engineTime: engineMs, suspect: bottleneck });
+          setDiag({ 
+            engineTime: typeof engineMs === 'number' ? engineMs : 0, 
+            suspect: bottleneck || "OPTIMAL" 
+          });
         }
       }
     });
@@ -333,7 +350,7 @@ export const GameCanvas = React.memo(({
         </div>
 
         <Canvas
-          shadows={{ type: THREE.PCFSoftShadowMap }}
+          shadows="soft"
           dpr={dpr}
           gl={{
             antialias: true,
@@ -352,6 +369,7 @@ export const GameCanvas = React.memo(({
             settingsRef={settingsRef}
             adaptivePotatoMode={adaptivePotatoMode}
             setAdaptivePotatoMode={setAdaptivePotatoMode}
+            isEditor={isEditor}
           />
           <PerformanceMonitor onIncline={() => setDpr(Math.min(dpr + 0.05, 0.9))} onDecline={() => setDpr(Math.max(dpr - 0.05, 0.6))} />
 

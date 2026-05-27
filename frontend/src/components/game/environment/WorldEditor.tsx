@@ -1,10 +1,41 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef, memo, Suspense } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, memo, Suspense, Component, ErrorInfo, ReactNode } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { TransformControls, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { useEditorStore, MapItem } from '@/src/state/useEditorStore';
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  fallback: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class SafeErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = {
+    hasError: false
+  };
+
+  public static getDerivedStateFromError(_: Error): ErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.warn("R3F Asset Load Error caught:", error, errorInfo);
+  }
+
+  public render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
+
 
 // A highly aesthetic semi-transparent 3D preview of the model being placed
 const GhostPreview = ({ path, position, scale, rotation }: { path: string, position: THREE.Vector3, scale: number | [number, number, number], rotation: [number, number, number] }) => {
@@ -398,21 +429,39 @@ export const WorldEditor = () => {
       )}
       
       {normalItems.map((item) => (
-        <EditorItem 
-          key={item.id} 
-          item={item} 
-          isSelected={selectedIds.includes(item.id)} 
-          isHovered={hoveredId === item.id}
-          onClick={(e) => {
-            if (!isEditorOpen) return;
-            const isShift = e.shiftKey || e.nativeEvent?.shiftKey;
-            if (isShift) {
-              toggleSelectedId(item.id);
-            } else {
-              setSelectedId(item.id);
+        <SafeErrorBoundary
+          key={item.id}
+          fallback={
+            <mesh position={item.pos} rotation={item.rot} scale={item.sca}>
+              <boxGeometry args={[1.1, 1.1, 1.1]} />
+              <meshBasicMaterial color="#ef4444" wireframe transparent opacity={0.6} />
+            </mesh>
+          }
+        >
+          <Suspense 
+            fallback={
+              <mesh position={item.pos} rotation={item.rot} scale={item.sca}>
+                <boxGeometry args={[1, 1, 1]} />
+                <meshBasicMaterial color="#6366f1" wireframe transparent opacity={0.4} />
+              </mesh>
             }
-          }}
-        />
+          >
+            <EditorItem 
+              item={item} 
+              isSelected={selectedIds.includes(item.id)} 
+              isHovered={hoveredId === item.id}
+              onClick={(e) => {
+                if (!isEditorOpen) return;
+                const isShift = e.shiftKey || e.nativeEvent?.shiftKey;
+                if (isShift) {
+                  toggleSelectedId(item.id);
+                } else {
+                  setSelectedId(item.id);
+                }
+              }}
+            />
+          </Suspense>
+        </SafeErrorBoundary>
       ))}
       <ProceduralVegetationLayer items={proceduralItems} />
 
