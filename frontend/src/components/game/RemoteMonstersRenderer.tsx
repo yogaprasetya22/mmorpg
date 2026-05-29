@@ -37,6 +37,9 @@ export interface RemoteMonsterInstanceProps {
   localPlayerId?: string;
   gameConfig?: any;
   visibleMonsterIdsRef?: React.RefObject<Set<string>>;
+  activeEnv: string;
+  terrainConfig: any;
+  localPlayerPositionRef: React.RefObject<[number, number, number]>;
 }
 
 // ─── Clip name cache: precomputed once per GLB load ───────────────────────────
@@ -62,7 +65,10 @@ export const RemoteMonsterInstance = ({
   remotePlayerMapRef,
   localPlayerId,
   gameConfig,
-  visibleMonsterIdsRef
+  visibleMonsterIdsRef,
+  activeEnv,
+  terrainConfig,
+  localPlayerPositionRef
 }: RemoteMonsterInstanceProps) => {
   void camera;
 
@@ -203,8 +209,6 @@ export const RemoteMonsterInstance = ({
     const isCurrentlyVisible = isEditorOpen || (!isDensityCulled && camDistSq <= MONSTER_FAR_SQ);
 
     // Get client terrain elevation to map server's flat 2D movement cleanly onto 3D sculpted landscape
-    const activeEnv = useStore.getState().environment;
-    const terrainConfig = useEditorStore.getState().terrainConfig;
     const terrainY = getTerrainElevation(data.x, data.z, activeEnv, 24, terrainConfig);
 
     // Snap position and rotation if culled to keep state synchronized
@@ -212,6 +216,9 @@ export const RemoteMonsterInstance = ({
       groupRef.current.position.set(data.x, terrainY, data.z);
       groupRef.current.visible = false;
       if (activeAction.current) activeAction.current.paused = true;
+      // GC Spike Prevention & Interpolation Jitter Pruning: clear stale queue on visibility exit
+      stateBufferRef.current.length = 0;
+      hasInitializedPrevVisual.current = false;
       return;
     }
 
@@ -238,15 +245,25 @@ export const RemoteMonsterInstance = ({
         buf[buf.length - 1].x !== x ||
         buf[buf.length - 1].z !== z ||
         buf[buf.length - 1].animation !== (data.animation || "")) {
-      buf.push({
-        x: x,
-        y: groundY,
-        z: z,
-        animation: data.animation || "",
-        timestamp: incomingTs
-      });
-      // Keep only last 8 entries: 20Hz × 160ms delay = 3.2 packets; 8 is safe headroom
-      if (buf.length > 8) buf.shift();
+      
+      // GC Spike Prevention: Zero-Allocation Object-Reusable Buffer Shift & Push
+      if (buf.length >= 8) {
+        const reusedObj = buf.shift()!;
+        reusedObj.x = x;
+        reusedObj.y = groundY;
+        reusedObj.z = z;
+        reusedObj.animation = data.animation || "";
+        reusedObj.timestamp = incomingTs;
+        buf.push(reusedObj);
+      } else {
+        buf.push({
+          x: x,
+          y: groundY,
+          z: z,
+          animation: data.animation || "",
+          timestamp: incomingTs
+        });
+      }
     }
 
     // ─── Step 2: Entity Interpolation — 160ms delay to absorb 20Hz jitter ────
@@ -288,17 +305,20 @@ export const RemoteMonsterInstance = ({
       }
     }
 
-    // ─── Step 3: Apply position — direct assignment for frame-perfect rendering
+    // ─── Step 3: Apply position — smooth damped lerp to filter out jitter and starvation snaps ──
+    const lerpFactor = Math.min(1, 24.0 * delta);
     if (!hasInitializedPrevVisual.current) {
       groupRef.current.position.set(targetX, targetY, targetZ);
       prevVisualPos.current[0] = targetX;
       prevVisualPos.current[1] = targetZ;
       hasInitializedPrevVisual.current = true;
     } else {
-      groupRef.current.position.set(targetX, targetY, targetZ);
+      groupRef.current.position.x += (targetX - groupRef.current.position.x) * lerpFactor;
+      groupRef.current.position.y += (targetY - groupRef.current.position.y) * lerpFactor;
+      groupRef.current.position.z += (targetZ - groupRef.current.position.z) * lerpFactor;
     }
 
-    // ─── Step 4: Measure visual speed AFTER position.set() ───────────────────
+    // ─── Step 4: Measure visual speed AFTER position updates ───────────────────
     const currentMeshX = groupRef.current.position.x;
     const currentMeshZ = groupRef.current.position.z;
     const visualDx = currentMeshX - prevVisualPos.current[0];
@@ -324,7 +344,7 @@ export const RemoteMonsterInstance = ({
     let targetPosX = 0, targetPosZ = 0, hasTarget = false;
     if (data.target_player_id && data.target_player_id !== "") {
       if (data.target_player_id === localPlayerId) {
-        const localPos = useStore.getState().playerPosition;
+        const localPos = localPlayerPositionRef.current;
         targetPosX = localPos[0];
         targetPosZ = localPos[2];
         hasTarget = true;
@@ -534,6 +554,13 @@ export const RemoteMonstersRenderer = ({
   // O(1) lookup map for remote players — eliminates O(n) .find() per monster per frame
   const remotePlayerMapRef = useRef<Map<string, PlayerNetworkState>>(new Map());
 
+  // Subscribe reactively to Zustand stores to avoid heavy getState() queries in child useFrame loop
+  const activeEnv = useStore((s) => s.environment);
+  const terrainConfig = useEditorStore((s) => s.terrainConfig);
+
+  // Shared Ref for the local player's position to avoid getState() calls in child useFrame loop
+  const localPlayerPositionRef = useRef<[number, number, number]>([0, 0, 0]);
+
   // ─── Throttle refs — avoid O(n log n) sort every frame ───────────────────
   const lastSortTime = useRef(-1);
   // Pre-allocated scratch array AND object pool — zero heap allocs in sort hot-path
@@ -564,6 +591,12 @@ export const RemoteMonstersRenderer = ({
     for (let i = 0; i < players.length; i++) {
       pMap.set(players[i].id, players[i]);
     }
+
+    // ─── Record local player position once per frame ─────────────────────────
+    const localPos = useStore.getState().playerPosition;
+    localPlayerPositionRef.current[0] = localPos[0];
+    localPlayerPositionRef.current[1] = localPos[1];
+    localPlayerPositionRef.current[2] = localPos[2];
 
     // ─── Throttled distance sort (10Hz max) — prevents 60x sort per second ──
     const now = state.clock.elapsedTime;
@@ -668,6 +701,9 @@ export const RemoteMonstersRenderer = ({
             localPlayerId={localPlayerId}
             gameConfig={gameConfig}
             visibleMonsterIdsRef={visibleMonsterIdsRef}
+            activeEnv={activeEnv}
+            terrainConfig={terrainConfig}
+            localPlayerPositionRef={localPlayerPositionRef}
           />
         </Suspense>
       ))}

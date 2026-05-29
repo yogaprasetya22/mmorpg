@@ -32,6 +32,8 @@ export interface RemotePlayerInstanceProps {
   assassinSpellsRef?: React.RefObject<any[]>;
   unitRegistry?: React.RefObject<UnitRuntimeData[]>;
   visiblePlayerIdsRef: React.RefObject<Set<string>>;
+  activeEnv: string;
+  terrainConfig: any;
 }
 
 export const RemotePlayerInstance = ({ 
@@ -49,7 +51,9 @@ export const RemotePlayerInstance = ({
   tankSpellsRef,
   assassinSpellsRef,
   unitRegistry,
-  visiblePlayerIdsRef
+  visiblePlayerIdsRef,
+  activeEnv,
+  terrainConfig
 }: RemotePlayerInstanceProps) => {
   const isEditorOpen = useEditorStore((s) => s.isEditorOpen);
 
@@ -132,8 +136,6 @@ export const RemotePlayerInstance = ({
     const isCurrentlyVisible = isEditorOpen || (!isDensityCulled && camDistSq <= FAR_SQ);
 
     // Get client terrain elevation to map desynced or flat server coordinates cleanly onto 3D sculpted landscape
-    const activeEnv = useStore.getState().environment;
-    const terrainConfig = useEditorStore.getState().terrainConfig;
     const terrainY = getTerrainElevation(data.x, data.z, activeEnv, 24, terrainConfig);
 
     // Snapping position and rotation if culled to keep state synchronized
@@ -143,6 +145,9 @@ export const RemotePlayerInstance = ({
       groupRef.current.rotation.y = data.rotation;
       groupRef.current.visible = false;
       if (activeAction.current) activeAction.current.paused = true;
+      // GC Spike Prevention & Interpolation Jitter Pruning: clear stale queue on visibility exit
+      stateBufferRef.current.length = 0;
+      hasInitializedPrevVisual.current = false;
       return;
     }
 
@@ -158,15 +163,25 @@ export const RemotePlayerInstance = ({
         buf[buf.length - 1].y !== data.y ||
         buf[buf.length - 1].z !== data.z ||
         buf[buf.length - 1].rotation !== data.rotation) {
-      buf.push({
-        x: data.x,
-        y: data.y,
-        z: data.z,
-        rotation: data.rotation,
-        timestamp: incomingTs
-      });
-      // Keep only last 8 entries: 20Hz × 160ms delay = 3.2 packets needed; 8 is a safe headroom
-      if (buf.length > 8) buf.shift();
+      
+      // GC Spike Prevention: Zero-Allocation Object-Reusable Buffer Shift & Push
+      if (buf.length >= 8) {
+        const reusedObj = buf.shift()!;
+        reusedObj.x = data.x;
+        reusedObj.y = data.y;
+        reusedObj.z = data.z;
+        reusedObj.rotation = data.rotation;
+        reusedObj.timestamp = incomingTs;
+        buf.push(reusedObj);
+      } else {
+        buf.push({
+          x: data.x,
+          y: data.y,
+          z: data.z,
+          rotation: data.rotation,
+          timestamp: incomingTs
+        });
+      }
     }
 
     // ─── Step 2: Entity Interpolation — 160ms delay to absorb 20Hz jitter ────
@@ -226,21 +241,30 @@ export const RemotePlayerInstance = ({
       targetY = terrainY;
     }
 
-    // ─── Step 3: Apply — direct assignment for frame-perfect 120fps rendering ─
-    groupRef.current.position.set(targetX, targetY, targetZ);
-    groupRef.current.rotation.y = targetRot;
+    // ─── Step 3: Apply — smooth lerped transition for frame-perfect fluid rendering ─
+    // Damped exponential lerp acts as a perfect low-pass filter to smooth out all high-frequency network jitters,
+    // buffer starvation gaps, and dead reckoning extrapolation snaps.
+    const lerpFactor = Math.min(1, 24.0 * delta);
+    groupRef.current.position.x += (targetX - groupRef.current.position.x) * lerpFactor;
+    groupRef.current.position.y += (targetY - groupRef.current.position.y) * lerpFactor;
+    groupRef.current.position.z += (targetZ - groupRef.current.position.z) * lerpFactor;
+
+    let diffRot = targetRot - groupRef.current.rotation.y;
+    while (diffRot < -Math.PI) diffRot += Math.PI * 2;
+    while (diffRot >  Math.PI) diffRot -= Math.PI * 2;
+    groupRef.current.rotation.y += diffRot * lerpFactor;
 
     // ─── Step 4: Measure visual speed for animation timescale ────────────────
-    // Runs AFTER position.set() so we measure the true interpolated displacement
+    // Runs AFTER position update so we measure the true interpolated displacement
     if (!hasInitializedPrevVisual.current) {
-      prevVisualPos.current[0] = targetX;
-      prevVisualPos.current[1] = targetZ;
+      prevVisualPos.current[0] = groupRef.current.position.x;
+      prevVisualPos.current[1] = groupRef.current.position.z;
       hasInitializedPrevVisual.current = true;
     }
-    const visualDx = targetX - prevVisualPos.current[0];
-    const visualDz = targetZ - prevVisualPos.current[1];
-    prevVisualPos.current[0] = targetX;
-    prevVisualPos.current[1] = targetZ;
+    const visualDx = groupRef.current.position.x - prevVisualPos.current[0];
+    const visualDz = groupRef.current.position.z - prevVisualPos.current[1];
+    prevVisualPos.current[0] = groupRef.current.position.x;
+    prevVisualPos.current[1] = groupRef.current.position.z;
     const visualDistance = Math.sqrt(visualDx * visualDx + visualDz * visualDz);
     const currentSpeed = visualDistance / Math.max(0.0001, delta);
     // Low-pass filter smoothedSpeed to prevent animation timescale jitter
@@ -771,6 +795,10 @@ export const RemotePlayersRenderer = ({
   const playerMapRef = useRef<Map<string, PlayerNetworkState>>(new Map());
   const visiblePlayerIdsRef = useRef<Set<string>>(new Set());
 
+  // Subscribe reactively to Zustand stores to avoid heavy getState() queries in child useFrame loop
+  const activeEnv = useStore((s) => s.environment);
+  const terrainConfig = useEditorStore((s) => s.terrainConfig);
+
   const lastSortTime = useRef(-1);
   // Pre-allocated scratch array and object pool to prevent heap allocation per frame
   const scratchPlayerDistances = useRef<{ id: string; distSq: number }[]>([]);
@@ -851,6 +879,8 @@ export const RemotePlayersRenderer = ({
             assassinSpellsRef={assassinSpellsRef}
             unitRegistry={unitRegistry}
             visiblePlayerIdsRef={visiblePlayerIdsRef}
+            activeEnv={activeEnv}
+            terrainConfig={terrainConfig}
           />
         </Suspense>
       ))}
