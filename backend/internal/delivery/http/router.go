@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"mmorpg-backend/internal/delivery/ws"
 )
 
@@ -41,6 +42,8 @@ func SetupRouter(authHandler *AuthHandler, wsHandler *ws.GameHandler, configHand
 			"time":   time.Now().Format(time.RFC3339),
 		})
 	})
+
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Serve assets-model folder statically over HTTP from the backend
 	r.Static("/assets-model", "./assets-model")
@@ -104,6 +107,8 @@ func SetupAPIRouter(authHandler *AuthHandler, configHandler *ConfigHandler) *gin
 		})
 	})
 
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
 	r.Static("/assets-model", "./assets-model")
 
 	api := r.Group("/api")
@@ -154,6 +159,8 @@ func SetupGameRouter(wsHandler *ws.GameHandler, apiServiceURL string) *gin.Engin
 			"time":   time.Now().Format(time.RFC3339),
 		})
 	})
+
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Configure proxy for all database/config queries to transparently flow to the API Service
 	target, err := url.Parse(apiServiceURL)

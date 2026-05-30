@@ -161,5 +161,23 @@ export const useWebSocketGame = (
         }
     };
 
-    return { sendPlayerState, sendPlayerAttack, sendDistributeStat, sendChatMessage };
+    // Send client-side aggregated performance telemetry metrics
+    const sendPerformanceReport = (report: {
+        min_fps: number;
+        max_fps: number;
+        avg_fps: number;
+        jitter_ms: number;
+        stutter_count: number;
+        p99_dt_ms: number;
+    }) => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            const binaryData = encode({
+                action: "telemetry_performance",
+                ...report
+            });
+            wsRef.current.send(binaryData);
+        }
+    };
+
+    return { sendPlayerState, sendPlayerAttack, sendDistributeStat, sendChatMessage, sendPerformanceReport };
 };

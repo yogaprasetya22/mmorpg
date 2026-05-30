@@ -17,8 +17,8 @@ const _sharedBox3 = new THREE.Box3();
 // ─── Shared scratch vectors to avoid per-frame allocations ───────────────────
 const _v3 = new THREE.Vector3();
 // ─── Module-level LOD thresholds (hoisted out of useFrame to avoid re-eval every frame) ─
-const MONSTER_FAR_SQ     = 100 * 100; // > 100 units: cull completely (farther distance for better visuals)
-const MONSTER_MED_FAR_SQ = 70 * 70;   // > 70 units: hide billboard + text (much further distance!)
+const MONSTER_FAR_SQ     = 80 * 80;   // > 80 units: cull completely
+const MONSTER_MED_FAR_SQ = 28 * 28;   // > 28 units: hide billboard + text (saves massive draw calls!)
 
 
 // ─── Global visual position registry (module-level Map, not window) ────────────
@@ -127,6 +127,8 @@ export const RemoteMonsterInstance = ({
         child.receiveShadow = true;
         // Pre-compute bounding sphere once — skip per-frame auto-compute
         child.geometry?.computeBoundingSphere?.();
+        // Disable heavy skinned mesh raycasting for remote monsters
+        child.raycast = () => {};
         // Freeze material to skip redundant uniform uploads
         if (child.material) {
           child.material.needsUpdate = false;
@@ -195,35 +197,43 @@ export const RemoteMonsterInstance = ({
       return;
     }
 
-    // ─── Density Culling — limit maximum rendered monster count when gathered ──────
-    // Disable density culling if overall monster count is low to prevent desync hiding
-    const isDensityCulled = !isEditorOpen && (_worldMonstersRef.current && _worldMonstersRef.current.length > 12) &&
-      visibleMonsterIdsRef && visibleMonsterIdsRef.current && !visibleMonsterIdsRef.current.has(monsterId);
+    // ─── Step 0: Fast Density Culling Check ───
+    const isDensityVisible = isEditorOpen || 
+      (!visibleMonsterIdsRef || !visibleMonsterIdsRef.current || visibleMonsterIdsRef.current.has(monsterId));
 
-    // ─── Distance Culling — avoids full skeleton update for far monsters ──────
-    // Compare distance to server coordinates directly for consistency
+    if (!isDensityVisible) {
+      groupRef.current.position.set(data.x, data.y, data.z);
+      groupRef.current.visible = false;
+      clone.visible = false;
+      if (activeAction.current) activeAction.current.paused = true;
+      stateBufferRef.current.length = 0;
+      hasInitializedPrevVisual.current = false;
+      return;
+    }
+
+    // ─── Step 1: Distance Culling Check (Only for density-visible monsters!) ───
     _v3.set(data.x, data.y, data.z);
     _v3.sub(state.camera.position);
     const camDistSq = _v3.lengthSq();
 
-    const isCurrentlyVisible = isEditorOpen || (!isDensityCulled && camDistSq <= MONSTER_FAR_SQ);
+    const isCurrentlyVisible = camDistSq <= MONSTER_FAR_SQ;
 
-    // Get client terrain elevation to map server's flat 2D movement cleanly onto 3D sculpted landscape
-    const terrainY = getTerrainElevation(data.x, data.z, activeEnv, 24, terrainConfig);
-
-    // Snap position and rotation if culled to keep state synchronized
     if (!isCurrentlyVisible) {
-      groupRef.current.position.set(data.x, terrainY, data.z);
+      groupRef.current.position.set(data.x, data.y, data.z);
       groupRef.current.visible = false;
+      clone.visible = false;
       if (activeAction.current) activeAction.current.paused = true;
-      // GC Spike Prevention & Interpolation Jitter Pruning: clear stale queue on visibility exit
       stateBufferRef.current.length = 0;
       hasInitializedPrevVisual.current = false;
       return;
     }
 
     groupRef.current.visible = true;
+    clone.visible = true;
     if (activeAction.current) activeAction.current.paused = false;
+
+    // ─── Step 2: Lazy Terrain Elevation Calculation (Only when visible!) ───
+    const terrainY = getTerrainElevation(data.x, data.z, activeEnv, 24, terrainConfig);
 
     // Snap HP bar to full when monster resets (returned to spawn with full HP)
     if (data.hp >= data.max_hp && smoothHpRatio.current < 0.99) {
@@ -512,15 +522,21 @@ export const RemoteMonsterInstance = ({
         </mesh>
       </Billboard>
 
-      <group
-        scale={scale}
+      <group scale={scale}>
+        <primitive object={clone} />
+      </group>
+
+      {/* Super lightweight invisible collider for click targeting (prevents skinned mesh raycast stutters) */}
+      <mesh
+        position={[0, (hpBarY * 0.45), 0]}
         onClick={(e) => {
           e.stopPropagation();
           if (monsterIdRef.current) onAttack(monsterIdRef.current);
         }}
       >
-        <primitive object={clone} />
-      </group>
+        <cylinderGeometry args={[0.7 * scale, 0.7 * scale, hpBarY * 0.9, 6]} />
+        <meshBasicMaterial transparent={true} opacity={0} depthWrite={false} colorWrite={false} />
+      </mesh>
     </group>
   );
 };

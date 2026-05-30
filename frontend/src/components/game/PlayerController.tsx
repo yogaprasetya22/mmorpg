@@ -209,6 +209,8 @@ export const PlayerController = ({
         child.castShadow = true;
         child.receiveShadow = true;
         child.geometry?.computeBoundingSphere?.();
+        // Disable heavy skinned mesh raycasting on complex skeleton
+        child.raycast = () => {};
       }
     });
     return cloned;

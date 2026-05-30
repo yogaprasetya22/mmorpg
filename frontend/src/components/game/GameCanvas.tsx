@@ -323,7 +323,7 @@ export const GameCanvas = React.memo(({
           }}
           className="select-none touch-none w-full h-full"
         >
-          <SceneAnalyzer />
+          {debug && <SceneAnalyzer />}
           <AdaptivePerformanceOptimizer
             settingsRef={settingsRef}
             adaptivePotatoMode={adaptivePotatoMode}

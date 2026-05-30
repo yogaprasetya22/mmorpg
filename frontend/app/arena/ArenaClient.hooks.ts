@@ -35,7 +35,7 @@ export function useArenaGameState() {
   const [characters, setCharacters] = useState<any[]>([]);
   const [selectedCharacter, setSelectedCharacter] = useState<any>(null);
   const [gameConfig, setGameConfig] = useState<any>(null);
-  const [dpr, setDpr] = useState(0.75);
+  const [dpr] = useState(0.8); // Fixed DPR — dynamic scaling via PerformanceMonitor removed to reduce useFrame overhead
 
   // Customization & creation states
   const [isCreatingChar, setIsCreatingChar] = useState(false);
@@ -66,7 +66,7 @@ export function useArenaGameState() {
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
-  const [activeRemotePlayers, setActiveRemotePlayers] = useState<{ id: string; username: string; class: string; gender: string }[]>([]);
+  const [activeRemotePlayers] = useState<{ id: string; username: string; class: string; gender: string }[]>([]);
   const [isRecoveringSession, setIsRecoveringSession] = useState(false);
   const activeRemotePlayersRef = useRef<{ id: string; username: string; class: string; gender: string }[]>([]);
   const lastRosterUpdate = useRef(0);
@@ -265,7 +265,9 @@ export function useArenaGameState() {
             class: p.class || "Beginner", gender: p.gender || "Male"
           }));
           activeRemotePlayersRef.current = nextList;
-          setActiveRemotePlayers(nextList);
+          // Throttled parent state update is completely disabled to eliminate parent component re-renders (Canvas, UI HUD).
+          // RemotePlayersRenderer now polls connectedPlayersRef directly and safely at 1Hz in a local effect.
+          // setActiveRemotePlayers(nextList);
         }
       }
 
@@ -554,7 +556,7 @@ export function useArenaGameState() {
     token, isLogin, setIsLogin, loading, errorMsg, setErrorMsg,
     successMsg, setSuccessMsg, isRecoveringSession,
     characters, selectedCharacter, setSelectedCharacter,
-    gameConfig, dpr, setDpr,
+    gameConfig, dpr,
     isCreatingChar, setIsCreatingChar,
     charName, setCharName, charClass, setCharClass,
     charGender, setCharGender, charHairStyle, setCharHairStyle,

@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
-import { KeyboardControls, PerformanceMonitor, AdaptiveEvents, AdaptiveDpr } from '@react-three/drei';
+import { KeyboardControls } from '@react-three/drei';
 import { EffectComposer, Bloom, ToneMapping } from '@react-three/postprocessing';
 import { PlayerController, keyboardMap } from '@/src/components/game/PlayerController';
 import { RemotePlayersRenderer } from '@/src/components/game/RemotePlayersRenderer';
@@ -28,10 +28,10 @@ import './ArenaClient.bootstrap';
 import { useArenaGameState } from './ArenaClient.hooks';
 
 // Components
-import { FPSCounterUpdater } from './components/FPSCounter';
+// FPSCounterUpdater removed — was adding useFrame overhead for CustomEvent dispatch every 1s
 import { ExposureBridge } from './components/ExposureBridge';
 import { ModelsPreloader } from './components/ModelsPreloader';
-import { PerformanceDiagnostics } from './components/PerformanceDiagnostics';
+// PerformanceDiagnostics removed — ring buffer + DOM updates + WS telemetry every frame was adding overhead
 import { GameChat } from './components/GameChat';
 import { PlayerStatsHUD } from './components/PlayerStatsHUD';
 import { GameStatusBar } from './components/GameStatusBar';
@@ -117,24 +117,10 @@ export default function MultiplayerArena() {
             }}
             className="w-full h-full"
           >
-            <PerformanceDiagnostics
-              connectedPlayersRef={state.connectedPlayersRef}
-              worldMonstersRef={state.worldMonstersRef}
-              selectedMapId={state.selectedMapId}
-              dpr={state.dpr}
-              potatoMode={state.settingsRef.current.potatoMode}
-            />
-            <PerformanceMonitor
-              onIncline={() => state.setDpr(Math.min(state.dpr + 0.05, 0.8))}
-              onDecline={() => state.setDpr(Math.max(state.dpr - 0.05, 0.5))}
-            />
-            <AdaptiveEvents />
-            <AdaptiveDpr pixelated={true} />
             <ExposureBridge exposure={2.0} />
 
             <VFXProvider>
               <CameraDirector />
-              <FPSCounterUpdater />
               <ModelsPreloader onReady={() => state.setModelsReady(true)} />
 
               <EnvironmentMultiGlobal
@@ -179,6 +165,7 @@ export default function MultiplayerArena() {
                 tankSpellsRef={state.tankSpellsRef}
                 assassinSpellsRef={state.assassinSpellsRef}
                 unitRegistry={state.unitRegistryRef}
+                localPlayerId={state.selectedCharacter?.id}
               />
 
               <RemoteMonstersRenderer

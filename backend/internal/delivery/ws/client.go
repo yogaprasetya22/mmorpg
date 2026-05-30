@@ -52,7 +52,7 @@ type Client struct {
 }
 
 type WSIncomingMessage struct {
-	Action   string  `json:"action" msgpack:"action"` // "move", "attack", "distribute_stat", "equip_item", "use_item", "cast_skill", "change_class"
+	Action   string  `json:"action" msgpack:"action"` // "move", "attack", "distribute_stat", "equip_item", "use_item", "cast_skill", "change_class", "telemetry_performance"
 	X        float64 `json:"x" msgpack:"x"`
 	Y        float64 `json:"y" msgpack:"y"`
 	Z        float64 `json:"z" msgpack:"z"`
@@ -71,6 +71,14 @@ type WSIncomingMessage struct {
 	SkillID      string `json:"skillId" msgpack:"skillId"`
 	NewClass     string `json:"newClass" msgpack:"newClass"`
 	Msg          string `json:"msg" msgpack:"msg"`
+
+	// Telemetry Metrics Payload
+	MinFPS       float64 `json:"min_fps" msgpack:"min_fps"`
+	MaxFPS       float64 `json:"max_fps" msgpack:"max_fps"`
+	AvgFPS       float64 `json:"avg_fps" msgpack:"avg_fps"`
+	JitterMS     float64 `json:"jitter_ms" msgpack:"jitter_ms"`
+	StutterCount int     `json:"stutter_count" msgpack:"stutter_count"`
+	P99DtMS      float64 `json:"p99_dt_ms" msgpack:"p99_dt_ms"`
 }
 
 func (c *Client) ReadPump() {
@@ -129,6 +137,14 @@ func (c *Client) ReadPump() {
 			c.Hub.gameUsecase.ChangeClass(c.PlayerID, msg.NewClass)
 		case "chat":
 			c.Hub.BroadcastChatMessage(c.Username, msg.Msg)
+		case "telemetry_performance":
+			// Record client performance metrics in Prometheus vectors
+			ClientFPSGauge.WithLabelValues(c.PlayerID, c.Username).Set(msg.AvgFPS)
+			ClientFPSMinGauge.WithLabelValues(c.PlayerID, c.Username).Set(msg.MinFPS)
+			ClientFPSMaxGauge.WithLabelValues(c.PlayerID, c.Username).Set(msg.MaxFPS)
+			ClientFPSJitterGauge.WithLabelValues(c.PlayerID, c.Username).Set(msg.JitterMS)
+			ClientStutterCounter.WithLabelValues(c.PlayerID, c.Username).Add(float64(msg.StutterCount))
+			ClientP99DtGauge.WithLabelValues(c.PlayerID, c.Username).Set(msg.P99DtMS)
 		default:
 			if msg.Action == "" {
 				c.Hub.gameUsecase.UpdatePlayerMovement(c.PlayerID, float32(msg.X), float32(msg.Y), float32(msg.Z), float32(msg.Rotation), msg.Animation, msg.TargetID)

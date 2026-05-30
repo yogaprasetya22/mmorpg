@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF, useAnimations, Text, Billboard } from "@react-three/drei";
 import * as THREE from 'three';
@@ -77,6 +77,8 @@ export const RemotePlayerInstance = ({
         child.castShadow = true;
         child.receiveShadow = true;
         child.geometry?.computeBoundingSphere?.();
+        // Disable heavy skinned mesh raycasting for remote players
+        child.raycast = () => {};
       }
     });
     return cloned;
@@ -119,40 +121,49 @@ export const RemotePlayerInstance = ({
       return;
     }
 
-    // ─── Density Culling — limit maximum rendered player count when gathered ──────
-    // Disable density culling if overall player count is low to prevent desync hiding
-    const isDensityCulled = !isEditorOpen && (_connectedPlayersRef.current && _connectedPlayersRef.current.length > 12) &&
-      visiblePlayerIdsRef.current && !visiblePlayerIdsRef.current.has(id);
+    // ─── Step 0: Fast Density Culling Check ───
+    const isDensityVisible = isEditorOpen || 
+      (!visiblePlayerIdsRef || !visiblePlayerIdsRef.current || visiblePlayerIdsRef.current.has(id));
 
-    // ─── Distance Culling — avoids full skeleton/animation ticks for far players ──────
+    if (!isDensityVisible) {
+      groupRef.current.position.set(data.x, data.y, data.z);
+      groupRef.current.rotation.y = data.rotation;
+      groupRef.current.visible = false;
+      clone.visible = false;
+      if (activeAction.current) activeAction.current.paused = true;
+      stateBufferRef.current.length = 0;
+      hasInitializedPrevVisual.current = false;
+      return;
+    }
+
+    // ─── Step 1: Distance Culling Check (Only for density-visible players!) ───
     const dxCam = state.camera.position.x - data.x;
     const dyCam = state.camera.position.y - data.y;
     const dzCam = state.camera.position.z - data.z;
     const camDistSq = dxCam * dxCam + dyCam * dyCam + dzCam * dzCam;
 
-    const FAR_SQ = 110 * 110;   // > 110 units: cull completely
-    const MED_FAR_SQ = 80 * 80; // > 80 units: hide name tag
+    const FAR_SQ = 80 * 80;     // > 80 units: cull completely
+    const MED_FAR_SQ = 28 * 28; // > 28 units: hide name tag (saves massive draw calls!)
 
-    const isCurrentlyVisible = isEditorOpen || (!isDensityCulled && camDistSq <= FAR_SQ);
+    const isCurrentlyVisible = camDistSq <= FAR_SQ;
 
-    // Get client terrain elevation to map desynced or flat server coordinates cleanly onto 3D sculpted landscape
-    const terrainY = getTerrainElevation(data.x, data.z, activeEnv, 24, terrainConfig);
-
-    // Snapping position and rotation if culled to keep state synchronized
     if (!isCurrentlyVisible) {
-      const snapY = (Math.abs(data.y) < 0.001 || data.y < terrainY - 5.0) ? terrainY : data.y;
-      groupRef.current.position.set(data.x, snapY, data.z);
+      groupRef.current.position.set(data.x, data.y, data.z);
       groupRef.current.rotation.y = data.rotation;
       groupRef.current.visible = false;
+      clone.visible = false;
       if (activeAction.current) activeAction.current.paused = true;
-      // GC Spike Prevention & Interpolation Jitter Pruning: clear stale queue on visibility exit
       stateBufferRef.current.length = 0;
       hasInitializedPrevVisual.current = false;
       return;
     }
 
     groupRef.current.visible = true;
+    clone.visible = true;
     if (activeAction.current) activeAction.current.paused = false;
+
+    // ─── Step 2: Lazy Terrain Elevation Calculation (Only when visible!) ───
+    const terrainY = getTerrainElevation(data.x, data.z, activeEnv, 24, terrainConfig);
 
     // ─── Step 1: Push incoming network state into the temporal buffer ────────
     // Use the precise WS arrival time (receivedAt) — NOT performance.now() which is frame-jittered
@@ -776,6 +787,7 @@ export interface RemotePlayersRendererProps {
   assassinSpellsRef?: React.RefObject<any[]>;
   unitRegistry?: React.RefObject<UnitRuntimeData[]>;
   settingsRef?: React.RefObject<any>;
+  localPlayerId?: string;
 }
 
 export const RemotePlayersRenderer = ({ 
@@ -788,7 +800,8 @@ export const RemotePlayersRenderer = ({
   tankSpellsRef,
   assassinSpellsRef,
   unitRegistry,
-  settingsRef
+  settingsRef,
+  localPlayerId
 }: RemotePlayersRendererProps) => {
   if (settingsRef) { /* bypass */ }
   const { camera } = useThree();
@@ -798,6 +811,34 @@ export const RemotePlayersRenderer = ({
   // Subscribe reactively to Zustand stores to avoid heavy getState() queries in child useFrame loop
   const activeEnv = useStore((s) => s.environment);
   const terrainConfig = useEditorStore((s) => s.terrainConfig);
+
+  const [localActivePlayers, setLocalActivePlayers] = useState<{ id: string; username: string; class: string; gender: string }[]>([]);
+  const lastHashRef = useRef("");
+
+  useEffect(() => {
+    if (!localPlayerId) return;
+
+    const updateRoster = () => {
+      const players = connectedPlayersRef.current || [];
+      const remotes = players.filter(p => p.id !== localPlayerId);
+      const nextHash = remotes.map(p => `${p.id}-${p.class || "Beginner"}-${p.gender || "Male"}`).join(",");
+      
+      if (lastHashRef.current !== nextHash) {
+        lastHashRef.current = nextHash;
+        const nextList = remotes.map(p => ({
+          id: p.id,
+          username: p.username || "",
+          class: p.class || "Beginner",
+          gender: p.gender || "Male"
+        }));
+        setLocalActivePlayers(nextList);
+      }
+    };
+
+    updateRoster();
+    const timer = setInterval(updateRoster, 1000);
+    return () => clearInterval(timer);
+  }, [connectedPlayersRef, localPlayerId]);
 
   const lastSortTime = useRef(-1);
   // Pre-allocated scratch array and object pool to prevent heap allocation per frame
@@ -858,9 +899,11 @@ export const RemotePlayersRenderer = ({
     }
   });
   
+  const playersToRender = localPlayerId ? localActivePlayers : activeRemotePlayers;
+
   return (
     <group>
-      {activeRemotePlayers.map((player) => (
+      {playersToRender.map((player: any) => (
         <Suspense key={player.id} fallback={null}>
           <RemotePlayerInstance
             key={player.id}
