@@ -18,6 +18,10 @@ export interface DeathOverlayRef {
   setDead: (isDead: boolean) => void;
 }
 
+export interface QuestPanelRef {
+  updateQuests: (quests: any[]) => void;
+}
+
 export interface ArenaGameState {
   // Auth
   username: string;

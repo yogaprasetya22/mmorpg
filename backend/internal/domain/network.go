@@ -18,6 +18,7 @@ type PlayerNetworkState struct {
 	Gold      int     `json:"gold" msgpack:"gold"`
 	Level     int     `json:"level" msgpack:"level"`
 	ASPD      float32 `json:"aspd" msgpack:"aspd"`
+	XP        int     `json:"xp" msgpack:"xp"`
 }
 
 // MonsterNetworkState is the minimal monster snapshot broadcast over WebSocket each tick.

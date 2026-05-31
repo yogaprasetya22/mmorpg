@@ -35,7 +35,7 @@ import { useVFX } from './VFXManager';
  */
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-const MAX_EVENTS = 24;
+const MAX_EVENTS = 96;
 const STRIDE     = 9;
 const MAX_INST   = MAX_EVENTS * STRIDE;
 
@@ -385,7 +385,7 @@ export function DamageHUDBatcher({ damageQueue }: { damageQueue: React.RefObject
 
             while (damageQueue.current.length > 0) {
                 const ev = damageQueue.current.shift()!;
-                if (!ev.isCrit && damageQueue.current.length > 20) continue;
+                if (!ev.isCrit && damageQueue.current.length > 80) continue;
 
                 const isCrit   = !!ev.isCrit;
                 const isMagic  = !!ev.isMagic || ev.color === '#00e5ff';
@@ -472,8 +472,6 @@ export function DamageHUDBatcher({ damageQueue }: { damageQueue: React.RefObject
                     spawnVFX(ev.position, 'critical-hit', '#ffcc00');
                     spawnVFX(ev.position, 'shockwave',    '#ff4400');
                 }
-
-                break;
             }
         }
 

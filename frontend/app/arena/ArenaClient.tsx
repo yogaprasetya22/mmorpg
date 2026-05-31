@@ -46,7 +46,7 @@ import { QuestPanel } from './components/QuestPanel';
 
 // Re-export types and constants for backward compatibility
 export { CLASS_LABELS } from './ArenaClient.constants';
-export type { GameChatRef, PlayerStatsHUDRef, GameStatusBarRef, DeathOverlayRef } from './ArenaClient.types';
+export type { GameChatRef, PlayerStatsHUDRef, GameStatusBarRef, DeathOverlayRef, QuestPanelRef } from './ArenaClient.types';
 
 /** Stub camera director (reserved for epic ending cinematics). */
 const CameraDirector = () => null;
@@ -152,7 +152,7 @@ export default function MultiplayerArena() {
                 simTimeRef={state.simTimeRef}
                 dealPlayerDamage={state.handleAuthoritativeAttack}
                 sendPlayerState={state.sendPlayerState}
-                playerStats={state.playerStatsRef.current.hp >= 0 ? { hp: state.playerStatsRef.current.hp, max_hp: state.playerStatsRef.current.maxHp, aspd: (state.playerStatsRef.current as any).aspd } : undefined}
+                playerStats={state.playerStatsRef.current.hp >= 0 ? state.playerStatsRef.current : undefined}
                 playerStatsRef={state.playerStatsRef}
               />
 
@@ -221,7 +221,7 @@ export default function MultiplayerArena() {
             localPlayerId={state.selectedCharacter?.id || ""}
             mapId={state.selectedMapId || "Starter Zone"}
           />
-          <GameStatusBar ref={state.statusBarRef} />
+          <GameStatusBar ref={state.statusBarRef} mapId={state.selectedMapId} />
 
           <button
             onClick={() => state.setShowMiniActions(v => !v)}
@@ -248,7 +248,7 @@ export default function MultiplayerArena() {
         </div>
 
         {/* Quest Panel */}
-        <QuestPanel />
+        <QuestPanel ref={state.questPanelRef} />
 
         {/* Chat */}
         <GameChat ref={state.chatRef} sendChatMessage={state.sendChatMessage} />

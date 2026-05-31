@@ -8,7 +8,7 @@ import { battleGrid } from '@/src/core/logic/combat/spatialGrid';
 import { UnitRuntimeData } from '@/src/core/domain/unit.types';
 import { CLASS_CONFIG, INITIAL_SETTINGS } from '@/src/core/logic/combat/constants';
 import { API_BASE_URL, WS_BASE_URL } from '@/src/core/config';
-import type { GameChatRef, PlayerStatsHUDRef, GameStatusBarRef, DeathOverlayRef } from './ArenaClient.types';
+import type { GameChatRef, PlayerStatsHUDRef, GameStatusBarRef, DeathOverlayRef, QuestPanelRef } from './ArenaClient.types';
 
 export function useArenaGameState() {
   const selectedMapId = useEditorStore(s => s.selectedMapId);
@@ -57,6 +57,7 @@ export function useArenaGameState() {
   const statsHudRef = useRef<PlayerStatsHUDRef>(null);
   const statusBarRef = useRef<GameStatusBarRef>(null);
   const deathOverlayRef = useRef<DeathOverlayRef>(null);
+  const questPanelRef = useRef<QuestPanelRef>(null);
 
   const lastPlayerHp = useRef(0);
   const playerStatsRef = useRef({ hp: -1, maxHp: -1, gold: -1, level: -1, aspd: 150, xp: -1 });
@@ -254,6 +255,7 @@ export function useArenaGameState() {
           lastPlayerHp.current = rawHP;
           playerStatsRef.current.hp = rawHP;
           playerStatsRef.current.maxHp = rawMaxHP;
+          (playerStatsRef.current as any).max_hp = rawMaxHP;
           statsHudRef.current?.updateHpMp(rawHP, rawMaxHP);
           deathOverlayRef.current?.setDead(rawHP <= 0);
         }
@@ -344,12 +346,12 @@ export function useArenaGameState() {
               if (response.ok) {
                 const data = await response.json();
                 if (data.player) {
-                  playerStatsRef.current.hp = data.player.hp;
+                  // Copy all server-authoritative properties to local ref so combat engine gets accurate stats
+                  Object.assign(playerStatsRef.current, data.player);
+                  // Ensure both camelCase and snake_case fields are kept in sync
                   playerStatsRef.current.maxHp = data.player.max_hp;
-                  playerStatsRef.current.gold = data.player.gold;
-                  playerStatsRef.current.level = data.player.level;
-                  (playerStatsRef.current as any).xp = data.player.xp;
                   statsHudRef.current?.updateStats(data.player);
+                  questPanelRef.current?.updateQuests(data.player.quests || []);
                 }
               } else if (response.status === 401) {
                 handleLogout();
@@ -454,6 +456,7 @@ export function useArenaGameState() {
     setSelectedCharacter(null);
     statsHudRef.current?.updateStats({ hp: 100, max_hp: 100, mp: 50, max_mp: 50, level: 1, gold: 0, username: "Hero" });
     playerStatsRef.current = { hp: -1, maxHp: -1, gold: -1, level: -1, aspd: 150, xp: -1 };
+    questPanelRef.current?.updateQuests([]);
     setIsCreatingChar(false);
     setSuccessMsg("");
     setErrorMsg("");
@@ -529,6 +532,7 @@ export function useArenaGameState() {
     setSelectedCharacter(null);
     statsHudRef.current?.updateStats({ hp: 100, max_hp: 100, mp: 50, max_mp: 50, level: 1, gold: 0, username: "Hero" });
     playerStatsRef.current = { hp: -1, maxHp: -1, gold: -1, level: -1, aspd: 150, xp: -1 };
+    questPanelRef.current?.updateQuests([]);
     setCharacters([]);
     setIsCreatingChar(false);
     connectedPlayersRef.current = [];
@@ -587,7 +591,7 @@ export function useArenaGameState() {
     isAutoMode, setIsAutoMode, showMiniActions, setShowMiniActions,
 
     // Refs
-    chatRef, statsHudRef, statusBarRef, deathOverlayRef,
+    chatRef, statsHudRef, statusBarRef, deathOverlayRef, questPanelRef,
     connectedPlayersRef, worldMonstersRef, settingsRef,
     damageQueue, mmSpellsRef, spellsRef, fighterSpellsRef,
     tankSpellsRef, assassinSpellsRef, unitRegistryRef, simTimeRef,

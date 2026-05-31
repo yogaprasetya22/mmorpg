@@ -55,15 +55,25 @@ func (h *GameHandler) ServeProfile(c *gin.Context) {
 		characterID = chars[0].ID
 	}
 
-	player, err := h.playerRepo.GetByID(characterID)
-	if err != nil || player == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Karakter pemain tidak ditemukan"})
-		return
+	player := h.hub.gameUsecase.GetActivePlayer(characterID)
+	if player == nil {
+		var err error
+		player, err = h.playerRepo.GetByID(characterID)
+		if err != nil || player == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Karakter pemain tidak ditemukan"})
+			return
+		}
 	}
 
 	if player.UserID != userID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Karakter bukan milik Anda"})
 		return
+	}
+
+	// Generate daily quests if none active
+	if len(player.Quests) == 0 || !player.HasActiveQuests() {
+		player.GenerateDailyQuests()
+		_ = h.playerRepo.Update(player)
 	}
 
 	// Always recalculate derived stats before serving the profile

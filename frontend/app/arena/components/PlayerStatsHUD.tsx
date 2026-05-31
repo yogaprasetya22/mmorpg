@@ -45,7 +45,11 @@ export const PlayerStatsHUD = forwardRef<PlayerStatsHUDRef, {
     const hpPct = Math.max(0, Math.min(100, ((stats.hp ?? 100) / (stats.max_hp ?? 100)) * 100));
     const mpPct = Math.max(0, Math.min(100, ((stats.mp ?? 50) / (stats.max_mp ?? 50)) * 100));
     const currentXp = stats.xp ?? 0;
-    const xpNeeded = (stats.level ?? 1) * 100;
+    const getRequiredXp = (lvl: number) => {
+      if (lvl <= 0) return 100;
+      return Math.round(100 * Math.pow(lvl, 1.8));
+    };
+    const xpNeeded = getRequiredXp(stats.level ?? 1);
     const xpPct = Math.max(0, Math.min(100, (currentXp / xpNeeded) * 100));
 
     return (

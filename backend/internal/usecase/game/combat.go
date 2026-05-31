@@ -3,6 +3,7 @@ package game
 import (
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"mmorpg-backend/internal/domain"
@@ -142,13 +143,18 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 			// Lock active players write lock to safely modify state in RAM
 			u.activePlayersMu.Lock()
 			// Reward XP & Gold
-			playerData.XP += monster.XPDrop
+			xpGained := playerData.CalculateXPGain(monster.Level, monster.XPDrop)
+			playerData.XP += xpGained
 			playerData.Gold += monster.GoldDrop
 
 			// Check Quest Progress for target monster type
+			hasActiveAfter := false
 			for i := range playerData.Quests {
 				q := &playerData.Quests[i]
-				if q.QuestID == "quest_goblin" && monster.Type == "goblin" && q.Status == "active" {
+				isMatch := strings.Contains(strings.ToLower(q.QuestID), strings.ToLower(monster.Type)) ||
+					(monster.Type == "default" && strings.Contains(strings.ToLower(q.QuestID), "boar"))
+
+				if isMatch && q.Status == "active" {
 					q.Progress++
 					if q.Progress >= q.TargetCount {
 						q.Progress = q.TargetCount
@@ -156,20 +162,31 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 						playerData.Gold += q.RewardGold
 						playerData.XP += q.RewardXP
 						fmt.Printf("🏆 QUEST COMPLETE: %s! Reward: +%d Gold, +%d XP\n", q.Title, q.RewardGold, q.RewardXP)
+					} else {
+						hasActiveAfter = true
 					}
+				} else if q.Status == "active" {
+					hasActiveAfter = true
 				}
 			}
+			if !hasActiveAfter {
+				playerData.GenerateDailyQuests()
+			}
 
-			// Handle level up
-			xpNeeded := playerData.Level * 100
-			if playerData.XP >= xpNeeded {
-				playerData.Level++
-				playerData.XP -= xpNeeded
-				playerData.StatPoints += 5 // 5 stat points to allocate!
-				playerData.RecalculateStats()
-				playerData.HP = playerData.MaxHP
-				playerData.MP = playerData.MaxMP
-				fmt.Printf("🌟 LEVEL UP! Player %s naik ke level %d! +5 Stat Points!\n", playerData.Username, playerData.Level)
+			// Handle level up sequence (supports multiple level ups if huge XP chunk is gained)
+			for {
+				xpNeeded := domain.GetRequiredXP(playerData.Level)
+				if playerData.XP >= xpNeeded {
+					playerData.Level++
+					playerData.XP -= xpNeeded
+					playerData.StatPoints += 5 // 5 stat points to allocate!
+					playerData.RecalculateStats()
+					playerData.HP = playerData.MaxHP
+					playerData.MP = playerData.MaxMP
+					fmt.Printf("🌟 LEVEL UP! Player %s naik ke level %d! +5 Stat Points!\n", playerData.Username, playerData.Level)
+				} else {
+					break
+				}
 			}
 			u.activePlayersMu.Unlock()
 

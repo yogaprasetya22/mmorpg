@@ -919,9 +919,14 @@ export const PlayerController = (props: {
         // Menyesuaikan kecepatan pemutaran animasi agar sinkron sempurna dengan pukulan per detik!
         const animationSpeedScale = hitsPerSecond * defaultAnimationDuration;
 
-        if (shootAction !== activeAction.current) {
+        // Force reset the animation if a new attack swing has just started (attackTimer[0] was just updated to now),
+        // or if we are switching to the attack animation. This ensures the visual swing aligns 100% with the attack frequency!
+        const isNewAttack = now - attackTimer[0] < 30; // updated in the same frame/tick
+        if (shootAction !== activeAction.current || isNewAttack) {
           shootAction.reset().play();
-          if (activeAction.current) activeAction.current.crossFadeTo(shootAction, 0.1, true);
+          if (activeAction.current && activeAction.current !== shootAction) {
+            activeAction.current.crossFadeTo(shootAction, 0.05, true);
+          }
           activeAction.current = shootAction;
         }
         

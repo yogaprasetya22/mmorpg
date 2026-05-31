@@ -89,26 +89,19 @@ const BaseAttackCalculator = (
 
   if (damage < 1) damage = 1;
 
-  // DYNAMIC DELAY CALCULATION: Higher ASPD = faster visual damage registration!
-  // Cap delay between 20ms and 120ms max to ensure premium, snappy combat response
-  const currentAspd = ctx.playerStats?.aspd ?? (ctx.playerStats?.ASPD ?? 150);
-  const delayMs = Math.max(20, Math.min(120, 150 - (currentAspd / 1000) * 130));
-
   const finalDamage = damage;
   const finalCrit = isCrit;
-  setTimeout(() => {
-    ctx.dealPlayerDamage?.(target.id, finalDamage, finalCrit);
-  }, delayMs);
+
+  // Directly deal player damage to ensure real-time synchronization with the hit event
+  ctx.dealPlayerDamage?.(target.id, finalDamage, finalCrit);
 
   // PROC RATE: 12% chance to trigger an automated Double Attack / Lightning Proc!
   const isProc = Math.random() < 0.12;
   if (isProc && ctx.dealPlayerDamage) {
     const procDamage = finalDamage * 0.85;
-    setTimeout(() => {
-      // Spawn magic cyan shockwave VFX
-      ctx.spawnVFX([target.position[0], target.position[1] + 1.2, target.position[2]], "shockwave", "#00e5ff");
-      ctx.dealPlayerDamage?.(target.id, procDamage, false, true, "#00e5ff");
-    }, delayMs + 70); // slightly staggered to create a premium double attack visual stream
+    // Spawn double attack proc immediately too!
+    ctx.spawnVFX([target.position[0], target.position[1] + 1.2, target.position[2]], "shockwave", "#00e5ff");
+    ctx.dealPlayerDamage?.(target.id, procDamage, false, true, "#00e5ff");
   }
 };
 

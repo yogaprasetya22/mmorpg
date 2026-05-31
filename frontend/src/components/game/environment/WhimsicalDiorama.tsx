@@ -239,10 +239,10 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
             />
             {sky === 'night' && (
                 <pointLight 
-                    position={[0, 15, 0]} 
-                    intensity={(ambientIntensity !== null ? 6.0 * (ambientIntensity / 3.5) : 6.0)} 
+                    position={[0, 1.5, 0]} 
+                    intensity={(ambientIntensity !== null ? 0.8 * (ambientIntensity / 3.5) : 0.8)} 
                     color="#ff5500" 
-                    distance={80} 
+                    distance={40} 
                 />
             )}
 

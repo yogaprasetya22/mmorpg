@@ -340,6 +340,193 @@ func (p *Player) CalculateDamageTo(targetDefense float32) (float32, bool) {
 	return dmg, isCrit
 }
 
+// GetRequiredXP returns the XP required to reach the next level based on an exponential curve.
+func GetRequiredXP(level int) int {
+	if level <= 0 {
+		return 100
+	}
+	// Formula: 100 * level^1.8
+	return int(math.Round(100.0 * math.Pow(float64(level), 1.8)))
+}
+
+// CalculateXPGain computes the final XP drop from a monster, applying a penalty/bonus based on level difference.
+func (p *Player) CalculateXPGain(monsterLevel int, baseXP int) int {
+	diff := monsterLevel - p.Level
+	var multiplier float32
+
+	switch {
+	case diff >= 15:
+		multiplier = 1.40
+	case diff >= 10:
+		multiplier = 1.25
+	case diff >= 5:
+		multiplier = 1.15
+	case diff >= -5:
+		multiplier = 1.00
+	case diff >= -10:
+		multiplier = 0.75
+	case diff >= -15:
+		multiplier = 0.35
+	default:
+		multiplier = 0.10
+	}
+
+	gained := float32(baseXP) * multiplier
+	if gained < 1 {
+		return 1
+	}
+	return int(math.Round(float64(gained)))
+}
+
+type QuestTemplate struct {
+	QuestID     string
+	Title       string
+	MonsterType string
+	MinLevel    int
+	TargetCount int
+	RewardGold  int
+	RewardXP    int
+}
+
+var DailyQuestTemplates = []QuestTemplate{
+	{
+		QuestID:     "quest_slime",
+		Title:       "Slime Purge",
+		MonsterType: "slime",
+		MinLevel:    1,
+		TargetCount: 5,
+		RewardGold:  60,
+		RewardXP:    100,
+	},
+	{
+		QuestID:     "quest_boar",
+		Title:       "Boar Hunter",
+		MonsterType: "default",
+		MinLevel:    1,
+		TargetCount: 4,
+		RewardGold:  80,
+		RewardXP:    150,
+	},
+	{
+		QuestID:     "quest_goblin",
+		Title:       "Goblin Menace",
+		MonsterType: "goblin",
+		MinLevel:    1,
+		TargetCount: 3,
+		RewardGold:  100,
+		RewardXP:    200,
+	},
+	{
+		QuestID:     "quest_goblin_archer",
+		Title:       "Scout Cleanout",
+		MonsterType: "goblin_archer",
+		MinLevel:    4,
+		TargetCount: 4,
+		RewardGold:  150,
+		RewardXP:    300,
+	},
+	{
+		QuestID:     "quest_orc",
+		Title:       "Orc Incursion",
+		MonsterType: "orc",
+		MinLevel:    6,
+		TargetCount: 4,
+		RewardGold:  200,
+		RewardXP:    450,
+	},
+	{
+		QuestID:     "quest_goblin_chief",
+		Title:       "Goblin Commander",
+		MonsterType: "goblin_chief",
+		MinLevel:    8,
+		TargetCount: 2,
+		RewardGold:  300,
+		RewardXP:    600,
+	},
+	{
+		QuestID:     "quest_orc_berserker",
+		Title:       "Orc Berserkers",
+		MonsterType: "orc_berserker",
+		MinLevel:    10,
+		TargetCount: 3,
+		RewardGold:  400,
+		RewardXP:    850,
+	},
+	{
+		QuestID:     "quest_orc_shaman",
+		Title:       "Mages of the Horde",
+		MonsterType: "orc_shaman",
+		MinLevel:    12,
+		TargetCount: 3,
+		RewardGold:  500,
+		RewardXP:    1200,
+	},
+	{
+		QuestID:     "quest_skeleton",
+		Title:       "Dark Skeleton Hunt",
+		MonsterType: "skeleton",
+		MinLevel:    15,
+		TargetCount: 3,
+		RewardGold:  800,
+		RewardXP:    2000,
+	},
+	{
+		QuestID:     "quest_boss",
+		Title:       "Zombie Queen Slayer",
+		MonsterType: "boss",
+		MinLevel:    25,
+		TargetCount: 1,
+		RewardGold:  5000,
+		RewardXP:    10000,
+	},
+}
+
+func (p *Player) HasActiveQuests() bool {
+	for _, q := range p.Quests {
+		if q.Status == "active" {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Player) GenerateDailyQuests() {
+	// Filter templates by player level
+	var eligible []QuestTemplate
+	for _, t := range DailyQuestTemplates {
+		if p.Level >= t.MinLevel {
+			eligible = append(eligible, t)
+		}
+	}
+
+	if len(eligible) == 0 {
+		return
+	}
+
+	// Pick a random template
+	randIdx := rand.Intn(len(eligible))
+	t := eligible[randIdx]
+
+	// Create new quest
+	questID := t.QuestID + "_" + time.Now().Format("20060102")
+	
+	p.Quests = []PlayerQuest{
+		{
+			ID:          p.ID + "-quest-" + time.Now().Format("150405"),
+			PlayerID:    p.ID,
+			QuestID:     questID,
+			Title:       t.Title,
+			Status:      "active",
+			Progress:    0,
+			TargetCount: t.TargetCount,
+			RewardGold:  t.RewardGold,
+			RewardXP:    t.RewardXP,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		},
+	}
+}
+
 type PlayerRepository interface {
 	Create(player *Player) error
 	GetByID(id string) (*Player, error)
