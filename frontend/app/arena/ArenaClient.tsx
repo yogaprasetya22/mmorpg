@@ -4,6 +4,10 @@
 import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
 import { KeyboardControls } from '@react-three/drei';
+import dynamic from 'next/dynamic';
+
+const Perf = dynamic(() => import('r3f-perf').then((mod) => mod.Perf), { ssr: false });
+
 import { EffectComposer, Bloom, ToneMapping } from '@react-three/postprocessing';
 import { PlayerController, keyboardMap } from '@/src/components/game/PlayerController';
 import { RemotePlayersRenderer } from '@/src/components/game/RemotePlayersRenderer';
@@ -118,6 +122,7 @@ export default function MultiplayerArena() {
             className="w-full h-full"
           >
             <ExposureBridge exposure={2.0} />
+            <Perf position="top-left" className="z-[2000]" />
 
             <VFXProvider>
               <CameraDirector />

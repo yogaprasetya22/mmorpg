@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef, Suspense } from "react";
+import { useMemo, useRef, Suspense } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useGLTF, useAnimations, Text, Billboard } from "@react-three/drei";
+import { useGLTF, useAnimations, Text } from "@react-three/drei";
 import * as THREE from 'three';
 import { SkeletonUtils } from 'three-stdlib';
 import { MeshoptDecoder } from 'meshoptimizer';
@@ -32,8 +32,6 @@ export interface RemotePlayerInstanceProps {
   assassinSpellsRef?: React.RefObject<any[]>;
   unitRegistry?: React.RefObject<UnitRuntimeData[]>;
   visiblePlayerIdsRef: React.RefObject<Set<string>>;
-  activeEnv: string;
-  terrainConfig: any;
 }
 
 export const RemotePlayerInstance = ({ 
@@ -51,12 +49,8 @@ export const RemotePlayerInstance = ({
   tankSpellsRef,
   assassinSpellsRef,
   unitRegistry,
-  visiblePlayerIdsRef,
-  activeEnv,
-  terrainConfig
+  visiblePlayerIdsRef
 }: RemotePlayerInstanceProps) => {
-  const isEditorOpen = useEditorStore((s) => s.isEditorOpen);
-
   // Pre-select model based on actual character Class + Gender from backend registry
   const modelPath = useMemo(() => {
     if (gameConfig && gameConfig.character_models) {
@@ -77,34 +71,21 @@ export const RemotePlayerInstance = ({
         child.castShadow = true;
         child.receiveShadow = true;
         child.geometry?.computeBoundingSphere?.();
-        // Disable heavy skinned mesh raycasting for remote players
-        child.raycast = () => {};
       }
     });
     return cloned;
   }, [scene]);
 
   const groupRef = useRef<THREE.Group>(null!);
-  const billboardGroupRef = useRef<any>(null);
-  const hpFillRef = useRef<THREE.Mesh>(null!);
+  const nameRef = useRef<THREE.Group>(null!);
   const textRef = useRef<any>(null);
-  const lastHpRatio = useRef(-1);
-  const smoothHpRatio = useRef(1);
-  const lastTextKey = useRef("");
   const { actions } = useAnimations(animations, groupRef);
   const activeAction = useRef<THREE.AnimationAction | null>(null);
 
   const currentAnimState = useRef("Idle");
-  // Fixed-size typed buffer: max 8 entries is plenty for 20Hz (160ms delay = 3.2 packets)
   const stateBufferRef = useRef<{ x: number, y: number, z: number, rotation: number, timestamp: number }[]>([]);
-  // Float32Array — zero heap allocation per frame (vs new {} each frame)
-  const prevVisualPos = useRef<Float32Array>(new Float32Array(2));
-  const hasInitializedPrevVisual = useRef(false);
+  const prevVisualPos = useRef<{ x: number, z: number } | null>(null);
   const smoothedSpeed = useRef(0);
-  // Clip name cache: built once per model load, avoids O(n) Object.keys on every anim state change
-  const clipCache = useRef<{
-    idle: string; walk: string; run: string; jump: string; attack: string;
-  } | null>(null);
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
@@ -121,82 +102,71 @@ export const RemotePlayerInstance = ({
       return;
     }
 
-    // ─── Step 0: Fast Density Culling Check ───
-    const isDensityVisible = isEditorOpen || 
-      (!visiblePlayerIdsRef || !visiblePlayerIdsRef.current || visiblePlayerIdsRef.current.has(id));
+    // ─── Density Culling — limit maximum rendered player count when gathered ──────
+    // Disable density culling if overall player count is low to prevent desync hiding
+    const isDensityCulled = (_connectedPlayersRef.current && _connectedPlayersRef.current.length > 12) &&
+      visiblePlayerIdsRef.current && !visiblePlayerIdsRef.current.has(id);
 
-    if (!isDensityVisible) {
-      groupRef.current.position.set(data.x, data.y, data.z);
-      groupRef.current.rotation.y = data.rotation;
-      groupRef.current.visible = false;
-      clone.visible = false;
-      if (activeAction.current) activeAction.current.paused = true;
-      stateBufferRef.current.length = 0;
-      hasInitializedPrevVisual.current = false;
-      return;
-    }
-
-    // ─── Step 1: Distance Culling Check (Only for density-visible players!) ───
+    // ─── Distance Culling — avoids full skeleton/animation ticks for far players ──────
     const dxCam = state.camera.position.x - data.x;
     const dyCam = state.camera.position.y - data.y;
     const dzCam = state.camera.position.z - data.z;
     const camDistSq = dxCam * dxCam + dyCam * dyCam + dzCam * dzCam;
 
-    const FAR_SQ = 80 * 80;     // > 80 units: cull completely
-    const MED_FAR_SQ = 28 * 28; // > 28 units: hide name tag (saves massive draw calls!)
+    const FAR_SQ = 60 * 60;     // > 60 units: cull completely
+    const MED_FAR_SQ = 40 * 40; // > 40 units: hide name tag
 
-    const isCurrentlyVisible = camDistSq <= FAR_SQ;
+    const isCurrentlyVisible = !isDensityCulled && camDistSq <= FAR_SQ;
 
+    // Get client terrain elevation to map desynced or flat server coordinates cleanly onto 3D sculpted landscape
+    const activeEnv = useStore.getState().environment;
+    const terrainConfig = useEditorStore.getState().terrainConfig;
+    const terrainY = getTerrainElevation(data.x, data.z, activeEnv, 24, terrainConfig);
+
+    // Snapping position and rotation if culled to keep state synchronized
     if (!isCurrentlyVisible) {
-      groupRef.current.position.set(data.x, data.y, data.z);
+      const snapY = (Math.abs(data.y) < 0.001 || data.y < terrainY - 5.0) ? terrainY : data.y;
+      groupRef.current.position.set(data.x, snapY, data.z);
       groupRef.current.rotation.y = data.rotation;
       groupRef.current.visible = false;
-      clone.visible = false;
       if (activeAction.current) activeAction.current.paused = true;
-      stateBufferRef.current.length = 0;
-      hasInitializedPrevVisual.current = false;
       return;
     }
 
     groupRef.current.visible = true;
-    clone.visible = true;
     if (activeAction.current) activeAction.current.paused = false;
 
-    // ─── Step 2: Lazy Terrain Elevation Calculation (Only when visible!) ───
-    const terrainY = getTerrainElevation(data.x, data.z, activeEnv, 24, terrainConfig);
+    if (prevVisualPos.current === null) {
+      prevVisualPos.current = { x: groupRef.current.position.x, z: groupRef.current.position.z };
+    }
+    const currentMeshX = groupRef.current.position.x;
+    const currentMeshZ = groupRef.current.position.z;
+    const visualDx = currentMeshX - prevVisualPos.current.x;
+    const visualDz = currentMeshZ - prevVisualPos.current.z;
+    const visualDistance = Math.sqrt(visualDx * visualDx + visualDz * visualDz);
+    prevVisualPos.current = { x: currentMeshX, z: currentMeshZ };
 
-    // ─── Step 1: Push incoming network state into the temporal buffer ────────
-    // Use the precise WS arrival time (receivedAt) — NOT performance.now() which is frame-jittered
+    const currentSpeed = visualDistance / Math.max(0.0001, delta);
+    smoothedSpeed.current += (currentSpeed - smoothedSpeed.current) * Math.min(1, 10.0 * delta);
+
+    // Push new network state to buffer if it differs from the last pushed state
     const buf = stateBufferRef.current;
-    const incomingTs = (data as any).receivedAt || performance.now();
-    if (buf.length === 0 ||
-        buf[buf.length - 1].x !== data.x ||
-        buf[buf.length - 1].y !== data.y ||
-        buf[buf.length - 1].z !== data.z ||
+    if (buf.length === 0 || 
+        buf[buf.length - 1].x !== data.x || 
+        buf[buf.length - 1].y !== data.y || 
+        buf[buf.length - 1].z !== data.z || 
         buf[buf.length - 1].rotation !== data.rotation) {
-      
-      // GC Spike Prevention: Zero-Allocation Object-Reusable Buffer Shift & Push
-      if (buf.length >= 8) {
-        const reusedObj = buf.shift()!;
-        reusedObj.x = data.x;
-        reusedObj.y = data.y;
-        reusedObj.z = data.z;
-        reusedObj.rotation = data.rotation;
-        reusedObj.timestamp = incomingTs;
-        buf.push(reusedObj);
-      } else {
-        buf.push({
-          x: data.x,
-          y: data.y,
-          z: data.z,
-          rotation: data.rotation,
-          timestamp: incomingTs
-        });
-      }
+      buf.push({
+        x: data.x,
+        y: data.y,
+        z: data.z,
+        rotation: data.rotation,
+        timestamp: (data as any).receivedAt || performance.now()
+      });
+      if (buf.length > 30) buf.shift(); // Limit queue length to 30 frames
     }
 
-    // ─── Step 2: Entity Interpolation — 160ms delay to absorb 20Hz jitter ────
-    // renderTime slides back 160ms, so we always interpolate BETWEEN two known server states
+    // Perform Entity Interpolation with a 160ms visual buffer delay to absorb 20Hz network jitter
     const renderTime = performance.now() - 160;
     let targetX = data.x;
     let targetY = data.y;
@@ -204,17 +174,17 @@ export const RemotePlayerInstance = ({
     let targetRot = data.rotation;
 
     if (buf.length >= 2) {
-      // Binary-style scan for the two buffer entries that bracket renderTime
       let i = 0;
       for (; i < buf.length - 1; i++) {
-        if (buf[i].timestamp <= renderTime && buf[i + 1].timestamp > renderTime) break;
+        if (buf[i].timestamp <= renderTime && buf[i+1].timestamp > renderTime) {
+          break;
+        }
       }
 
       if (i < buf.length - 1) {
-        // ── Normal interpolation between two known states ──
         const start = buf[i];
-        const end   = buf[i + 1];
-        const elapsed  = renderTime - start.timestamp;
+        const end = buf[i+1];
+        const elapsed = renderTime - start.timestamp;
         const duration = end.timestamp - start.timestamp;
         const alpha = Math.min(1, Math.max(0, elapsed / (duration || 1)));
 
@@ -222,102 +192,48 @@ export const RemotePlayerInstance = ({
         targetY = start.y + (end.y - start.y) * alpha;
         targetZ = start.z + (end.z - start.z) * alpha;
 
-        // Angle-wrapped rotation interpolation (prevents 360° spin artefact)
+        // Correctly handle angle wrapping (Slerp)
         let diffRot = end.rotation - start.rotation;
         while (diffRot < -Math.PI) diffRot += Math.PI * 2;
-        while (diffRot >  Math.PI) diffRot -= Math.PI * 2;
+        while (diffRot > Math.PI) diffRot -= Math.PI * 2;
         targetRot = start.rotation + diffRot * alpha;
       } else {
-        // ── Buffer starvation: network packet hasn't arrived yet ──
-        // Use dead-reckoning: continue last known velocity instead of freezing
-        const last = buf[buf.length - 1];
-        const prev = buf[buf.length - 2];
-        const lastDt = Math.max(1, last.timestamp - prev.timestamp);
-        const overrun = (renderTime - last.timestamp) / lastDt; // extrapolation factor
-        // Cap extrapolation at 1.5 server ticks to prevent rubber-banding
-        const extAlpha = Math.min(overrun, 1.5);
-        targetX = last.x + (last.x - prev.x) * extAlpha;
-        targetY = last.y + (last.y - prev.y) * extAlpha;
-        targetZ = last.z + (last.z - prev.z) * extAlpha;
-        let diffRot = last.rotation - prev.rotation;
-        while (diffRot < -Math.PI) diffRot += Math.PI * 2;
-        while (diffRot >  Math.PI) diffRot -= Math.PI * 2;
-        targetRot = last.rotation + diffRot * extAlpha;
+        // Fallback: If network lag causes buffer starvation, fallback to the latest known state
+        targetX = buf[buf.length - 1].x;
+        targetY = buf[buf.length - 1].y;
+        targetZ = buf[buf.length - 1].z;
+        targetRot = buf[buf.length - 1].rotation;
       }
     }
 
-    // Terrain Y correction: snap to ground if server sent y≈0 (flat 2D backend)
-    // but do NOT clamp players legitimately elevated (on ramps, hills, jump)
+    // Adjust targetY using the terrain height fallback if desynced/flat, but do NOT cap players standing on high elevated obstacles
     if (Math.abs(targetY) < 0.001 || targetY < terrainY - 5.0) {
       targetY = terrainY;
     }
+    
+    // Set position and rotation directly from the mathematically smooth entity interpolation to achieve 120fps+ fluidity
+    groupRef.current.position.set(targetX, targetY, targetZ);
+    groupRef.current.rotation.y = targetRot;
 
-    // ─── Step 3: Apply — smooth lerped transition for frame-perfect fluid rendering ─
-    // Damped exponential lerp acts as a perfect low-pass filter to smooth out all high-frequency network jitters,
-    // buffer starvation gaps, and dead reckoning extrapolation snaps.
-    const lerpFactor = Math.min(1, 24.0 * delta);
-    groupRef.current.position.x += (targetX - groupRef.current.position.x) * lerpFactor;
-    groupRef.current.position.y += (targetY - groupRef.current.position.y) * lerpFactor;
-    groupRef.current.position.z += (targetZ - groupRef.current.position.z) * lerpFactor;
-
-    let diffRot = targetRot - groupRef.current.rotation.y;
-    while (diffRot < -Math.PI) diffRot += Math.PI * 2;
-    while (diffRot >  Math.PI) diffRot -= Math.PI * 2;
-    groupRef.current.rotation.y += diffRot * lerpFactor;
-
-    // ─── Step 4: Measure visual speed for animation timescale ────────────────
-    // Runs AFTER position update so we measure the true interpolated displacement
-    if (!hasInitializedPrevVisual.current) {
-      prevVisualPos.current[0] = groupRef.current.position.x;
-      prevVisualPos.current[1] = groupRef.current.position.z;
-      hasInitializedPrevVisual.current = true;
-    }
-    const visualDx = groupRef.current.position.x - prevVisualPos.current[0];
-    const visualDz = groupRef.current.position.z - prevVisualPos.current[1];
-    prevVisualPos.current[0] = groupRef.current.position.x;
-    prevVisualPos.current[1] = groupRef.current.position.z;
-    const visualDistance = Math.sqrt(visualDx * visualDx + visualDz * visualDz);
-    const currentSpeed = visualDistance / Math.max(0.0001, delta);
-    // Low-pass filter smoothedSpeed to prevent animation timescale jitter
-    smoothedSpeed.current += (currentSpeed - smoothedSpeed.current) * Math.min(1, 10.0 * delta);
-
-    // ─── Billboard & HP UI (hidden beyond MED_FAR_SQ) ────────────────────────
-    if (billboardGroupRef.current) {
-      if (!isEditorOpen && camDistSq > MED_FAR_SQ) {
-        billboardGroupRef.current.visible = false;
+    // Billboard name label or hide if too far
+    if (nameRef.current) {
+      if (camDistSq > MED_FAR_SQ) {
+        nameRef.current.visible = false;
       } else {
-        billboardGroupRef.current.visible = true;
-
-        const currentHp = typeof data.hp !== 'undefined' ? data.hp : 100;
-        const maxHp = typeof data.maxHp !== 'undefined' ? data.maxHp : 100;
-
-        if (hpFillRef.current) {
-          const targetRatio = Math.max(0, Math.min(1, currentHp / maxHp));
-          // Smooth draining transition (lerped)
-          const lerpSpeed = targetRatio < smoothHpRatio.current ? 6.0 : 12.0;
-          smoothHpRatio.current += (targetRatio - smoothHpRatio.current) * Math.min(1, lerpSpeed * delta);
-          const ratio = smoothHpRatio.current;
-
-          // Skip uniform updates if ratio hasn't changed meaningfully
-          if (Math.abs(ratio - lastHpRatio.current) > 0.0005) {
-            hpFillRef.current.scale.x = ratio;
-            hpFillRef.current.position.x = -0.5 * (1 - ratio);
-            lastHpRatio.current = ratio;
-          }
-        }
-
-        if (textRef.current) {
-          const pClass = data.class || cls || "Beginner";
-          const pName = username || id.substring(0, 8);
-          const textKey = `${pClass}_${pName}`;
-
-          if (lastTextKey.current !== textKey) {
-            textRef.current.text = `[${pClass}] ${pName}`;
-            lastTextKey.current = textKey;
-          }
-        }
+        nameRef.current.visible = true;
       }
     }
+
+    // Update text only if changed to avoid expensive Troika dirty checking/re-layouts
+    if (textRef.current && nameRef.current.visible) {
+      const expectedText = username || id.substring(0, 8);
+      if (textRef.current.text !== expectedText) {
+        textRef.current.text = expectedText;
+      }
+    }
+    
+    // Billboard name label: quaternion copy removed — nameRef is a group, not Billboard.
+    // Skip camera.quaternion.copy per player — use drei <Billboard> in JSX instead if needed.
 
     // Handle animations inside useFrame dynamically without React state re-render!
     const animation = data.animation || "Idle";
@@ -329,23 +245,20 @@ export const RemotePlayerInstance = ({
     const startedNewSkill  = isUsingSkill && (currentAnimState.current !== animation);
 
     if (actions && currentAnimState.current !== animation) {
-      // Build clip cache once per model load — avoids O(n) Object.keys on every animation state change
-      if (!clipCache.current) {
-        const keys = Object.keys(actions);
-        clipCache.current = {
-          idle:   keys.find(k => k === 'Idle'   || k.toLowerCase() === 'idle')   ?? 'Idle',
-          walk:   keys.find(k => k === 'Walk'   || k.toLowerCase().includes('walk')) ?? 'Idle',
-          run:    keys.find(k => k === 'Run'    || k.toLowerCase() === 'run')    ?? 'Idle',
-          jump:   keys.find(k => k === 'Jump'   || k.toLowerCase().includes('jump')) ?? 'Idle',
-          attack: keys.find(k => k.toLowerCase().includes('attack') || k.toLowerCase().includes('slash') || k.toLowerCase().includes('shoot')) ?? 'Idle',
-        };
-      }
+      const keys = Object.keys(actions);
+      let clipName = "Idle";
 
-      let clipName: string = clipCache.current.idle;
-      if      (desired.includes('run'))                  clipName = clipCache.current.run;
-      else if (desired.includes('walk'))                 clipName = clipCache.current.walk;
-      else if (desired.includes('jump'))                 clipName = clipCache.current.jump;
-      else if (isAttacking || isUsingSkill)              clipName = clipCache.current.attack;
+      if (desired.includes("run")) {
+        clipName = keys.find((k) => k === "Run" || k.toLowerCase() === "run") || "Idle";
+      } else if (desired.includes("walk")) {
+        clipName = keys.find((k) => k === "Walk" || k.toLowerCase().includes("walk")) || "Idle";
+      } else if (desired.includes("jump")) {
+        clipName = keys.find((k) => k === "Jump" || k.toLowerCase() === "jump" || k.toLowerCase().includes("jump")) || "Idle";
+      } else if (isAttacking || isUsingSkill) {
+        clipName = keys.find((k) => k.toLowerCase().includes("attack") || k.toLowerCase().includes("slash") || k.toLowerCase().includes("shoot")) || "Idle";
+      } else {
+        clipName = keys.find((k) => k === "Idle" || k.toLowerCase() === "idle") || "Idle";
+      }
 
       const nextAction = actions[clipName];
       if (nextAction && nextAction !== activeAction.current) {
@@ -731,47 +644,21 @@ export const RemotePlayerInstance = ({
       <group scale={1.0} position={[0, -1.3, 0]}>
         <primitive object={clone} />
       </group>
-      <Billboard ref={billboardGroupRef} position={[0, 2.5, 0]} follow={true} visible={false}>
-        {/* Username & Class Text */}
+      <group ref={nameRef} position={[0, 1.75, 0]}>
         <Text
           ref={textRef}
           font="/Press_Start_2P/PressStart2P-Regular.ttf"
-          fontSize={0.095}
-          position={[0, 0.08, 0]}
+          fontSize={0.22}
           anchorX="center"
           anchorY="bottom"
-          outlineWidth={0.015}
+          outlineWidth={0.03}
           outlineColor="#000000"
-          color="#38bdf8" // Premium Sky Cyan
+          color="#06b6d4"
           depthOffset={-5}
         >
           {""}
         </Text>
-
-        {/* HP Bar Outer Border Shadow/Glow (Glassy Drop Shadow) */}
-        <mesh position={[0, 0, -0.002]}>
-          <planeGeometry args={[1.06, 0.11]} />
-          <meshBasicMaterial color="#000000" opacity={0.6} transparent={true} toneMapped={false} />
-        </mesh>
-
-        {/* HP Bar Slate Border */}
-        <mesh position={[0, 0, -0.001]}>
-          <planeGeometry args={[1.02, 0.07]} />
-          <meshBasicMaterial color="#1e293b" toneMapped={false} />
-        </mesh>
-
-        {/* HP Bar Container Background */}
-        <mesh position={[0, 0, 0]}>
-          <planeGeometry args={[1.0, 0.05]} />
-          <meshBasicMaterial color="#0f172a" toneMapped={false} />
-        </mesh>
-
-        {/* HP Bar Fill (Vibrant Emerald/Mint Green) */}
-        <mesh ref={hpFillRef} position={[0, 0, 0.002]}>
-          <planeGeometry args={[1.0, 0.05]} />
-          <meshBasicMaterial color="#10b981" toneMapped={false} />
-        </mesh>
-      </Billboard>
+      </group>
     </group>
   );
 };
@@ -804,41 +691,10 @@ export const RemotePlayersRenderer = ({
   localPlayerId
 }: RemotePlayersRendererProps) => {
   if (settingsRef) { /* bypass */ }
+  if (localPlayerId) { /* bypass */ }
   const { camera } = useThree();
   const playerMapRef = useRef<Map<string, PlayerNetworkState>>(new Map());
   const visiblePlayerIdsRef = useRef<Set<string>>(new Set());
-
-  // Subscribe reactively to Zustand stores to avoid heavy getState() queries in child useFrame loop
-  const activeEnv = useStore((s) => s.environment);
-  const terrainConfig = useEditorStore((s) => s.terrainConfig);
-
-  const [localActivePlayers, setLocalActivePlayers] = useState<{ id: string; username: string; class: string; gender: string }[]>([]);
-  const lastHashRef = useRef("");
-
-  useEffect(() => {
-    if (!localPlayerId) return;
-
-    const updateRoster = () => {
-      const players = connectedPlayersRef.current || [];
-      const remotes = players.filter(p => p.id !== localPlayerId);
-      const nextHash = remotes.map(p => `${p.id}-${p.class || "Beginner"}-${p.gender || "Male"}`).join(",");
-      
-      if (lastHashRef.current !== nextHash) {
-        lastHashRef.current = nextHash;
-        const nextList = remotes.map(p => ({
-          id: p.id,
-          username: p.username || "",
-          class: p.class || "Beginner",
-          gender: p.gender || "Male"
-        }));
-        setLocalActivePlayers(nextList);
-      }
-    };
-
-    updateRoster();
-    const timer = setInterval(updateRoster, 1000);
-    return () => clearInterval(timer);
-  }, [connectedPlayersRef, localPlayerId]);
 
   const lastSortTime = useRef(-1);
   // Pre-allocated scratch array and object pool to prevent heap allocation per frame
@@ -885,10 +741,8 @@ export const RemotePlayersRenderer = ({
 
       scratch.sort((a, b) => a.distSq - b.distSq);
 
-      const isEditorOpen = useEditorStore.getState().isEditorOpen;
       // Adaptive cap: when loadtest saturates server with 40 bots, limit to 8 closest player skeletons
-      // Editor Bypass: no density culling when in the World Editor
-      const playerCap = isEditorOpen ? Infinity : (players.length > 20 ? 8 : 12);
+      const playerCap = players.length > 20 ? 8 : 12;
       const visibleSet = visiblePlayerIdsRef.current;
       visibleSet.clear();
 
@@ -899,11 +753,9 @@ export const RemotePlayersRenderer = ({
     }
   });
   
-  const playersToRender = localPlayerId ? localActivePlayers : activeRemotePlayers;
-
   return (
     <group>
-      {playersToRender.map((player: any) => (
+      {activeRemotePlayers.map((player) => (
         <Suspense key={player.id} fallback={null}>
           <RemotePlayerInstance
             key={player.id}
@@ -922,8 +774,6 @@ export const RemotePlayersRenderer = ({
             assassinSpellsRef={assassinSpellsRef}
             unitRegistry={unitRegistry}
             visiblePlayerIdsRef={visiblePlayerIdsRef}
-            activeEnv={activeEnv}
-            terrainConfig={terrainConfig}
           />
         </Suspense>
       ))}

@@ -17,8 +17,8 @@ const _sharedBox3 = new THREE.Box3();
 // ─── Shared scratch vectors to avoid per-frame allocations ───────────────────
 const _v3 = new THREE.Vector3();
 // ─── Module-level LOD thresholds (hoisted out of useFrame to avoid re-eval every frame) ─
-const MONSTER_FAR_SQ     = 80 * 80;   // > 80 units: cull completely
-const MONSTER_MED_FAR_SQ = 28 * 28;   // > 28 units: hide billboard + text (saves massive draw calls!)
+const MONSTER_FAR_SQ     = 55 * 55;  // > 55 units: cull completely
+const MONSTER_MED_FAR_SQ = 35 * 35;  // > 35 units: hide billboard + text (much further distance!)
 
 
 // ─── Global visual position registry (module-level Map, not window) ────────────
@@ -37,9 +37,6 @@ export interface RemoteMonsterInstanceProps {
   localPlayerId?: string;
   gameConfig?: any;
   visibleMonsterIdsRef?: React.RefObject<Set<string>>;
-  activeEnv: string;
-  terrainConfig: any;
-  localPlayerPositionRef: React.RefObject<[number, number, number]>;
 }
 
 // ─── Clip name cache: precomputed once per GLB load ───────────────────────────
@@ -65,14 +62,9 @@ export const RemoteMonsterInstance = ({
   remotePlayerMapRef,
   localPlayerId,
   gameConfig,
-  visibleMonsterIdsRef,
-  activeEnv,
-  terrainConfig,
-  localPlayerPositionRef
+  visibleMonsterIdsRef
 }: RemoteMonsterInstanceProps) => {
   void camera;
-
-  const isEditorOpen = useEditorStore((s) => s.isEditorOpen);
 
   const isBoss = useMemo(() => {
     const data = monsterMapRef.current?.get(monsterId);
@@ -127,8 +119,6 @@ export const RemoteMonsterInstance = ({
         child.receiveShadow = true;
         // Pre-compute bounding sphere once — skip per-frame auto-compute
         child.geometry?.computeBoundingSphere?.();
-        // Disable heavy skinned mesh raycasting for remote monsters
-        child.raycast = () => {};
         // Freeze material to skip redundant uniform uploads
         if (child.material) {
           child.material.needsUpdate = false;
@@ -183,6 +173,7 @@ export const RemoteMonsterInstance = ({
     if (!groupRef.current) return;
 
     // O(1) Map lookup
+    // O(1) Map lookup
     let data = monsterMapRef.current?.get(monsterId);
     if (!data && _worldMonstersRef.current) {
       // Fallback search to prevent frame-ordering race conditions!
@@ -197,43 +188,34 @@ export const RemoteMonsterInstance = ({
       return;
     }
 
-    // ─── Step 0: Fast Density Culling Check ───
-    const isDensityVisible = isEditorOpen || 
-      (!visibleMonsterIdsRef || !visibleMonsterIdsRef.current || visibleMonsterIdsRef.current.has(monsterId));
+    // ─── Density Culling — limit maximum rendered monster count when gathered ──────
+    // Disable density culling if overall monster count is low to prevent desync hiding
+    const isDensityCulled = (_worldMonstersRef.current && _worldMonstersRef.current.length > 12) &&
+      visibleMonsterIdsRef && visibleMonsterIdsRef.current && !visibleMonsterIdsRef.current.has(monsterId);
 
-    if (!isDensityVisible) {
-      groupRef.current.position.set(data.x, data.y, data.z);
-      groupRef.current.visible = false;
-      clone.visible = false;
-      if (activeAction.current) activeAction.current.paused = true;
-      stateBufferRef.current.length = 0;
-      hasInitializedPrevVisual.current = false;
-      return;
-    }
-
-    // ─── Step 1: Distance Culling Check (Only for density-visible monsters!) ───
+    // ─── Distance Culling — avoids full skeleton update for far monsters ──────
+    // Compare distance to server coordinates directly for consistency
     _v3.set(data.x, data.y, data.z);
     _v3.sub(state.camera.position);
     const camDistSq = _v3.lengthSq();
 
-    const isCurrentlyVisible = camDistSq <= MONSTER_FAR_SQ;
+    const isCurrentlyVisible = !isDensityCulled && camDistSq <= MONSTER_FAR_SQ;
 
+    // Get client terrain elevation to map server's flat 2D movement cleanly onto 3D sculpted landscape
+    const activeEnv = useStore.getState().environment;
+    const terrainConfig = useEditorStore.getState().terrainConfig;
+    const terrainY = getTerrainElevation(data.x, data.z, activeEnv, 24, terrainConfig);
+
+    // Snap position and rotation if culled to keep state synchronized
     if (!isCurrentlyVisible) {
-      groupRef.current.position.set(data.x, data.y, data.z);
+      groupRef.current.position.set(data.x, terrainY, data.z);
       groupRef.current.visible = false;
-      clone.visible = false;
       if (activeAction.current) activeAction.current.paused = true;
-      stateBufferRef.current.length = 0;
-      hasInitializedPrevVisual.current = false;
       return;
     }
 
     groupRef.current.visible = true;
-    clone.visible = true;
     if (activeAction.current) activeAction.current.paused = false;
-
-    // ─── Step 2: Lazy Terrain Elevation Calculation (Only when visible!) ───
-    const terrainY = getTerrainElevation(data.x, data.z, activeEnv, 24, terrainConfig);
 
     // Snap HP bar to full when monster resets (returned to spawn with full HP)
     if (data.hp >= data.max_hp && smoothHpRatio.current < 0.99) {
@@ -246,39 +228,28 @@ export const RemoteMonsterInstance = ({
     // ─── Read flat position fields (no nested object allocation) ─────────────
     const x = data.x;
     const z = data.z;
+    // Client-side 3D terrain elevation handles server flat coordinate mapping
     const groundY = terrainY;
 
-    // ─── Step 1: Push incoming network state into the temporal buffer ─────────
+    // Push new network state to buffer if it differs from the last pushed state
     const buf = stateBufferRef.current;
-    const incomingTs = (data as any).receivedAt || performance.now();
-    if (buf.length === 0 ||
-        buf[buf.length - 1].x !== x ||
+    if (buf.length === 0 || 
+        buf[buf.length - 1].x !== x || 
         buf[buf.length - 1].z !== z ||
         buf[buf.length - 1].animation !== (data.animation || "")) {
-      
-      // GC Spike Prevention: Zero-Allocation Object-Reusable Buffer Shift & Push
-      if (buf.length >= 8) {
-        const reusedObj = buf.shift()!;
-        reusedObj.x = x;
-        reusedObj.y = groundY;
-        reusedObj.z = z;
-        reusedObj.animation = data.animation || "";
-        reusedObj.timestamp = incomingTs;
-        buf.push(reusedObj);
-      } else {
-        buf.push({
-          x: x,
-          y: groundY,
-          z: z,
-          animation: data.animation || "",
-          timestamp: incomingTs
-        });
-      }
+      buf.push({
+        x: x,
+        y: groundY,
+        z: z,
+        animation: data.animation || "",
+        timestamp: (data as any).receivedAt || performance.now()
+      });
+      if (buf.length > 30) buf.shift(); // Limit queue length to 30 frames
     }
 
-    // ─── Step 2: Entity Interpolation — 160ms delay to absorb 20Hz jitter ────
+    // Perform Entity Interpolation with a 160ms visual buffer delay to absorb 20Hz network jitter
     const renderTime = performance.now() - 160;
-
+    
     let targetX = x;
     let targetY = groundY;
     let targetZ = z;
@@ -287,14 +258,15 @@ export const RemoteMonsterInstance = ({
     if (buf.length >= 2) {
       let i = 0;
       for (; i < buf.length - 1; i++) {
-        if (buf[i].timestamp <= renderTime && buf[i + 1].timestamp > renderTime) break;
+        if (buf[i].timestamp <= renderTime && buf[i+1].timestamp > renderTime) {
+          break;
+        }
       }
 
       if (i < buf.length - 1) {
-        // ── Normal interpolation between two known states ──
         const start = buf[i];
-        const end   = buf[i + 1];
-        const elapsed  = renderTime - start.timestamp;
+        const end = buf[i+1];
+        const elapsed = renderTime - start.timestamp;
         const duration = end.timestamp - start.timestamp;
         const alpha = Math.min(1, Math.max(0, elapsed / (duration || 1)));
 
@@ -303,32 +275,73 @@ export const RemoteMonsterInstance = ({
         targetZ = start.z + (end.z - start.z) * alpha;
         targetAnim = alpha < 0.5 ? start.animation : end.animation;
       } else {
-        // ── Buffer starvation: dead-reckoning — continue last known velocity ──
-        const last = buf[buf.length - 1];
-        const prev = buf[buf.length - 2];
-        const lastDt = Math.max(1, last.timestamp - prev.timestamp);
-        const extAlpha = Math.min((renderTime - last.timestamp) / lastDt, 1.5);
-        targetX = last.x + (last.x - prev.x) * extAlpha;
-        targetY = last.y + (last.y - prev.y) * extAlpha;
-        targetZ = last.z + (last.z - prev.z) * extAlpha;
-        targetAnim = last.animation;
+        targetX = buf[buf.length - 1].x;
+        targetY = buf[buf.length - 1].y;
+        targetZ = buf[buf.length - 1].z;
+        targetAnim = buf[buf.length - 1].animation;
       }
     }
 
-    // ─── Step 3: Apply position — smooth damped lerp to filter out jitter and starvation snaps ──
-    const lerpFactor = Math.min(1, 24.0 * delta);
-    if (!hasInitializedPrevVisual.current) {
+    const meshX = groupRef.current.position.x;
+    const meshZ = groupRef.current.position.z;
+
+    const dx = x - meshX;
+    const dz = z - meshZ;
+    const distToTargetSq = dx * dx + dz * dz;
+    const distToTarget = Math.sqrt(distToTargetSq);
+
+    // ─── Resolve target position for attack/rotation ──────────────────────────
+    let targetPosX = 0, targetPosZ = 0, hasTarget = false;
+    if (data.target_player_id && data.target_player_id !== "") {
+      if (data.target_player_id === localPlayerId) {
+        const localPos = useStore.getState().playerPosition;
+        targetPosX = localPos[0];
+        targetPosZ = localPos[2];
+        hasTarget = true;
+      } else {
+        const rp = remotePlayerMapRef.current?.get(data.target_player_id);
+        if (rp) {
+          targetPosX = rp.x;
+          targetPosZ = rp.z;
+          hasTarget = true;
+        }
+      }
+    }
+
+    let isWithinAttackRange = false;
+    if (hasTarget) {
+      const tDx = targetPosX - meshX;
+      const tDz = targetPosZ - meshZ;
+      isWithinAttackRange = (tDx * tDx + tDz * tDz) <= (isBoss ? 4.5 * 4.5 : 3.5 * 3.5);
+    }
+
+    const serverAnim = (targetAnim || "").toLowerCase();
+    isMoving.current = distToTarget > 0.15;
+
+    // ─── Determine desired animation state ───────────────────────────────────
+    let desiredState = "idle";
+    if (data.is_dead || serverAnim === "death") desiredState = "death";
+    else if (serverAnim === "attack") desiredState = "attack";
+    else if (serverAnim === "run")    desiredState = "run";
+    else if (serverAnim === "walk")   desiredState = "walk";
+    else if (data.target_player_id && data.target_player_id !== "") {
+      if (isMoving.current)        desiredState = "run";
+      else if (isWithinAttackRange) desiredState = "attack";
+      else                          desiredState = "idle";
+    } else if (isMoving.current) {
+      desiredState = "walk";
+    }
+
+    // ─── Highly Responsive Lerp Interpolation ───────────────────
+    if (!hasInitializedPrevVisual.current || distToTarget > 4.0) {
       groupRef.current.position.set(targetX, targetY, targetZ);
       prevVisualPos.current[0] = targetX;
       prevVisualPos.current[1] = targetZ;
       hasInitializedPrevVisual.current = true;
     } else {
-      groupRef.current.position.x += (targetX - groupRef.current.position.x) * lerpFactor;
-      groupRef.current.position.y += (targetY - groupRef.current.position.y) * lerpFactor;
-      groupRef.current.position.z += (targetZ - groupRef.current.position.z) * lerpFactor;
+      groupRef.current.position.set(targetX, targetY, targetZ);
     }
 
-    // ─── Step 4: Measure visual speed AFTER position updates ───────────────────
     const currentMeshX = groupRef.current.position.x;
     const currentMeshZ = groupRef.current.position.z;
     const visualDx = currentMeshX - prevVisualPos.current[0];
@@ -347,50 +360,6 @@ export const RemoteMonsterInstance = ({
     const currentSpeed = visualDistance / Math.max(0.0001, delta);
     smoothedSpeed.current += (currentSpeed - smoothedSpeed.current) * Math.min(1, 10.0 * delta);
 
-    // isMoving: based on visual frame-delta displacement (not raw server coord diff)
-    isMoving.current = visualDistSq > 0.0001;
-
-    // ─── Resolve target position for attack/rotation ──────────────────────────
-    let targetPosX = 0, targetPosZ = 0, hasTarget = false;
-    if (data.target_player_id && data.target_player_id !== "") {
-      if (data.target_player_id === localPlayerId) {
-        const localPos = localPlayerPositionRef.current;
-        targetPosX = localPos[0];
-        targetPosZ = localPos[2];
-        hasTarget = true;
-      } else {
-        const rp = remotePlayerMapRef.current?.get(data.target_player_id);
-        if (rp) {
-          targetPosX = rp.x;
-          targetPosZ = rp.z;
-          hasTarget = true;
-        }
-      }
-    }
-
-    let isWithinAttackRange = false;
-    if (hasTarget) {
-      const tDx = targetPosX - currentMeshX;
-      const tDz = targetPosZ - currentMeshZ;
-      isWithinAttackRange = (tDx * tDx + tDz * tDz) <= (isBoss ? 4.5 * 4.5 : 3.5 * 3.5);
-    }
-
-    const serverAnim = (targetAnim || "").toLowerCase();
-
-    // ─── Determine desired animation state ───────────────────────────────────
-    let desiredState = "idle";
-    if (data.is_dead || serverAnim === "death") desiredState = "death";
-    else if (serverAnim === "attack") desiredState = "attack";
-    else if (serverAnim === "run")    desiredState = "run";
-    else if (serverAnim === "walk")   desiredState = "walk";
-    else if (data.target_player_id && data.target_player_id !== "") {
-      if (isMoving.current)        desiredState = "run";
-      else if (isWithinAttackRange) desiredState = "attack";
-      else                          desiredState = "idle";
-    } else if (isMoving.current) {
-      desiredState = "walk";
-    }
-
     // ─── Rotation: face target or movement direction ──────────────────────────
     let targetAngle: number | null = null;
     if (serverAnim === "attack" || (isWithinAttackRange && data.target_player_id)) {
@@ -404,9 +373,8 @@ export const RemoteMonsterInstance = ({
     if (targetAngle !== null) {
       let diff = targetAngle - groupRef.current.rotation.y;
       while (diff < -Math.PI) diff += Math.PI * 2;
-      while (diff >  Math.PI) diff -= Math.PI * 2;
-      // Rotation lerp is intentional — smooth facing looks more natural than direct-set
-      groupRef.current.rotation.y += diff * Math.min(1, 20.0 * delta);
+      while (diff > Math.PI)  diff -= Math.PI * 2;
+      groupRef.current.rotation.y += diff * Math.min(1, 24.0 * delta);
     }
 
     // ─── Animation State Machine (JIT clip name cache initialization) ──────────
@@ -451,9 +419,9 @@ export const RemoteMonsterInstance = ({
       else                              activeAction.current.timeScale = 1.0;
     }
 
-    // ─── Billboard & HP UI (hidden beyond MONSTER_MED_FAR_SQ) ────────────────────────
+    // ─── Billboard & HP UI (hidden beyond MED_FAR_SQ) ────────────────────────
     if (billboardGroupRef.current) {
-      if (!isEditorOpen && camDistSq > MONSTER_MED_FAR_SQ) {
+      if (camDistSq > MONSTER_MED_FAR_SQ) {
         billboardGroupRef.current.visible = false;
       } else {
         billboardGroupRef.current.visible = true;
@@ -522,21 +490,15 @@ export const RemoteMonsterInstance = ({
         </mesh>
       </Billboard>
 
-      <group scale={scale}>
-        <primitive object={clone} />
-      </group>
-
-      {/* Super lightweight invisible collider for click targeting (prevents skinned mesh raycast stutters) */}
-      <mesh
-        position={[0, (hpBarY * 0.45), 0]}
+      <group
+        scale={scale}
         onClick={(e) => {
           e.stopPropagation();
           if (monsterIdRef.current) onAttack(monsterIdRef.current);
         }}
       >
-        <cylinderGeometry args={[0.7 * scale, 0.7 * scale, hpBarY * 0.9, 6]} />
-        <meshBasicMaterial transparent={true} opacity={0} depthWrite={false} colorWrite={false} />
-      </mesh>
+        <primitive object={clone} />
+      </group>
     </group>
   );
 };
@@ -570,13 +532,6 @@ export const RemoteMonstersRenderer = ({
   // O(1) lookup map for remote players — eliminates O(n) .find() per monster per frame
   const remotePlayerMapRef = useRef<Map<string, PlayerNetworkState>>(new Map());
 
-  // Subscribe reactively to Zustand stores to avoid heavy getState() queries in child useFrame loop
-  const activeEnv = useStore((s) => s.environment);
-  const terrainConfig = useEditorStore((s) => s.terrainConfig);
-
-  // Shared Ref for the local player's position to avoid getState() calls in child useFrame loop
-  const localPlayerPositionRef = useRef<[number, number, number]>([0, 0, 0]);
-
   // ─── Throttle refs — avoid O(n log n) sort every frame ───────────────────
   const lastSortTime = useRef(-1);
   // Pre-allocated scratch array AND object pool — zero heap allocs in sort hot-path
@@ -607,12 +562,6 @@ export const RemoteMonstersRenderer = ({
     for (let i = 0; i < players.length; i++) {
       pMap.set(players[i].id, players[i]);
     }
-
-    // ─── Record local player position once per frame ─────────────────────────
-    const localPos = useStore.getState().playerPosition;
-    localPlayerPositionRef.current[0] = localPos[0];
-    localPlayerPositionRef.current[1] = localPos[1];
-    localPlayerPositionRef.current[2] = localPos[2];
 
     // ─── Throttled distance sort (10Hz max) — prevents 60x sort per second ──
     const now = state.clock.elapsedTime;
@@ -648,11 +597,9 @@ export const RemoteMonstersRenderer = ({
 
       scratch.sort((a, b) => a.distSq - b.distSq);
 
-      const isEditorOpen = useEditorStore.getState().isEditorOpen;
       // Adaptive cap: aggressively reduce skeleton updates under heavy load
       // 80+ monsters: cap 5 (combined with 40 bots = very heavy), 40+: cap 8, otherwise 12
-      // Editor Bypass: no density culling when in the World Editor
-      const densityCap = isEditorOpen ? Infinity : (list.length > 60 ? 5 : list.length > 40 ? 8 : 12);
+      const densityCap = list.length > 60 ? 5 : list.length > 40 ? 8 : 12;
       const limit = Math.min(scratch.length, densityCap);
 
       // Reuse visibleMonsterIdsRef Set in-place — no new Set() allocation
@@ -717,9 +664,6 @@ export const RemoteMonstersRenderer = ({
             localPlayerId={localPlayerId}
             gameConfig={gameConfig}
             visibleMonsterIdsRef={visibleMonsterIdsRef}
-            activeEnv={activeEnv}
-            terrainConfig={terrainConfig}
-            localPlayerPositionRef={localPlayerPositionRef}
           />
         </Suspense>
       ))}
