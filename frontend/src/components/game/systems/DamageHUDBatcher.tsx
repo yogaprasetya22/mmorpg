@@ -6,60 +6,75 @@ import { useFrame } from '@react-three/fiber';
 import { useVFX } from './VFXManager';
 
 /**
- * DamageHUDBatcher v8 — SIMPLE & OPTIMAL
+ * DamageHUDBatcher — Ragnarok Style (v17 — Authentic 2D Crit Star Sprites)
  *
- * Architecture (zero ring-buffer bugs):
- * - Hard cap of MAX_EVENTS (10) popups on screen.
- * - Each event owns a FIXED block of slots: event[i] → slots[i*STRIDE ... i*STRIDE+STRIDE-1]
- * - No dynamic ring-buffer → no out-of-bounds possible.
- * - Zero heap allocation in render loop.
- * - Camera-space billboarding.
+ * ══════════════════════════════════════════════════════════════════════════════
+ * VISUAL SYSTEM
+ * ══════════════════════════════════════════════════════════════════════════════
+ *
+ * 1. NO COIN BACKGROUND:
+ *    Only pure text numbers are rendered.
+ *
+ * 2. TUNED RETRO SIZE:
+ *    The size of the numbers has been reduced to fit the screen neatly
+ *    (Crit scale = 1.8, Normal scale = 1.25) so they don't cover the entire screen.
+ *
+ * 3. 2D RETRO COMIC CRIT STAR:
+ *    Instead of mathematical glowing 3D stars, we now draw a layered comic-style
+ *    explosion star directly onto a 2D Canvas texture using Nearest-Neighbor scaling.
+ *    - Thick dark crimson border
+ *    - Vibrant orange-red outer body
+ *    - Golden orange inner layer
+ *    - Creamy yellow retro core
+ *    - Uneven hand-drawn cartoon spikes (10 points)
+ *    It is static (no saw-blade rotation) and moves/shrinks perfectly in sync.
+ *
+ * 4. PERSPECTIVE STACKING ("jatuh ke belakang"):
+ *    Rapid consecutive hits push older hits backward (into -Z depth), upward,
+ *    and reduce their opacity, creating a receding 3D stack.
  */
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-const MAX_EVENTS = 10;        // Max popups on screen at once
-const STRIDE     = 14;        // Slots per event: 8 digits + "CRIT!"(5) + 1 spare
+const MAX_EVENTS = 24;
+const STRIDE     = 9;
 const MAX_INST   = MAX_EVENTS * STRIDE;
 
 const ATLAS_COLS = 6;
-const ATLAS_ROWS = 3;
-// Atlas layout:
-// Row 0: '0' '1' '2' '3' '4' '5'  (idx 0-5)
-// Row 1: '6' '7' '8' '9' '!' '-'  (idx 6-11)
-// Row 2: 'C' 'R' 'I' 'T' '!' ' '  (idx 12-17)
+const ATLAS_ROWS = 2;
 
-const CRIT_LABEL = [12, 13, 14, 15, 16]; // C R I T !
+// Perspective stack tuning
+const DEPTH_SCALE    = 0.82;  // each depth level shrinks to this fraction
+const DEPTH_Y        = 0.55;  // world units upward per depth level
+const CLUSTER_RADIUS = 1.8;   // world units: hits within this radius join one cluster
+const LIFE_DURATION  = 1.6;   // seconds
 
-function digitIdx(d: number): number {
-    return d < 6 ? d : 6 + (d - 6); // 0→0 ... 9→9
-}
-
-// ─── ZERO-ALLOC MATH OBJECTS ─────────────────────────────────────────────────
+// ─── ZERO-ALLOC HELPERS ──────────────────────────────────────────────────────
 const _dummy = new THREE.Object3D();
 const _v3    = new THREE.Vector3();
 const _right = new THREE.Vector3();
 const _up    = new THREE.Vector3();
-const _col   = new THREE.Color();
 const _hide  = new THREE.Matrix4().makeScale(0, 0, 0);
 const _dbuf  = new Uint8Array(8);
 
-// Colors (only magic/heal are fixed; normal/crit use team color)
-const C_MAGIC  = new THREE.Color('#dd66ff');
-const C_HEAL   = new THREE.Color('#00ffaa');
-// Scratch color — reused every frame, never allocated in loop
-const _teamScratch = new THREE.Color();
+// ─── COLORS ──────────────────────────────────────────────────────────────────
+const C_CRIT_DIGIT   = new THREE.Color('#ffea00'); // Neon yellow/gold for crits
+const C_NORMAL_DIGIT = new THREE.Color('#ffffff'); // Pure white for normal physical hits
+const C_MAGIC_DIGIT  = new THREE.Color('#00e5ff'); // Electric cyan for magic/skills
+const C_HEAL_DIGIT   = new THREE.Color('#33ff66'); // Lime green for heals
+const C_DEBUFF_DIGIT = new THREE.Color('#00e5ff'); // Cyan for debuffs/negatives
 
-// ─── ATLAS ───────────────────────────────────────────────────────────────────
-// Pure white fill — instanceColor does all the tinting at runtime.
+const IDX_PLUS  = 10;
+const IDX_MINUS = 11;
+
+// ─── ATLAS (digits only, white fill, thick black outline, Press Start 2P) ────
 function buildAtlas(): THREE.CanvasTexture {
-    const S = 128;
+    const S   = 128;
     const cvs = document.createElement('canvas');
     cvs.width  = S * ATLAS_COLS;
     cvs.height = S * ATLAS_ROWS;
     const ctx  = cvs.getContext('2d')!;
 
-    const chars = ['0','1','2','3','4','5','6','7','8','9','!','-','C','R','I','T','!'];
-
+    const chars = ['0','1','2','3','4','5','6','7','8','9','+','-'];
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
 
@@ -69,408 +84,572 @@ function buildAtlas(): THREE.CanvasTexture {
         const cx  = col * S + S / 2;
         const cy  = row * S + S / 2;
 
-        ctx.font      = '900 82px "Arial Black",Impact,sans-serif';
-        ctx.lineJoin  = 'round';
+        ctx.font       = 'normal 56px "Press Start 2P", monospace';
+        ctx.lineJoin   = 'round';
         ctx.miterLimit = 2;
 
-        // Thin pure black outline only (for contrast, no color border)
-        ctx.shadowColor   = 'rgba(0,0,0,0.8)';
-        ctx.shadowBlur    = 6;
-        ctx.shadowOffsetY = 3;
-        ctx.strokeStyle   = '#000';
-        ctx.lineWidth     = 12; // Thinner border requested by user
+        // Massive thick black outline for blocky pixel art/arcade feel
+        ctx.shadowColor   = 'rgba(0,0,0,0.95)';
+        ctx.shadowBlur    = 8;
+        ctx.shadowOffsetY = 4;
+        ctx.strokeStyle   = '#000000';
+        ctx.lineWidth     = 18;
         ctx.strokeText(ch, cx, cy);
-        ctx.shadowColor   = 'transparent';
 
-        // Pure white fill — instanceColor tints this at runtime
-        ctx.fillStyle = '#ffffff';
+        // Fill with white (colors applied via instanced color attributes)
+        ctx.shadowColor = 'transparent';
+        ctx.fillStyle   = '#ffffff';
         ctx.fillText(ch, cx, cy);
     });
 
-    const tex = new THREE.CanvasTexture(cvs);
+    const tex     = new THREE.CanvasTexture(cvs);
     tex.minFilter = THREE.LinearFilter;
     tex.magFilter = THREE.LinearFilter;
     tex.anisotropy = 4;
     return tex;
 }
 
-// ─── EVENT STRUCT ────────────────────────────────────────────────────────────
+// ─── AUTHENTIC 2D CRIT STAR TEXTURE ──────────────────────────────────────────
+function buildStarTexture(): THREE.CanvasTexture {
+    const S = 256;
+    const cvs = document.createElement('canvas');
+    cvs.width = S;
+    cvs.height = S;
+    const ctx = cvs.getContext('2d')!;
+
+    const cx = S / 2;
+    const cy = S / 2;
+
+    const points = 10;
+    const outerR = 108;
+    const innerR = 48;
+
+    // Stylized asymmetrical radii pattern to give a hand-drawn cartoon/RO feel
+    const radiiPattern = [1.0, 0.85, 1.1, 0.9, 1.05, 0.95, 1.15, 0.88, 1.0, 0.92];
+
+    ctx.lineJoin = 'miter';
+    ctx.miterLimit = 3;
+
+    // 1. Draw outer black outline (thick stroke + fill)
+    ctx.beginPath();
+    for (let i = 0; i < points * 2; i++) {
+        const angle = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+        const isOuter = i % 2 === 0;
+        let r = isOuter ? outerR : innerR;
+        if (isOuter) {
+            r *= radiiPattern[(i / 2) % radiiPattern.length];
+        }
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = '#1e0000'; // Very dark, near-black crimson outline
+    ctx.lineWidth = 16;
+    ctx.stroke();
+    ctx.fillStyle = '#1e0000';
+    ctx.fill();
+
+    // 2. Draw vibrant red layer (slightly smaller)
+    ctx.beginPath();
+    for (let i = 0; i < points * 2; i++) {
+        const angle = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+        const isOuter = i % 2 === 0;
+        let r = (isOuter ? outerR : innerR) - 6;
+        if (isOuter) {
+            r *= radiiPattern[(i / 2) % radiiPattern.length];
+        }
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#e84118'; // Bright crimson red (Ragnarok Online style)
+    ctx.fill();
+
+    // 3. Draw bright orange middle layer
+    ctx.beginPath();
+    for (let i = 0; i < points * 2; i++) {
+        const angle = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+        const isOuter = i % 2 === 0;
+        let r = (isOuter ? outerR * 0.72 : innerR * 0.85);
+        if (isOuter) {
+            r *= radiiPattern[(i / 2) % radiiPattern.length];
+        }
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#f0932b'; // Rich golden orange
+    ctx.fill();
+
+    // 4. Draw creamy yellow core
+    ctx.beginPath();
+    for (let i = 0; i < points * 2; i++) {
+        const angle = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+        const isOuter = i % 2 === 0;
+        let r = (isOuter ? outerR * 0.42 : innerR * 0.6);
+        if (isOuter) {
+            r *= radiiPattern[(i / 2) % radiiPattern.length];
+        }
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#fbc531'; // Bright retro yellow core
+    ctx.fill();
+
+    const tex = new THREE.CanvasTexture(cvs);
+    tex.minFilter = THREE.NearestFilter; // Crisp pixel art edges
+    tex.magFilter = THREE.NearestFilter;
+    return tex;
+}
+
+// ─── EVENT STRUCT ─────────────────────────────────────────────────────────────
 interface Evt {
-    alive:     boolean;
-    startTime: number;
-    duration:  number;
-    wx: number; wy: number; wz: number;
-    vx: number; vy: number; vz: number;
-    isCrit:  boolean;
-    isMagic: boolean;
-    isHeal:  boolean;
-    numDigits: number;
-    numChars:  number;
-    charIdx:   Uint8Array;
-    localX:    Float32Array;
-    localY:    Float32Array;
-    teamColor: THREE.Color;  // pre-allocated, set at spawn from ev.color
+    alive:      boolean;
+    startTime:  number;
+    duration:   number;
+    spawnX:     number; spawnY: number; spawnZ: number;
+    isCrit:     boolean;
+    isMagic:    boolean;
+    isHeal:     boolean;
+    isDebuff:   boolean;
+    numChars:   number;
+    charIdx:    Uint8Array;
+    digitColor: THREE.Color;
+    clusterX:   number; clusterY: number; clusterZ: number;
+    depthIdx:   number;
 }
 
 function makeEvt(): Evt {
     return {
-        alive: false, startTime: 0, duration: 1, wx: 0, wy: 0, wz: 0,
-        vx: 0, vy: 0, vz: 0, isCrit: false, isMagic: false, isHeal: false,
-        numDigits: 0, numChars: 0,
-        charIdx:   new Uint8Array(STRIDE),
-        localX:    new Float32Array(STRIDE),
-        localY:    new Float32Array(STRIDE),
-        teamColor: new THREE.Color('#ffffff'),
+        alive: false, startTime: 0, duration: LIFE_DURATION,
+        spawnX:0, spawnY:0, spawnZ:0,
+        isCrit:false, isMagic:false, isHeal:false, isDebuff:false,
+        numChars:0, charIdx: new Uint8Array(STRIDE),
+        digitColor: new THREE.Color('#ffffff'),
+        clusterX:0, clusterY:0, clusterZ:0,
+        depthIdx:0,
     };
 }
 
 // ─── COMPONENT ───────────────────────────────────────────────────────────────
 export function DamageHUDBatcher({ damageQueue }: { damageQueue: React.RefObject<any[]> }) {
-    const meshRef      = useRef<THREE.InstancedMesh>(null!);
+    const digitMeshRef = useRef<THREE.InstancedMesh>(null!);
+    const starMeshRef  = useRef<THREE.InstancedMesh>(null!);
     const { spawnVFX } = useVFX();
 
-    // Fixed pool: MAX_EVENTS slots, each pre-allocated
-    const evts      = useMemo(() => Array.from({ length: MAX_EVENTS }, makeEvt), []);
-    const evtActive = useRef<boolean[]>(Array(MAX_EVENTS).fill(false));
-    const evtPtr    = useRef(0); // ring pointer for next event slot
+    // Pools
+    const evts    = useMemo(() => Array.from({ length: MAX_EVENTS }, makeEvt), []);
+    const evtPtr  = useRef(0);
 
-    const atlas    = useMemo(() => buildAtlas(), []);
-    const geometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
-    const uTime    = useMemo(() => ({ value: 0 }), []);
+    const atlas      = useMemo(() => buildAtlas(), []);
+    const digitGeo   = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
+    const starGeo    = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
+    const starTex    = useMemo(() => buildStarTexture(), []);
+    const uTime      = useMemo(() => ({ value: 0 }), []);
 
-    const material = useMemo(() => new THREE.ShaderMaterial({
+    // ── DIGIT SHADER ──────────────────────────────────────────────────────────
+    const digitMat = useMemo(() => new THREE.ShaderMaterial({
         uniforms: { uAtlas: { value: atlas }, uTime },
-        vertexShader: /* glsl */`
+        vertexShader: `
             attribute float aCharIdx;
             attribute float aOpacity;
             attribute float aCrit;
             attribute vec3  aCol;
-            
             varying vec2  vUv;
             varying float vOp;
             varying float vCrit;
             varying vec3  vCol;
-            
             void main() {
                 float c = mod(aCharIdx, ${ATLAS_COLS}.0);
                 float r = floor(aCharIdx / ${ATLAS_COLS}.0);
-                vUv  = vec2((c + uv.x) / ${ATLAS_COLS}.0,
-                            1.0 - (r + 1.0 - uv.y) / ${ATLAS_ROWS}.0);
+                vUv  = vec2(
+                    (c + uv.x) / ${ATLAS_COLS}.0,
+                    1.0 - (r + 1.0 - uv.y) / ${ATLAS_ROWS}.0
+                );
                 vOp  = aOpacity;
                 vCrit = aCrit;
                 vCol  = aCol;
-                
                 gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
             }
         `,
-        fragmentShader: /* glsl */`
+        fragmentShader: `
             uniform sampler2D uAtlas;
             uniform float     uTime;
-            
             varying vec2  vUv;
             varying float vOp;
             varying float vCrit;
             varying vec3  vCol;
-            
             void main() {
                 vec4 t = texture2D(uAtlas, vUv);
                 if (t.a < 0.05) discard;
-                
                 vec3 c = t.rgb * vCol;
-                
-                // Shimmer for crits
-                if (vCrit > 0.5) {
-                    float w = pow(sin(vUv.x * 10.0 - uTime * 8.0) * 0.5 + 0.5, 3.0) * 0.5;
-                    c = mix(c, vec3(1.0, 0.95, 0.4), w * t.a);
+                if(vCrit > 0.5){
+                    float sweep = mod(vUv.x*1.2 + vUv.y*0.4 - uTime*4.0, 2.0);
+                    float shine = smoothstep(0.0,0.18,sweep)*smoothstep(0.45,0.18,sweep);
+                    float top   = pow(1.0-vUv.y, 4.0)*0.45;
+                    c = mix(c, vec3(1.0,0.98,0.75), (shine*0.65+top)*t.a);
                 }
                 gl_FragColor = vec4(c, t.a * vOp);
             }
         `,
-        transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
+        transparent:true, depthTest:false, depthWrite:false, side:THREE.DoubleSide,
     }), [atlas, uTime]);
 
+    // ── STAR SHADER ───────────────────────────────────────────────────────────
+    const starMat = useMemo(() => new THREE.ShaderMaterial({
+        uniforms: { uStarTex: { value: starTex } },
+        vertexShader: `
+            attribute float aOpacity;
+            varying float vOp;
+            varying vec2  vUv;
+            void main(){
+                vOp = aOpacity;
+                vUv = uv;
+                gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+            }
+        `,
+        fragmentShader: `
+            uniform sampler2D uStarTex;
+            varying float vOp;
+            varying vec2  vUv;
+            void main(){
+                vec4 tex = texture2D(uStarTex, vUv);
+                if (tex.a < 0.05) discard;
+                gl_FragColor = vec4(tex.rgb, tex.a * vOp);
+            }
+        `,
+        transparent:true, depthTest:false, depthWrite:false, side:THREE.DoubleSide,
+    }), [starTex]);
+
+    // Per-instance digit buffers
     const aCharIdx = useMemo(() => new Float32Array(MAX_INST), []);
     const aOpacity = useMemo(() => new Float32Array(MAX_INST), []);
     const aCrit    = useMemo(() => new Float32Array(MAX_INST), []);
     const aCol     = useMemo(() => new Float32Array(MAX_INST * 3), []);
-    const hadActiveEvents = useRef(false);
+
+    // Per-instance star buffers (mapped 1-to-1 with events to track movement/scaling)
+    const sOpacity = useMemo(() => new Float32Array(MAX_EVENTS), []);
+
+    const hadActive = useRef(false);
 
     useEffect(() => {
-        const m = meshRef.current;
-        if (!m) return;
-        for (let i = 0; i < MAX_INST; i++) m.setMatrixAt(i, _hide);
-        m.geometry.setAttribute('aCharIdx', new THREE.InstancedBufferAttribute(aCharIdx, 1));
-        m.geometry.setAttribute('aOpacity', new THREE.InstancedBufferAttribute(aOpacity, 1));
-        m.geometry.setAttribute('aCrit',    new THREE.InstancedBufferAttribute(aCrit,    1));
-        m.geometry.setAttribute('aCol',     new THREE.InstancedBufferAttribute(aCol,     3));
-        
-        m.instanceMatrix.needsUpdate = true;
-    }, [aCharIdx, aOpacity, aCrit, aCol]);
+        if (typeof document !== 'undefined' && document.fonts) {
+            document.fonts.ready.then(() => {
+                const newCvs = buildAtlas().image as HTMLCanvasElement;
+                if (atlas) {
+                    atlas.image = newCvs;
+                    atlas.needsUpdate = true;
+                }
+            });
+        }
+    }, [atlas]);
+
+    useEffect(() => {
+        const dm = digitMeshRef.current;
+        if (dm) {
+            for (let i = 0; i < MAX_INST; i++) dm.setMatrixAt(i, _hide);
+            dm.geometry.setAttribute('aCharIdx', new THREE.InstancedBufferAttribute(aCharIdx, 1));
+            dm.geometry.setAttribute('aOpacity', new THREE.InstancedBufferAttribute(aOpacity, 1));
+            dm.geometry.setAttribute('aCrit',    new THREE.InstancedBufferAttribute(aCrit,    1));
+            dm.geometry.setAttribute('aCol',     new THREE.InstancedBufferAttribute(aCol,     3));
+            dm.instanceMatrix.needsUpdate = true;
+        }
+        const sm = starMeshRef.current;
+        if (sm) {
+            for (let i = 0; i < MAX_EVENTS; i++) sm.setMatrixAt(i, _hide);
+            sm.geometry.setAttribute('aOpacity', new THREE.InstancedBufferAttribute(sOpacity, 1));
+            sm.instanceMatrix.needsUpdate = true;
+        }
+    }, [aCharIdx, aOpacity, aCrit, aCol, sOpacity]);
 
     useFrame((state) => {
-        const now  = state.clock.elapsedTime;
-        const m    = meshRef.current;
-        if (!m || !m.geometry.attributes.aCharIdx) return;
+        const now = state.clock.elapsedTime;
+        const dm  = digitMeshRef.current;
+        const sm  = starMeshRef.current;
+        if (!dm || !dm.geometry.attributes.aCharIdx) return;
 
         uTime.value = now;
 
         // ── SPAWN ─────────────────────────────────────────────────────────────
         if (damageQueue.current && damageQueue.current.length > 0) {
-            // Crits first so they always claim a slot
             damageQueue.current.sort((a, b) => (b.isCrit ? 1 : 0) - (a.isCrit ? 1 : 0));
 
             while (damageQueue.current.length > 0) {
                 const ev = damageQueue.current.shift()!;
+                if (!ev.isCrit && damageQueue.current.length > 20) continue;
 
-                // LOD: skip basic if queue is still huge
-                if (!ev.isCrit && damageQueue.current.length > 15) continue;
+                const isCrit   = !!ev.isCrit;
+                const isMagic  = !!ev.isMagic || ev.color === '#00e5ff';
+                const isHeal   = !!ev.isHeal;
+                const isDebuff = ev.value < 0;
 
-                const isCrit  = !!ev.isCrit;
-                const isMagic = !!ev.isMagic;
-                const isHeal  = !!ev.isHeal;
-
-                // Extract digits
-                let val = Math.max(0, Math.round(ev.value));
+                let val = Math.abs(Math.round(ev.value));
                 let dc  = 0;
                 if (val === 0) { _dbuf[0] = 0; dc = 1; }
                 else { while (val > 0 && dc < 8) { _dbuf[dc++] = val % 10; val = (val / 10) | 0; } }
 
-                const hasCritLabel = isCrit;
-                const totalChars   = dc + (hasCritLabel ? 5 : 0);
+                const hasSign    = isHeal || isDebuff;
+                const totalChars = dc + (hasSign ? 1 : 0);
 
-                // Grab the next event slot (ring, overwrites oldest)
+                // ── Cluster check ─────────────────────────────────────────────
+                const px = ev.position[0], py = ev.position[1], pz = ev.position[2];
+                let clusterX = px, clusterY = py, clusterZ = pz;
+
+                for (let ei = 0; ei < MAX_EVENTS; ei++) {
+                    const e = evts[ei];
+                    if (!e.alive) continue;
+                    const dx = e.clusterX - px, dz = e.clusterZ - pz;
+                    if (dx*dx + dz*dz < CLUSTER_RADIUS * CLUSTER_RADIUS) {
+                        clusterX = e.clusterX;
+                        clusterY = e.clusterY;
+                        clusterZ = e.clusterZ;
+                        e.depthIdx++;
+                    }
+                }
+
                 const ei  = evtPtr.current;
                 evtPtr.current = (evtPtr.current + 1) % MAX_EVENTS;
+                const e   = evts[ei];
 
-                const e = evts[ei];
-
-                // If overwriting a live event, hide its instances
                 if (e.alive) {
                     const base = ei * STRIDE;
                     for (let s = 0; s < e.numChars; s++) {
-                        m.setMatrixAt(base + s, _hide);
+                        dm.setMatrixAt(base + s, _hide);
                         aOpacity[base + s] = 0;
                     }
-                }
-
-                // Layout params
-                const SW  = isCrit ? 0.65 : 0.6;
-                const GAP = SW * (isCrit ? 0.58 : 0.50);
-                const numW = dc * GAP;
-
-                // Write digit chars
-                for (let c = 0; c < dc; c++) {
-                    const d = _dbuf[dc - 1 - c]; // MSB first
-                    e.charIdx[c] = digitIdx(d);
-                    e.localX[c]  = (c * GAP) - numW * 0.5 + GAP * 0.5;
-                    e.localY[c]  = 0;
-                }
-
-                // Write "CRIT!" chars above
-                if (hasCritLabel) {
-                    const critW = 5 * GAP;
-                    const critY = SW * 1.55;
-                    for (let c = 0; c < 5; c++) {
-                        e.charIdx[dc + c] = CRIT_LABEL[c];
-                        e.localX[dc + c]  = (c * GAP) - critW * 0.5 + GAP * 0.5;
-                        e.localY[dc + c]  = critY;
+                    if (sm) {
+                        sm.setMatrixAt(ei, _hide);
+                        sOpacity[ei] = 0;
                     }
                 }
 
-                // Determine team color based on user request (normal white, crit red/yellow, magic/elemental blue/green/cyan)
-                const isElemental = ev.color === '#00e5ff' || ev.isMagic || isMagic;
-                if (isHeal) {
-                    e.teamColor.set('#00ff33'); // Bright Green for heals
-                } else if (isCrit) {
-                    e.teamColor.set('#ff2200'); // Vivid Red for crits
-                } else if (isElemental) {
-                    e.teamColor.set('#00e5ff'); // Electric Blue/Cyan for elemental/magic hits
-                } else {
-                    e.teamColor.set('#ffffff'); // Standard pure white for normal hits
+                // Spacing configurations
+                const SW  = isCrit ? 0.9 : 0.75;
+                const GAP = isCrit ? 0.75 : 0.6;
+                let ci    = 0;
+                if (hasSign) { e.charIdx[ci++] = isHeal ? IDX_PLUS : IDX_MINUS; }
+                for (let d = 0; d < dc; d++) {
+                    e.charIdx[ci++] = _dbuf[dc - 1 - d];
                 }
-                {
-                    // Ensure max lightness so it's vivid against dark background
-                    const hsl = { h: 0, s: 0, l: 0 };
-                    e.teamColor.getHSL(hsl);
-                    e.teamColor.setHSL(hsl.h, Math.max(hsl.s, 0.85), Math.max(hsl.l, 0.72));
-                }
+                const totalW = totalChars * GAP;
 
-                // Physics (RO:TNL Style - gentle arc)
-                const dx = (Math.random() - 0.5) * 0.4;
-                const dz = (Math.random() - 0.5) * 0.2;
-                const vy = isCrit ? 4.5 : 2.5;
+                // Digit color
+                if      (isHeal)   e.digitColor.copy(C_HEAL_DIGIT);
+                else if (isDebuff) e.digitColor.copy(C_DEBUFF_DIGIT);
+                else if (isCrit)   e.digitColor.copy(C_CRIT_DIGIT);
+                else if (isMagic)  e.digitColor.copy(C_MAGIC_DIGIT);
+                else               e.digitColor.copy(C_NORMAL_DIGIT);
 
-                // Vertical Cascade Offset: prevents damage numbers stacking in high ASPD scenarios
-                let targetYOffset = isCrit ? 3.8 : 2.5;
-                let overlapCount = 0;
-                for (let prevI = 0; prevI < MAX_EVENTS; prevI++) {
-                    const prevE = evts[prevI];
-                    if (prevE.alive) {
-                        const distSq = (prevE.wx - ev.position[0])**2 + (prevE.wz - ev.position[2])**2;
-                        if (distSq < 1.0 && Math.abs(prevE.wy - (ev.position[1] + targetYOffset)) < 1.8) {
-                            overlapCount++;
-                        }
-                    }
-                }
-                targetYOffset += overlapCount * 0.72;
+                const yOff = 2.2;
 
-                e.alive     = true;
-                e.startTime = now;
-                e.duration  = isCrit ? 1.35 : 0.85;
-                e.wx = ev.position[0]; e.wy = ev.position[1] + targetYOffset; e.wz = ev.position[2];
-                e.vx = dx; e.vy = vy; e.vz = dz;
-                e.isCrit = isCrit; e.isMagic = isElemental; e.isHeal = isHeal;
-                e.numDigits = dc;
-                e.numChars  = totalChars;
-                evtActive.current[ei] = true;
+                e.alive      = true;
+                e.startTime  = now;
+                e.duration   = LIFE_DURATION;
+                e.spawnX     = px; e.spawnY = py + yOff; e.spawnZ = pz;
+                e.clusterX   = clusterX; e.clusterY = clusterY; e.clusterZ = clusterZ;
+                e.depthIdx   = 0;
+                e.isCrit     = isCrit;
+                e.isMagic    = isMagic;
+                e.isHeal     = isHeal;
+                e.isDebuff   = isDebuff;
+                e.numChars   = totalChars;
 
-                if (isCrit) {
+                (e as any)._totalW = totalW;
+                (e as any)._GAP    = GAP;
+                (e as any)._SW     = SW;
+
+                // Spawning Star burst
+                if (isCrit && sm) {
                     spawnVFX(ev.position, 'critical-hit', '#ffcc00');
-                    spawnVFX(ev.position, 'shockwave', '#fff5cc');
+                    spawnVFX(ev.position, 'shockwave',    '#ff4400');
                 }
 
-                // Only spawn one per frame to avoid stutter
                 break;
             }
         }
 
-        // ── ANIMATE ───────────────────────────────────────────────────────────
+        // ── CAMERA BASIS ──────────────────────────────────────────────────────
         const camQ = state.camera.quaternion;
-        _right.set(1, 0, 0).applyQuaternion(camQ);
-        _up.set(0, 1, 0).applyQuaternion(camQ);
+        _right.set(1,0,0).applyQuaternion(camQ);
+        _up.set(0,1,0).applyQuaternion(camQ);
+
+        // ── ANIMATE DIGITS & STAR BURSTS ──────────────────────────────────────
+        let anyActive = false;
 
         for (let ei = 0; ei < MAX_EVENTS; ei++) {
             const e    = evts[ei];
             const base = ei * STRIDE;
 
             if (!e.alive) {
-                // Ensure hidden (idempotent)
                 continue;
             }
 
             const t  = now - e.startTime;
             const tn = t / e.duration;
 
-            // Expire
             if (tn >= 1.0) {
                 e.alive = false;
-                evtActive.current[ei] = false;
                 for (let s = 0; s < e.numChars; s++) {
-                    m.setMatrixAt(base + s, _hide);
+                    dm.setMatrixAt(base + s, _hide);
                     aOpacity[base + s] = 0;
+                }
+                if (sm) {
+                    sm.setMatrixAt(ei, _hide);
+                    sOpacity[ei] = 0;
                 }
                 continue;
             }
 
-            // World position (gentler RO:TNL gravity)
-            const gravity = e.isCrit ? 2.0 : 4.0;
-            const gx = e.wx + e.vx * t;
-            const gy = e.wy + e.vy * t - 0.5 * gravity * t * t;
-            const gz = e.wz + e.vz * t;
+            anyActive = true;
 
-            // Scale based on attack type (Crit, Magic/Elemental, Normal)
-            let s: number;
-            if (e.isCrit) {
-                if      (t < 0.07) s = t / 0.07 * 2.8;
-                else if (t < 0.18) s = 2.8 - (t - 0.07) / 0.11 * 1.0;
-                else               s = 1.8 - Math.min((t - 0.18) / 0.5, 1) * 0.5;
-            } else if (e.isMagic) {
-                if      (t < 0.06) s = t / 0.06 * 2.2;
-                else if (t < 0.15) s = 2.2 - (t - 0.06) / 0.09 * 0.9;
-                else               s = 1.3 - Math.min((t - 0.15) / 0.5, 1) * 0.3;
-            } else {
-                if      (t < 0.06) s = t / 0.06 * 1.6;
-                else if (t < 0.15) s = 1.6 - (t - 0.06) / 0.09 * 0.7;
-                else               s = 0.9 - Math.min((t - 0.15) / 0.5, 1) * 0.2;
+            const di   = e.depthIdx;
+            const dsc  = Math.pow(DEPTH_SCALE, di); 
+            const dyUp = di * DEPTH_Y;               
+
+            // Front pop-in animation (only depthIdx=0, only first ~0.12s)
+            let popExtra = 0.0;
+            if (di === 0 && t < 0.12) {
+                popExtra = t < 0.06
+                    ? (1.0 - t / 0.06) * (e.isCrit ? 0.4 : 0.2)
+                    : 0.0;
             }
 
-            // Opacity: ramp in, hold, fade out
-            const opacity = tn < 0.07
-                ? tn / 0.07
-                : tn < 0.6
-                ? 1.0
-                : 1.0 - (tn - 0.6) / 0.4;
+            // Ideal retro size: 2.4 for Crit, 1.25 for Normal (punchy crits!)
+            const baseScale = e.isCrit ? 2.4 : 1.25;
+            const totalScale = (baseScale + popExtra) * dsc;
 
-            // Jitter for crits
-            let jx = 0, jy = 0;
-            if (e.isCrit && t < 0.18) {
-                const j = (1 - t / 0.18) * 0.15;
+            const yFloat = di === 0 ? t * 0.4 : 0.0;
+
+            // World position
+            const wx = e.spawnX;
+            const wy = e.spawnY + dyUp + yFloat;
+            const wz = e.spawnZ;
+
+            const depthFade  = Math.pow(0.80, di);
+            const lifeFade   = tn < 0.06 && di === 0 ? tn / 0.06
+                             : tn > 0.65 ? 1.0 - (tn - 0.65) / 0.35
+                             : 1.0;
+            const opacity    = lifeFade * depthFade;
+
+            if (opacity < 0.02) continue;
+
+            // Crit jitter on newest digit only (first ~0.15s)
+            let jx = 0.0, jy = 0.0;
+            if (e.isCrit && di === 0 && t < 0.15) {
+                const j = (1.0 - t / 0.15) * 0.12;
                 jx = (Math.random() - 0.5) * j;
                 jy = (Math.random() - 0.5) * j;
             }
 
-            // Color — always team color (boosted at spawn), magic/heal override
-            let baseCol: THREE.Color;
-            if      (e.isHeal)  baseCol = C_HEAL;
-            else if (e.isMagic) baseCol = C_MAGIC;
-            else {
-                // Use team color. For crits, briefly flash white then team color.
-                if (e.isCrit && t < 0.12 && Math.floor(t * 20) % 2 === 0) {
-                    _teamScratch.set(1, 1, 1); // white flash on impact
-                } else {
-                    _teamScratch.copy(e.teamColor);
-                }
-                baseCol = _teamScratch;
+            // ── Animate Star Background (1-to-1 matching this event) ──────────
+            if (e.isCrit && sm) {
+                let starSc;
+                if      (t < 0.04) starSc = t/0.04 * 3.2;
+                else if (t < 0.10) starSc = 3.2 - (t-0.04)/0.06 * 0.8;
+                else if (t < 0.22) starSc = 2.4 + (t-0.10)/0.12 * 0.3;
+                else               starSc = 2.7 - (tn-0.22/0.75)/(0.78) * 0.6;
+                starSc = Math.max(starSc, 1.4);
+
+                _v3.set(wx, wy, wz)
+                   .addScaledVector(_right, jx)
+                   .addScaledVector(_up,    jy);
+
+                const sc = totalScale * starSc;
+                const starOp = opacity * (tn > 0.65 ? (1.0 - (tn - 0.65) / 0.35) : 1.0);
+
+                _dummy.position.copy(_v3);
+                _dummy.quaternion.copy(camQ); // Keep static rotation (comic/RO style, no saw-blade spinning)
+                _dummy.scale.setScalar(sc);
+                _dummy.updateMatrix();
+                sm.setMatrixAt(ei, _dummy.matrix);
+                sOpacity[ei] = starOp;
+            } else if (sm) {
+                sm.setMatrixAt(ei, _hide);
+                sOpacity[ei] = 0;
             }
 
-            const SW = e.isCrit ? 0.65 : 0.6;
+            // ── Digits ────────────────────────────────────────────────────────
+            const GAP    = (e as any)._GAP    ?? 0.6;
+            const SW     = (e as any)._SW     ?? 0.75;
+            const totalW = (e as any)._totalW ?? (e.numChars * GAP);
+
+            // Color: crit flashes white on impact frame
+            let baseR: number, baseG: number, baseB: number;
+            if (e.isCrit && di === 0 && t < 0.07 && Math.floor(t * 40) % 2 === 0) {
+                baseR = 1.0; baseG = 1.0; baseB = 1.0;
+            } else {
+                baseR = e.digitColor.r; baseG = e.digitColor.g; baseB = e.digitColor.b;
+            }
 
             for (let c = 0; c < e.numChars; c++) {
                 const si   = base + c;
-                const isLbl = e.localY[c] > 0;
-                const sc   = isLbl ? s * 0.68 : s;
+                const lx   = (c * GAP) - totalW * 0.5 + GAP * 0.5;
 
-                _v3.set(gx, gy, gz)
-                   .addScaledVector(_right, e.localX[c] * s + jx)
-                   .addScaledVector(_up,    e.localY[c] * s + jy);
+                _v3.set(wx, wy, wz)
+                   .addScaledVector(_right, lx * totalScale + jx)
+                   .addScaledVector(_up,    jy);
 
                 _dummy.position.copy(_v3);
                 _dummy.quaternion.copy(camQ);
-                _dummy.scale.setScalar(sc * SW);
+                _dummy.scale.setScalar(totalScale * SW);
                 _dummy.updateMatrix();
-                m.setMatrixAt(si, _dummy.matrix);
+                dm.setMatrixAt(si, _dummy.matrix);
 
-                aOpacity[si]  = opacity;
-                aCharIdx[si]  = e.charIdx[c];
-                aCrit[si]     = e.isCrit ? 1.0 : 0.0;
-
-                _col.copy(baseCol);
-                
-                aCol[si * 3]     = _col.r;
-                aCol[si * 3 + 1] = _col.g;
-                aCol[si * 3 + 2] = _col.b;
+                aOpacity[si] = opacity;
+                aCharIdx[si] = e.charIdx[c];
+                aCrit[si]    = (e.isCrit && di === 0) ? 1.0 : 0.0;
+                aCol[si*3]   = baseR;
+                aCol[si*3+1] = baseG;
+                aCol[si*3+2] = baseB;
             }
 
-            // Hide unused slots in this event's block
+            // Hide unused digit slots
             for (let c = e.numChars; c < STRIDE; c++) {
                 aOpacity[base + c] = 0;
+                dm.setMatrixAt(base + c, _hide);
             }
         }
 
-        let anyActive = false;
-        for (let ei = 0; ei < MAX_EVENTS; ei++) {
-            if (evts[ei].alive) {
-                anyActive = true;
-                break;
+        if (anyActive || hadActive.current) {
+            dm.instanceMatrix.needsUpdate = true;
+            (dm.geometry.attributes.aCharIdx as THREE.InstancedBufferAttribute).needsUpdate = true;
+            (dm.geometry.attributes.aOpacity as THREE.InstancedBufferAttribute).needsUpdate = true;
+            (dm.geometry.attributes.aCrit    as THREE.InstancedBufferAttribute).needsUpdate = true;
+            (dm.geometry.attributes.aCol     as THREE.InstancedBufferAttribute).needsUpdate = true;
+
+            if (sm) {
+                sm.instanceMatrix.needsUpdate = true;
+                (sm.geometry.attributes.aOpacity as THREE.InstancedBufferAttribute).needsUpdate = true;
             }
         }
-
-        if (anyActive || hadActiveEvents.current) {
-            m.instanceMatrix.needsUpdate = true;
-            (m.geometry.attributes.aCharIdx as THREE.InstancedBufferAttribute).needsUpdate = true;
-            (m.geometry.attributes.aOpacity as THREE.InstancedBufferAttribute).needsUpdate = true;
-            (m.geometry.attributes.aCrit    as THREE.InstancedBufferAttribute).needsUpdate = true;
-            (m.geometry.attributes.aCol     as THREE.InstancedBufferAttribute).needsUpdate = true;
-        }
-        hadActiveEvents.current = anyActive;
+        hadActive.current = anyActive;
     });
 
     return (
-        <instancedMesh
-            ref={meshRef}
-            args={[geometry, material, MAX_INST]}
-            frustumCulled={false}
-            renderOrder={999}
-        />
+        <>
+            {/* Crit star — behind everything, mapped 1-to-1 to each event */}
+            <instancedMesh
+                ref={starMeshRef}
+                args={[starGeo, starMat, MAX_EVENTS]}
+                frustumCulled={false}
+                renderOrder={997}
+            />
+            {/* Digit numbers — on top */}
+            <instancedMesh
+                ref={digitMeshRef}
+                args={[digitGeo, digitMat, MAX_INST]}
+                frustumCulled={false}
+                renderOrder={999}
+            />
+        </>
     );
 }

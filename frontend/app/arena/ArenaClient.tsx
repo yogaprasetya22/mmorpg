@@ -287,17 +287,6 @@ export default function MultiplayerArena() {
           />
         )}
       </div>
-
-      {/* Bottom EXP Bar */}
-      <div className="absolute bottom-0 inset-x-0 h-1.5 bg-zinc-950 z-20 flex items-center pointer-events-auto border-t border-white/5">
-        <div
-          className="h-full bg-gradient-to-r from-emerald-500 via-green-400 to-emerald-500 transition-all duration-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
-          style={{ width: "40.98%" }}
-        />
-        <div className="absolute bottom-2 left-6 text-[8px] font-black text-emerald-400 uppercase tracking-widest leading-none drop-shadow">
-          EXP 40.98%
-        </div>
-      </div>
     </div>
   );
 }

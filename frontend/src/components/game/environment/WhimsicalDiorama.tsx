@@ -237,12 +237,14 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
                 shadow-camera-near={0.5}
                 shadow-camera-far={120}
             />
-            <pointLight 
-                position={[0, 15, 0]} 
-                intensity={(ambientIntensity !== null ? (sky === 'night' ? 6.0 : 4.0) * (ambientIntensity / 3.5) : (sky === 'night' ? 6.0 : 4.0))} 
-                color={sky === 'night' ? "#ff5500" : "#ffaa00"} 
-                distance={250} 
-            />
+            {sky === 'night' && (
+                <pointLight 
+                    position={[0, 15, 0]} 
+                    intensity={(ambientIntensity !== null ? 6.0 * (ambientIntensity / 3.5) : 6.0)} 
+                    color="#ff5500" 
+                    distance={80} 
+                />
+            )}
 
 
             {/* 2. WEATHER EFFECTS */}

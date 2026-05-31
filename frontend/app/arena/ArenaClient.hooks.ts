@@ -59,7 +59,7 @@ export function useArenaGameState() {
   const deathOverlayRef = useRef<DeathOverlayRef>(null);
 
   const lastPlayerHp = useRef(0);
-  const playerStatsRef = useRef({ hp: -1, maxHp: -1, gold: -1, level: -1, aspd: 150 });
+  const playerStatsRef = useRef({ hp: -1, maxHp: -1, gold: -1, level: -1, aspd: 150, xp: -1 });
 
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -257,12 +257,15 @@ export function useArenaGameState() {
           statsHudRef.current?.updateHpMp(rawHP, rawMaxHP);
           deathOverlayRef.current?.setDead(rawHP <= 0);
         }
-        // Real-time gold & level sync via WebSocket — no more waiting for 5s HTTP profile poll
+        // Real-time gold, level & XP sync via WebSocket — no more waiting for 5s HTTP profile poll
         if (typeof rawGold === 'number' && typeof rawLevel === 'number') {
-          if (playerStatsRef.current.gold !== rawGold || playerStatsRef.current.level !== rawLevel) {
-            playerStatsRef.current.gold = rawGold;
-            playerStatsRef.current.level = rawLevel;
-            statsHudRef.current?.updateStats({ gold: rawGold, level: rawLevel });
+          const rawXP = (me as any).xp ?? 0;
+          const currentStats = playerStatsRef.current as any;
+          if (currentStats.gold !== rawGold || currentStats.level !== rawLevel || currentStats.xp !== rawXP) {
+            currentStats.gold = rawGold;
+            currentStats.level = rawLevel;
+            currentStats.xp = rawXP;
+            statsHudRef.current?.updateStats({ gold: rawGold, level: rawLevel, xp: rawXP });
           }
         }
       }
@@ -343,6 +346,9 @@ export function useArenaGameState() {
                 if (data.player) {
                   playerStatsRef.current.hp = data.player.hp;
                   playerStatsRef.current.maxHp = data.player.max_hp;
+                  playerStatsRef.current.gold = data.player.gold;
+                  playerStatsRef.current.level = data.player.level;
+                  (playerStatsRef.current as any).xp = data.player.xp;
                   statsHudRef.current?.updateStats(data.player);
                 }
               } else if (response.status === 401) {
@@ -447,7 +453,7 @@ export function useArenaGameState() {
     localStorage.removeItem("game_active_char_id");
     setSelectedCharacter(null);
     statsHudRef.current?.updateStats({ hp: 100, max_hp: 100, mp: 50, max_mp: 50, level: 1, gold: 0, username: "Hero" });
-    playerStatsRef.current = { hp: -1, maxHp: -1, gold: -1, level: -1, aspd: 150 };
+    playerStatsRef.current = { hp: -1, maxHp: -1, gold: -1, level: -1, aspd: 150, xp: -1 };
     setIsCreatingChar(false);
     setSuccessMsg("");
     setErrorMsg("");
@@ -522,7 +528,7 @@ export function useArenaGameState() {
     setToken("");
     setSelectedCharacter(null);
     statsHudRef.current?.updateStats({ hp: 100, max_hp: 100, mp: 50, max_mp: 50, level: 1, gold: 0, username: "Hero" });
-    playerStatsRef.current = { hp: -1, maxHp: -1, gold: -1, level: -1, aspd: 150 };
+    playerStatsRef.current = { hp: -1, maxHp: -1, gold: -1, level: -1, aspd: 150, xp: -1 };
     setCharacters([]);
     setIsCreatingChar(false);
     connectedPlayersRef.current = [];

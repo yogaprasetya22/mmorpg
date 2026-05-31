@@ -882,63 +882,58 @@ export const PlayerController = (props: {
     // Process Active States
     if (charState[0] === 1) { 
       // == STATE: ATTACKING ==
-      if (isMovingInput || keys.jump) {
-        // 3. Batal Memukul Jika Bergerak atau Melompat (Cancel/Override)
-        charState[0] = 0; 
-      } else {
-        // 1. Berhenti Saat Menyerang (Animation Lock)
-        // Lock horizontal velocity — let BVH gravity & float spring handle Y
-        const vel = characterStatus.linvel;
-        ecctrlRef.current?.setLinVel({ x: 0, y: vel.y, z: 0 } as any);
-        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+      // 1. Berhenti Saat Menyerang (Animation Lock)
+      // Lock horizontal velocity — let BVH gravity & float spring handle Y
+      const vel = characterStatus.linvel;
+      ecctrlRef.current?.setLinVel({ x: 0, y: vel.y, z: 0 } as any);
+      ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+      
+      // Face target dynamically
+      if (hasTarget[0]) {
+        const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
+        const fwd = _tempFwd.copy(_fwdAxis);
+        fwd.applyQuaternion(characterRef.current.quaternion);
+        if (characterRef.current.parent) {
+          fwd.applyQuaternion(characterRef.current.parent.quaternion);
+        }
+        const worldRot = Math.atan2(fwd.x, fwd.z);
+        let diff = worldTargetAngle - worldRot;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        characterRef.current.rotation.y += diff * 15 * delta;
+      }
+
+      // Force Shoot / Melee Animation
+      let targetAnim = animationSet.shoot;
+      if (playerClass === "Warrior" || playerClass === "Thief" || playerClass === "Beginner") {
+        if (actions['SwordSlash']) targetAnim = 'SwordSlash';
+        else if (actions['1H_Melee_Attack_Chop']) targetAnim = '1H_Melee_Attack_Chop';
+      }
+      const shootAction = actions[targetAnim] || actions[animationSet.shoot];
+      if (shootAction) {
+        // 5. REFACTOR ANIMASI GAME (ANIMATION SPEED SCALE)
+        // Mengambil durasi asli file animasi menyerang dalam satuan detik
+        const defaultAnimationDuration = shootAction.getClip()?.duration || 1.0;
         
-        // Face target dynamically
-        if (hasTarget[0]) {
-          const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
-          const fwd = _tempFwd.copy(_fwdAxis);
-          fwd.applyQuaternion(characterRef.current.quaternion);
-          if (characterRef.current.parent) {
-            fwd.applyQuaternion(characterRef.current.parent.quaternion);
-          }
-          const worldRot = Math.atan2(fwd.x, fwd.z);
-          let diff = worldTargetAngle - worldRot;
-          while (diff < -Math.PI) diff += Math.PI * 2;
-          while (diff > Math.PI) diff -= Math.PI * 2;
-          characterRef.current.rotation.y += diff * 15 * delta;
-        }
+        // Rumus: AnimationSpeedScale = HitsPerSecond * DefaultAnimationDuration
+        // Menyesuaikan kecepatan pemutaran animasi agar sinkron sempurna dengan pukulan per detik!
+        const animationSpeedScale = hitsPerSecond * defaultAnimationDuration;
 
-        // Force Shoot / Melee Animation
-        let targetAnim = animationSet.shoot;
-        if (playerClass === "Warrior" || playerClass === "Thief" || playerClass === "Beginner") {
-          if (actions['SwordSlash']) targetAnim = 'SwordSlash';
-          else if (actions['1H_Melee_Attack_Chop']) targetAnim = '1H_Melee_Attack_Chop';
+        if (shootAction !== activeAction.current) {
+          shootAction.reset().play();
+          if (activeAction.current) activeAction.current.crossFadeTo(shootAction, 0.1, true);
+          activeAction.current = shootAction;
         }
-        const shootAction = actions[targetAnim] || actions[animationSet.shoot];
-        if (shootAction) {
-          // 5. REFACTOR ANIMASI GAME (ANIMATION SPEED SCALE)
-          // Mengambil durasi asli file animasi menyerang dalam satuan detik
-          const defaultAnimationDuration = shootAction.getClip()?.duration || 1.0;
-          
-          // Rumus: AnimationSpeedScale = HitsPerSecond * DefaultAnimationDuration
-          // Menyesuaikan kecepatan pemutaran animasi agar sinkron sempurna dengan pukulan per detik!
-          const animationSpeedScale = hitsPerSecond * defaultAnimationDuration;
+        
+        // Menerapkan nilai pengali kecepatan animasi ke Three.js AnimationAction
+        shootAction.timeScale = animationSpeedScale;
+      }
 
-          if (shootAction !== activeAction.current) {
-            shootAction.reset().play();
-            if (activeAction.current) activeAction.current.crossFadeTo(shootAction, 0.1, true);
-            activeAction.current = shootAction;
-          }
-          
-          // Menerapkan nilai pengali kecepatan animasi ke Three.js AnimationAction
-          shootAction.timeScale = animationSpeedScale;
-        }
-
-        // Check if animation lock is over
-        if (now - attackTimer[0] > attackDuration) {
-          // If the player is still holding the attack button, keep them in the ATTACKING state to prevent animation stuttering
-          if (!isAttackInput) {
-            charState[0] = 0; // Return to normal
-          }
+      // Check if animation lock is over
+      if (now - attackTimer[0] > attackDuration) {
+        // If the player is trying to move/jump, or is no longer holding the attack button, return to normal
+        if (isMovingInput || keys.jump || !isAttackInput) {
+          charState[0] = 0; // Return to normal
         }
       }
     } else if (charState[0] === 2) { 
@@ -1068,19 +1063,20 @@ export const PlayerController = (props: {
     const isAttackingOrCasting = charState[0] === 1 || (window as any).pendingSkillExecution;
 
     if (!isAttackingOrCasting) {
-      // If not attacking/casting, ensure we are playing the correct movement/idle animation
-      if (expectedAction && (currentAnimStatus !== prevAnimStatus.current || activeAction.current !== expectedAction)) {
+      if (currentAnimStatus !== prevAnimStatus.current) {
         prevAnimStatus.current = currentAnimStatus;
-
+      }
+      // If not attacking/casting, ensure we are playing the correct movement/idle animation
+      if (expectedAction && activeAction.current !== expectedAction) {
         const isJump = expectedAnimName.toLowerCase().includes('jump');
         // Ultra-fast transition for jump (0.04s) so it feels instant;
         // standard crossfade (0.12s) for walk/run/idle to remain smooth.
         const crossfadeDuration = isJump ? 0.04 : 0.12;
 
         expectedAction.reset().play();
-        if (activeAction.current && activeAction.current !== expectedAction) {
+        if (activeAction.current) {
           activeAction.current.crossFadeTo(expectedAction, crossfadeDuration, true);
-        } else if (!activeAction.current) {
+        } else {
           expectedAction.fadeIn(crossfadeDuration);
         }
         activeAction.current = expectedAction;
