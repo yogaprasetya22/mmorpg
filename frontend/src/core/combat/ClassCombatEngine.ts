@@ -6,7 +6,7 @@ export interface CombatExecutionContext {
   camDir: THREE.Vector3;
   combo: number;
   playerStats: any;
-  dealPlayerDamage?: (targetId: string, damage: number, isCrit: boolean) => void;
+  dealPlayerDamage?: (targetId: string, damage: number, isCrit?: boolean, isMagic?: boolean, customColor?: string) => void;
   spawnVFX: (pos: [number, number, number], type: string, color: string) => void;
   camera: any;
   simTimeRef?: { current: number };
@@ -89,12 +89,27 @@ const BaseAttackCalculator = (
 
   if (damage < 1) damage = 1;
 
-  // SYNC FIX: Delay damage slightly to match physical weapon contact visual cues
+  // DYNAMIC DELAY CALCULATION: Higher ASPD = faster visual damage registration!
+  // Cap delay between 20ms and 120ms max to ensure premium, snappy combat response
+  const currentAspd = ctx.playerStats?.aspd ?? (ctx.playerStats?.ASPD ?? 150);
+  const delayMs = Math.max(20, Math.min(120, 150 - (currentAspd / 1000) * 130));
+
   const finalDamage = damage;
   const finalCrit = isCrit;
   setTimeout(() => {
     ctx.dealPlayerDamage?.(target.id, finalDamage, finalCrit);
-  }, 250);
+  }, delayMs);
+
+  // PROC RATE: 12% chance to trigger an automated Double Attack / Lightning Proc!
+  const isProc = Math.random() < 0.12;
+  if (isProc && ctx.dealPlayerDamage) {
+    const procDamage = finalDamage * 0.85;
+    setTimeout(() => {
+      // Spawn magic cyan shockwave VFX
+      ctx.spawnVFX([target.position[0], target.position[1] + 1.2, target.position[2]], "shockwave", "#00e5ff");
+      ctx.dealPlayerDamage?.(target.id, procDamage, false, true, "#00e5ff");
+    }, delayMs + 70); // slightly staggered to create a premium double attack visual stream
+  }
 };
 
 // 1. WARRIOR (FIGHTER) STRATEGY
@@ -165,16 +180,20 @@ const WarriorStrategy: ClassCombatStrategy = {
     }
   },
 
-  executeSkill(_target, ctx) {
+  executeSkill(target, ctx) {
+    const castX = target ? target.position[0] : ctx.charPos.x;
+    const castY = target ? target.position[1] : ctx.charPos.y;
+    const castZ = target ? target.position[2] : ctx.charPos.z;
+
     // --- SKILL: Putaran Badai (Cyclone Slash / Whirlwind) ---
     if (ctx.fighterSpellsRef?.current) {
       const pool = ctx.fighterSpellsRef.current;
       const fs = pool[ctx.fighterSpellPtr.current];
       if (fs) {
         fs.active = true;
-        fs.x = ctx.charPos.x;
-        fs.y = ctx.charPos.y;
-        fs.z = ctx.charPos.z;
+        fs.x = castX;
+        fs.y = castY;
+        fs.z = castZ;
         fs.startTime = performance.now();
         fs.color = "#ea580c"; // Fiery orange cyclone
         fs.isCyclone = true;
@@ -187,7 +206,7 @@ const WarriorStrategy: ClassCombatStrategy = {
     }
 
     if (ctx.grid && ctx.dealPlayerDamage) {
-      const nearby = ctx.grid.queryRadius(ctx.charPos.x, ctx.charPos.z, 6.5);
+      const nearby = ctx.grid.queryRadius(castX, castZ, 6.5);
       setTimeout(() => {
         nearby.forEach((u: any) => {
           if (u.type === "enemy" && u.isActive && !u.isDying) {
@@ -198,7 +217,7 @@ const WarriorStrategy: ClassCombatStrategy = {
         });
       }, 350);
     }
-    ctx.spawnVFX([ctx.charPos.x, ctx.charPos.y + 1.2, ctx.charPos.z], "shockwave", "#ea580c");
+    ctx.spawnVFX([castX, castY + 1.2, castZ], "shockwave", "#ea580c");
   }
 };
 
@@ -431,7 +450,11 @@ const PriestStrategy: ClassCombatStrategy = {
     }
   },
 
-  executeSkill(_target, ctx) {
+  executeSkill(target, ctx) {
+    const castX = target ? target.position[0] : ctx.charPos.x;
+    const castY = target ? target.position[1] : ctx.charPos.y;
+    const castZ = target ? target.position[2] : ctx.charPos.z;
+
     // --- SKILL: Kuil Dewata (Divine Sanctuary Dome) ---
     if (ctx.tankSpellsRef?.current) {
       const pool = ctx.tankSpellsRef.current;
@@ -439,9 +462,9 @@ const PriestStrategy: ClassCombatStrategy = {
       if (ts) {
         ts.active = true;
         ts.isShield = true; // glowing sanctuary dome!
-        ts.x = ctx.charPos.x;
-        ts.y = ctx.charPos.y;
-        ts.z = ctx.charPos.z;
+        ts.x = castX;
+        ts.y = castY;
+        ts.z = castZ;
         ts.startTime = performance.now();
         ts.color = "#fbbf24";
         (ts as any).ownerId = "localPlayer";
@@ -454,7 +477,7 @@ const PriestStrategy: ClassCombatStrategy = {
     }
 
     if (ctx.grid && ctx.dealPlayerDamage) {
-      const nearby = ctx.grid.queryRadius(ctx.charPos.x, ctx.charPos.z, 8.0);
+      const nearby = ctx.grid.queryRadius(castX, castZ, 8.0);
       setTimeout(() => {
         nearby.forEach((u: any) => {
           if (u.type === "enemy" && u.isActive && !u.isDying) {
@@ -465,7 +488,7 @@ const PriestStrategy: ClassCombatStrategy = {
         });
       }, 200);
     }
-    ctx.spawnVFX([ctx.charPos.x, ctx.charPos.y + 1.2, ctx.charPos.z], "magic", "#fbbf24");
+    ctx.spawnVFX([castX, castY + 1.2, castZ], "magic", "#fbbf24");
   }
 };
 
@@ -542,11 +565,15 @@ const MageStrategy: ClassCombatStrategy = {
     }
   },
 
-  executeSkill(_target, ctx) {
+  executeSkill(target, ctx) {
+    const castX = target ? target.position[0] : ctx.charPos.x;
+    const castY = target ? target.position[1] : ctx.charPos.y;
+    const castZ = target ? target.position[2] : ctx.charPos.z;
+
     // --- SKILL: Hujan Meteor (Meteor Rain) ---
     if (ctx.grid && ctx.spellsRef?.current) {
       const pool = ctx.spellsRef.current;
-      const nearby = ctx.grid.queryRadius(ctx.charPos.x, ctx.charPos.z, 14.0);
+      const nearby = ctx.grid.queryRadius(castX, castZ, 14.0);
       let targetCount = 0;
 
       nearby.forEach((t: any) => {
@@ -556,7 +583,7 @@ const MageStrategy: ClassCombatStrategy = {
             s.active = true;
             s.isBullet = false; // falls from sky
             s.fromX = t.position[0] + (Math.random() - 0.5) * 4;
-            s.fromY = ctx.charPos.y + 12.0;
+            s.fromY = castY + 12.0;
             s.fromZ = t.position[2] + (Math.random() - 0.5) * 4;
             s.toX = t.position[0];
             s.toY = t.position[1] + 0.3;
@@ -586,7 +613,7 @@ const MageStrategy: ClassCombatStrategy = {
         ctx.cameraShake(0.95);
       }
     }
-    ctx.spawnVFX([ctx.charPos.x, ctx.charPos.y + 1.2, ctx.charPos.z], "magic", "#ec4899");
+    ctx.spawnVFX([castX, castY + 1.2, castZ], "magic", "#ec4899");
   }
 };
 

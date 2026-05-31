@@ -32,11 +32,11 @@ export const CLASS_DESCRIPTIONS: Record<string, string> = {
 /** Stat attributes displayed in the Character Stats Modal. */
 export const STAT_ATTRIBUTES = [
   { key: "str", label: "STR", name: "Strength", desc: "Meningkatkan Serangan Fisik" },
+  { key: "agi", label: "AGI", name: "Agility", desc: "Meningkatkan Kecepatan Serang & Flee" },
+  { key: "vit", label: "VIT", name: "Vitality", desc: "Meningkatkan Maks HP & Soft DEF" },
   { key: "int", label: "INT", name: "Intelligence", desc: "Meningkatkan Serangan Sihir & Maks MP" },
-  { key: "con", label: "CON", name: "Constitution", desc: "Meningkatkan Maks HP & Pertahanan Fisik" },
-  { key: "vit", label: "VIT", name: "Vitality", desc: "Meningkatkan Maks HP & Pertahanan Utama" },
-  { key: "wis", label: "WIS", name: "Wisdom", desc: "Meningkatkan Maks MP & Pertahanan Sihir" },
-  { key: "luk", label: "LUK", name: "Luck", desc: "Meningkatkan Critical Rate & Speed" },
+  { key: "dex", label: "DEX", name: "Dexterity", desc: "Meningkatkan Casting Speed & ASPD" },
+  { key: "luk", label: "LUK", name: "Luck", desc: "Meningkatkan Critical Rate & Status Bonus" },
 ];
 
 /** Secondary combat stats displayed in the Character Stats Modal. */
@@ -45,9 +45,13 @@ export const COMBAT_STAT_FIELDS = [
   { label: "Serangan Sihir", key: "magic_attack", fallback: 10 },
   { label: "Pertahanan Fisik", key: "defense", fallback: 10 },
   { label: "Pertahanan Sihir", key: "magic_defense", fallback: 10 },
+  { label: "Akurasi (HIT)", key: "hit", fallback: 175 },
+  { label: "Hindaran (FLEE)", key: "flee", fallback: 100 },
   { label: "Maks HP", key: "max_hp", fallback: 1000 },
   { label: "Maks MP", key: "max_mp", fallback: 200 },
   { label: "Critical Rate", key: "critical_rate", fallback: 0.05, format: "percent" },
+  { label: "Perfect Dodge", key: "perfect_dodge", fallback: 1.0, format: "percent_direct" },
+  { label: "Cast Reduction", key: "cast_time", fallback: 0.0, format: "cast_reduction" },
   { label: "Kecepatan Gerak", key: "speed", fallback: 5.0, format: "decimal" },
 ];
 

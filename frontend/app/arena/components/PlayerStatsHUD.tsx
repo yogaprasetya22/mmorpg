@@ -21,6 +21,14 @@ export const PlayerStatsHUD = forwardRef<PlayerStatsHUDRef, {
     updateStats(newStats: any) {
       setStats((prev: any) => {
         if (!prev) return newStats;
+        let changed = false;
+        for (const key in newStats) {
+          if (prev[key] !== newStats[key]) {
+            changed = true;
+            break;
+          }
+        }
+        if (!changed) return prev;
         return { ...prev, ...newStats };
       });
     },

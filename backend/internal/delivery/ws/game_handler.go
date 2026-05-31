@@ -66,6 +66,9 @@ func (h *GameHandler) ServeProfile(c *gin.Context) {
 		return
 	}
 
+	// Always recalculate derived stats before serving the profile
+	player.RecalculateStats()
+
 	c.JSON(http.StatusOK, gin.H{
 		"player": player,
 	})

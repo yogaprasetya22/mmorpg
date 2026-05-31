@@ -71,7 +71,12 @@ export function CharacterStatsModal({ playerStats, onClose, sendDistributeStat }
               </div>
               
               <div className="flex items-center gap-2.5">
-                <span className="text-xs font-black text-white tracking-wide">{playerStats[stat.key] ?? 10}</span>
+                <span className="text-xs font-black text-white tracking-wide">
+                  {playerStats[`base_${stat.key}`] ?? playerStats[stat.key] ?? 10}
+                  {playerStats[`bonus_${stat.key}`] !== undefined && playerStats[`bonus_${stat.key}`] > 0 && (
+                    <span className="text-emerald-400 font-bold ml-1">+{playerStats[`bonus_${stat.key}`]}</span>
+                  )}
+                </span>
                 
                 {playerStats.stat_points > 0 && (
                   <button
@@ -96,6 +101,11 @@ export function CharacterStatsModal({ playerStats, onClose, sendDistributeStat }
               const rawValue = playerStats[item.key] ?? item.fallback;
               if (item.format === "percent") {
                 displayValue = `${((rawValue as number) * 100).toFixed(1)}%`;
+              } else if (item.format === "percent_direct") {
+                displayValue = `${(rawValue as number).toFixed(1)}%`;
+              } else if (item.format === "cast_reduction") {
+                const reductionPct = (1.0 - (rawValue as number)) * 100;
+                displayValue = `${reductionPct.toFixed(1)}%`;
               } else if (item.format === "decimal") {
                 displayValue = (rawValue as number).toFixed(1);
               } else {

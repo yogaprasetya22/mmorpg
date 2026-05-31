@@ -31,6 +31,7 @@ type GameUsecase interface {
 	UseConsumable(playerID string, playerItemID string)
 	CastPlayerSkill(playerID string, skillID string, targetID string)
 	ChangeClass(playerID string, newClass string)
+	SyncPlayerStatsFromDB(playerID string) error
 }
 
 type gameUsecase struct {
@@ -334,12 +335,12 @@ func (u *gameUsecase) RegisterPlayer(playerID string, username string) {
 			Level:      1,
 			XP:         0,
 			Gold:       200,
-			STR:        10,
-			INT:        10,
-			CON:        10,
-			VIT:        10,
-			WIS:        10,
-			LUK:        10,
+			BaseSTR:    10,
+			BaseAGI:    10,
+			BaseVIT:    10,
+			BaseINT:    10,
+			BaseDEX:    10,
+			BaseLUK:    10,
 			StatPoints: 5, // Stat points to distribute
 			HP:         1000,
 			MaxHP:      1000,
@@ -431,6 +432,11 @@ func (u *gameUsecase) RegisterPlayer(playerID string, username string) {
 		_ = u.playerRepo.Create(pData)
 	}
 
+	// CRITICAL: Always recalculate derived stats from base attributes for ALL players
+	// This ensures ASPD, ATK, DEF, HIT, FLEE etc. are correctly derived from the
+	// persisted base stats, even if the cached/DB values are stale.
+	pData.RecalculateStats()
+
 	// Respawn player on reconnect if they logged out dead (HP == 0)
 	if pData.HP <= 0 {
 		pData.HP = pData.MaxHP
@@ -442,6 +448,7 @@ func (u *gameUsecase) RegisterPlayer(playerID string, username string) {
 	}
 
 	// 2. Cache player data in memory
+	pData.SpawnProtectedUntil = time.Now().Add(25 * time.Second) // 25 seconds invulnerability to allow slow asset loading on the client
 	u.activePlayersMu.Lock()
 	u.activePlayers[playerID] = pData
 	u.activePlayersMu.Unlock()
@@ -459,6 +466,9 @@ func (u *gameUsecase) RegisterPlayer(playerID string, username string) {
 		Username:  pData.Username,
 		HP:        pData.HP,
 		MaxHP:     pData.MaxHP,
+		Gold:      pData.Gold,
+		Level:     pData.Level,
+		ASPD:      pData.ASPD,
 	}
 	u.players[playerID] = state
 
@@ -533,6 +543,18 @@ func (u *gameUsecase) GetStatePayload() domain.GameStatePayload {
 	}
 	u.playersMu.RUnlock()
 
+	// Enrich player states with Gold and Level from in-memory active player cache
+	// This avoids database queries — activePlayers is already kept in sync by combat/quest handlers
+	u.activePlayersMu.RLock()
+	for i := range playerStates {
+		if pData, exists := u.activePlayers[playerStates[i].ID]; exists {
+			playerStates[i].Gold = pData.Gold
+			playerStates[i].Level = pData.Level
+			playerStates[i].ASPD = pData.ASPD
+		}
+	}
+	u.activePlayersMu.RUnlock()
+
 	// Build lean MonsterNetworkState slice — avoids serialising internal AI fields
 	// (SpawnPosition, Defense, Attack, etc.) that the client never uses per frame.
 	// Reduces msgpack payload size by ~60% per tick for 50-player sessions.
@@ -578,17 +600,17 @@ func (u *gameUsecase) DistributeStatPoints(playerID string, stat string, amount 
 
 	switch stat {
 	case "str":
-		playerData.STR += amount
-	case "int":
-		playerData.INT += amount
-	case "con":
-		playerData.CON += amount
+		playerData.BaseSTR += amount
+	case "agi":
+		playerData.BaseAGI += amount
 	case "vit":
-		playerData.VIT += amount
-	case "wis":
-		playerData.WIS += amount
+		playerData.BaseVIT += amount
+	case "int":
+		playerData.BaseINT += amount
+	case "dex":
+		playerData.BaseDEX += amount
 	case "luk":
-		playerData.LUK += amount
+		playerData.BaseLUK += amount
 	default:
 		u.activePlayersMu.Unlock()
 		return
@@ -609,8 +631,8 @@ func (u *gameUsecase) DistributeStatPoints(playerID string, stat string, amount 
 		}
 	}
 
-	fmt.Printf("💪 Player %s distributed %d points into %s. New values: (STR=%d, INT=%d, CON=%d, VIT=%d, WIS=%d, LUK=%d, StatPoints=%d)\n",
-		playerData.Username, amount, stat, playerData.STR, playerData.INT, playerData.CON, playerData.VIT, playerData.WIS, playerData.LUK, playerData.StatPoints)
+	fmt.Printf("💪 Player %s distributed %d points into %s. New values: (STR=%d, AGI=%d, VIT=%d, INT=%d, DEX=%d, LUK=%d, StatPoints=%d)\n",
+		playerData.Username, amount, stat, playerData.STR, playerData.AGI, playerData.VIT, playerData.INT, playerData.DEX, playerData.LUK, playerData.StatPoints)
 }
 
 // EquipPlayerItem toggles equipped state on weapons/armors and triggers recalculation
@@ -913,11 +935,7 @@ func (u *gameUsecase) ChangeClass(playerID string, newClass string) {
 	playerData.Class = newClass
 	
 	switch newClass {
-	case "Warrior":
-		playerData.STR += 5
-		playerData.CON += 5
 	case "Mage":
-		playerData.INT += 8
 		playerData.Skills = append(playerData.Skills, domain.PlayerSkill{
 			ID:         playerID + "-skill-fireball",
 			PlayerID:   playerID,
@@ -930,11 +948,6 @@ func (u *gameUsecase) ChangeClass(playerID string, newClass string) {
 			Damage:     2.5, // 250% Magic Attack multiplier
 			IsUnlocked: true,
 		})
-	case "Priest":
-		playerData.INT += 5
-		playerData.WIS += 5
-	case "Thief":
-		playerData.LUK += 8
 	}
 
 	playerData.RecalculateStats()
@@ -1004,4 +1017,60 @@ func (g *SpatialHashGrid) GetNearby(x, z, radius float32) []string {
 		}
 	}
 	return result
+}
+
+func (u *gameUsecase) SyncPlayerStatsFromDB(playerID string) error {
+	u.activePlayersMu.Lock()
+	defer u.activePlayersMu.Unlock()
+
+	pData, err := u.playerRepo.GetByID(playerID)
+	if err != nil {
+		return err
+	}
+
+	// Recalculate stats for correct attributes mapping based on the newly loaded DB values
+	pData.RecalculateStats()
+
+	// Retain the current HP/MP unless they are dead or we want to reset them to max
+	if currentActive, exists := u.activePlayers[playerID]; exists {
+		hp := currentActive.HP
+		mp := currentActive.MP
+		if hp > pData.MaxHP {
+			hp = pData.MaxHP
+		}
+		if mp > pData.MaxMP {
+			mp = pData.MaxMP
+		}
+		pData.HP = hp
+		pData.MP = mp
+		pData.SpawnProtectedUntil = currentActive.SpawnProtectedUntil
+	} else {
+		pData.HP = pData.MaxHP
+		pData.MP = pData.MaxMP
+	}
+
+	u.activePlayers[playerID] = pData
+
+	// Also update the network state representation so the client gets the new stats immediately
+	u.playersMu.Lock()
+	if netState, exists := u.players[playerID]; exists {
+		netState.Class = pData.Class
+		netState.HP = pData.HP
+		netState.MaxHP = pData.MaxHP
+		netState.Gold = pData.Gold
+		netState.Level = pData.Level
+		netState.ASPD = pData.ASPD
+	}
+	u.playersMu.Unlock()
+
+	// Sync to ECS registry HealthComponent if exists
+	if healthComp, found := u.registry.GetComponent(domain.EntityID(playerID), "Health"); found {
+		h := healthComp.(*domain.HealthComponent)
+		h.MaxHP = pData.MaxHP
+		h.HP = pData.HP
+	}
+
+	fmt.Printf("🔄 DB Sync: Player %s (Username: %s) stats re-read from PostgreSQL and synced to cache. New AGI=%d, DEX=%d, ASPD=%.2f\n",
+		playerID, pData.Username, pData.AGI, pData.DEX, pData.ASPD)
+	return nil
 }

@@ -4,10 +4,6 @@
 import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
 import { KeyboardControls } from '@react-three/drei';
-import dynamic from 'next/dynamic';
-
-const Perf = dynamic(() => import('r3f-perf').then((mod) => mod.Perf), { ssr: false });
-
 import { EffectComposer, Bloom, ToneMapping } from '@react-three/postprocessing';
 import { PlayerController, keyboardMap } from '@/src/components/game/PlayerController';
 import { RemotePlayersRenderer } from '@/src/components/game/RemotePlayersRenderer';
@@ -122,7 +118,6 @@ export default function MultiplayerArena() {
             className="w-full h-full"
           >
             <ExposureBridge exposure={2.0} />
-            <Perf position="top-left" className="z-[2000]" />
 
             <VFXProvider>
               <CameraDirector />
@@ -157,7 +152,8 @@ export default function MultiplayerArena() {
                 simTimeRef={state.simTimeRef}
                 dealPlayerDamage={state.handleAuthoritativeAttack}
                 sendPlayerState={state.sendPlayerState}
-                playerStats={state.playerStatsRef.current.hp >= 0 ? { hp: state.playerStatsRef.current.hp, max_hp: state.playerStatsRef.current.maxHp } : undefined}
+                playerStats={state.playerStatsRef.current.hp >= 0 ? { hp: state.playerStatsRef.current.hp, max_hp: state.playerStatsRef.current.maxHp, aspd: (state.playerStatsRef.current as any).aspd } : undefined}
+                playerStatsRef={state.playerStatsRef}
               />
 
               <RemotePlayersRenderer

@@ -20,7 +20,7 @@ type Player struct {
 	Username     string
 	Class        string
 	Level        int
-	STR, INT, CON, VIT, WIS, LUK int
+	STR, AGI, VIT, INT, DEX, LUK int
 	Attack       float32
 	MagicAttack  float32
 	Defense      float32
@@ -29,28 +29,48 @@ type Player struct {
 }
 
 func (p *Player) RecalculateStats() {
-	p.MaxHP = 500 + float32(p.Level*100) + float32(p.CON*25) + float32(p.VIT*15)
+	// 1. Calculate Base HP from Level, VIT and INT using official iRO Wiki principles:
+	baseHP := float32(500 + p.Level*100)
+	if p.Class == "Warrior" {
+		baseHP = float32(700 + p.Level*140)
+	} else if p.Class == "Thief" {
+		baseHP = float32(550 + p.Level*105)
+	} else if p.Class == "Mage" {
+		baseHP = float32(400 + p.Level*75)
+	}
+	p.MaxHP = baseHP * (1.0 + float32(p.VIT)/100.0)
+
+	// 2. Class Attack & MagicAttack Modifiers following iRO Renewal formulas:
+	baseMeleeATK := float32(p.STR) + float32(p.DEX/5) + float32(p.LUK/3) + float32(p.Level/4)
+	baseMATK := float32(p.INT) + float32(p.DEX/5) + float32(p.LUK/3) + float32(p.Level/4)
+
+	isRanged := p.Class == "Beginner"
+	if isRanged {
+		p.Attack = float32(p.DEX) + float32(p.STR/5) + float32(p.LUK/3) + float32(p.Level/4)
+	} else {
+		p.Attack = baseMeleeATK
+	}
+	p.MagicAttack = baseMATK
 
 	switch p.Class {
 	case "Warrior":
-		p.Attack = 30 + float32(p.Level*8) + float32(p.STR)*4.5 + float32(p.LUK)*1.5
-		p.MagicAttack = 10 + float32(p.Level*2) + float32(p.INT)*1.0 + float32(p.WIS)*0.5
+		p.Attack += 35.0 + float32(p.Level)*2.0
+		p.MagicAttack += 10.0
 	case "Mage":
-		p.Attack = 15 + float32(p.Level*4) + float32(p.STR)*0.5
-		p.MagicAttack = 40 + float32(p.Level*10) + float32(p.INT)*5.0 + float32(p.WIS)*2.0
+		p.MagicAttack += 50.0 + float32(p.Level)*3.0
 	case "Priest":
-		p.Attack = 20 + float32(p.Level*5) + float32(p.STR)*1.5 + float32(p.LUK)*1.0
-		p.MagicAttack = 25 + float32(p.Level*7) + float32(p.INT)*3.0 + float32(p.WIS)*1.5
+		p.Attack += 20.0 + float32(p.Level)
+		p.MagicAttack += 30.0 + float32(p.Level)*2.0
 	case "Thief":
-		p.Attack = 25 + float32(p.Level*7) + float32(p.STR)*2.0 + float32(p.LUK)*3.5
-		p.MagicAttack = 10 + float32(p.Level*2) + float32(p.INT)*1.0 + float32(p.WIS)*0.5
+		p.Attack += 30.0 + float32(p.Level)*1.5
+		p.MagicAttack += 10.0
 	default:
-		p.Attack = 20 + float32(p.Level*5) + float32(p.STR)*2.0 + float32(p.LUK)*1.0
-		p.MagicAttack = 10 + float32(p.Level*3) + float32(p.INT)*1.0 + float32(p.WIS)*0.5
+		p.Attack += 15.0
+		p.MagicAttack += 10.0
 	}
 
-	p.Defense = 10 + float32(p.Level*3) + float32(p.VIT)*2.0 + float32(p.CON)*1.0
-	p.CriticalRate = 0.05 + float32(p.LUK)*0.0025
+	p.Defense = float32(p.VIT)/2.0 + float32(p.AGI)/5.0 + float32(p.Level)/15.0 + 10.0
+	p.CriticalRate = 0.01 * (1.0 + float32(p.LUK)/3.0)
 	if p.CriticalRate > 0.80 {
 		p.CriticalRate = 0.80
 	}
@@ -208,7 +228,7 @@ func testDamageAccuracy() {
 			Username: "TestBot_" + class,
 			Class:    class,
 			Level:    10,
-			STR:      15, INT: 15, CON: 10, VIT: 10, WIS: 10, LUK: 20,
+			STR:      15, AGI: 10, VIT: 10, INT: 15, DEX: 10, LUK: 20,
 		}
 		p.RecalculateStats()
 
@@ -321,7 +341,7 @@ func testCritMultiplier() {
 	p := &Player{
 		Class: "Warrior",
 		Level: 10,
-		STR: 15, INT: 10, CON: 10, VIT: 10, WIS: 10, LUK: 200, // force near-100% crit
+		STR: 15, AGI: 10, VIT: 10, INT: 10, DEX: 10, LUK: 200, // force near-100% crit
 	}
 	p.RecalculateStats()
 	if p.CriticalRate > 0.80 {

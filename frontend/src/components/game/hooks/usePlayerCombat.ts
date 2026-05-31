@@ -27,7 +27,6 @@ import {
   autoFireTimer,
   charState,
   attackTimer,
-  AUTO_FIRE_RATE,
   SKILL_COOLDOWN,
 } from '../PlayerController.buffers';
 
@@ -266,8 +265,25 @@ export function usePlayerCombat({
       }, 0);
     }
 
+    // ── Dynamic Ragnarok X / New World ASPD Calculation ──
+    const baseLevel = playerStats?.level ?? (playerStats?.Level ?? 1);
+    const agi = playerStats?.agi ?? (playerStats?.AGI ?? 10);
+    const dex = playerStats?.dex ?? (playerStats?.DEX ?? 10);
+    const bonusEquipmentPercent = playerStats?.bonusEquipmentPercent ?? (playerStats?.bonus_equipment_percent ?? 0);
+    const bonusBuffPercent = playerStats?.bonusBuffPercent ?? (playerStats?.bonus_buff_percent ?? 0);
+
+    const rawASPD = (agi * 4) + (dex * 1);
+    const levelFactor = 50 + (baseLevel * 2);
+    const statPercent = (rawASPD / levelFactor) * 100;
+    let finalASPDPercent = statPercent + bonusEquipmentPercent + bonusBuffPercent;
+    if (finalASPDPercent > 1000) {
+      finalASPDPercent = 1000;
+    }
+    const hitsPerSecond = 1 + (finalASPDPercent / 125);
+    const dynamicAttackInterval = 1000 / hitsPerSecond;
+
     // ── Input attack handler ──
-    if (isAttackInput && now - autoFireTimer[0] > AUTO_FIRE_RATE) {
+    if (isAttackInput && now - autoFireTimer[0] > dynamicAttackInterval) {
       if (hasTarget[0]) {
         const dx = aimTargetX[0] - _charPos.x;
         const dz = aimTargetZ[0] - _charPos.z;

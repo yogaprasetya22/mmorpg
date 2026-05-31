@@ -28,6 +28,18 @@ func (u *gameUsecase) processMonsterAI(m *domain.Monster, dt float32) {
 	u.processMonsterAIWithSnapshot(m, dt, playerSnapshot, grid)
 }
 
+func getMaxLeashRange(m *domain.Monster) float32 {
+	maxLeash := float32(40.0) // 40.0 units leash distance for normal monsters to feel spacious and fun
+	if m.Type == "boss" {
+		maxLeash = 85.0 // Bosses have a huge battlefield range
+	}
+	// If monster is actively in combat (taken damage within last 4s), extend leash by 1.5x
+	if time.Since(m.LastHitTime) < 4*time.Second {
+		maxLeash *= 1.5
+	}
+	return maxLeash
+}
+
 // processMonsterAIWithSnapshot is an ultra-fast, lock-free, and allocation-free FSM state machine
 // that scales horizontally up to 10,000+ entities via Goroutines and O(1) Spatial Hash Grid indexing.
 func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32, playerSnap map[string]*domain.PlayerNetworkState, grid *SpatialHashGrid) {
@@ -77,7 +89,7 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 				u.activePlayersMu.RLock()
 				pData, existsActive := u.activePlayers[id]
 				u.activePlayersMu.RUnlock()
-				if existsActive && pData != nil && pData.HP > 0 {
+				if existsActive && pData != nil && pData.HP > 0 && (pData.SpawnProtectedUntil.IsZero() || time.Now().After(pData.SpawnProtectedUntil)) {
 					minDist = dist
 					closestID = id
 				}
@@ -96,22 +108,20 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 			u.activePlayersMu.RLock()
 			pData, exists := u.activePlayers[m.TargetPlayerID]
 			u.activePlayersMu.RUnlock()
-			if exists && pData != nil && pData.HP > 0 {
+			if exists && pData != nil && pData.HP > 0 && (pData.SpawnProtectedUntil.IsZero() || time.Now().After(pData.SpawnProtectedUntil)) {
 				m.AIState = "chase"
 				break
 			}
 			m.TargetPlayerID = ""
 		}
 
-		if m.Position.DistanceTo(m.SpawnPosition) <= 8.0 {
-			if id := findClosestPlayer(m.AggroRange); id != "" {
-				m.TargetPlayerID = id
-				m.AIState = "chase"
-				fmt.Printf("❗ Monster %s terprovokasi ke Player %s!\n", m.Name, id)
-				break
-			}
+		if id := findClosestPlayer(m.AggroRange); id != "" {
+			m.TargetPlayerID = id
+			m.AIState = "chase"
+			fmt.Printf("❗ Monster %s terprovokasi ke Player %s!\n", m.Name, id)
+			break
 		}
-
+	
 		// Wait interval check for patrol
 		u.patrolTargetsMu.Lock()
 		waitTime, isWaiting := u.patrolWaiting[m.ID]
@@ -141,19 +151,17 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 			u.activePlayersMu.RLock()
 			pData, exists := u.activePlayers[m.TargetPlayerID]
 			u.activePlayersMu.RUnlock()
-			if exists && pData != nil && pData.HP > 0 {
+			if exists && pData != nil && pData.HP > 0 && (pData.SpawnProtectedUntil.IsZero() || time.Now().After(pData.SpawnProtectedUntil)) {
 				m.AIState = "chase"
 				break
 			}
 			m.TargetPlayerID = ""
 		}
 
-		if m.Position.DistanceTo(m.SpawnPosition) <= 8.0 {
-			if id := findClosestPlayer(m.AggroRange); id != "" {
-				m.TargetPlayerID = id
-				m.AIState = "chase"
-				break
-			}
+		if id := findClosestPlayer(m.AggroRange); id != "" {
+			m.TargetPlayerID = id
+			m.AIState = "chase"
+			break
 		}
 
 		u.patrolTargetsMu.Lock()
@@ -194,7 +202,7 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 		u.activePlayersMu.RLock()
 		pData, pExists := u.activePlayers[m.TargetPlayerID]
 		u.activePlayersMu.RUnlock()
-		if !pExists || pData == nil || pData.HP <= 0 {
+		if !pExists || pData == nil || pData.HP <= 0 || (!pData.SpawnProtectedUntil.IsZero() && time.Now().Before(pData.SpawnProtectedUntil)) {
 			m.TargetPlayerID = ""
 			m.AIState = "returning"
 			break
@@ -203,10 +211,11 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 		playerPos := domain.Vector3{X: targetPlayer.X, Y: targetPlayer.Y, Z: targetPlayer.Z}
 		dist := m.Position.DistanceTo(playerPos)
 
-		// Tether limit check
+		// Tether limit check matching Ragnarok Online & ROX
 		distFromHome := m.Position.DistanceTo(m.SpawnPosition)
-		if distFromHome > 18.0 {
-			fmt.Printf("⛓️ [LEASH-SNAP] Monster %s berpaling karena mengejar terlalu jauh (%.2f unit)!\n", m.Name, distFromHome)
+		maxLeash := getMaxLeashRange(m)
+		if distFromHome > maxLeash {
+			fmt.Printf("⛓️ [LEASH-SNAP] Monster %s berpaling karena mengejar terlalu jauh (%.2f/%.2f unit)!\n", m.Name, distFromHome, maxLeash)
 			m.TargetPlayerID = ""
 			m.AIState = "returning"
 			break
@@ -215,6 +224,11 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 		dy := float32(math.Abs(float64(m.Position.Y - playerPos.Y)))
 		if dist <= 3.5 && dy <= 4.5 {
 			m.AIState = "attack"
+			break
+		}
+
+		if time.Since(m.LastHitTime) < 220*time.Millisecond {
+			m.Animation = "idle" // Stagger flinch visual lock
 			break
 		}
 
@@ -242,7 +256,7 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 		u.activePlayersMu.RLock()
 		pData, pExists := u.activePlayers[m.TargetPlayerID]
 		u.activePlayersMu.RUnlock()
-		if !pExists || pData == nil || pData.HP <= 0 {
+		if !pExists || pData == nil || pData.HP <= 0 || (!pData.SpawnProtectedUntil.IsZero() && time.Now().Before(pData.SpawnProtectedUntil)) {
 			m.TargetPlayerID = ""
 			m.AIState = "returning"
 			break
@@ -251,10 +265,11 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 		playerPos := domain.Vector3{X: targetPlayer.X, Y: targetPlayer.Y, Z: targetPlayer.Z}
 		dist := m.Position.DistanceTo(playerPos)
 
-		// Tether limit check
+		// Tether limit check matching Ragnarok Online & ROX
 		distFromHome := m.Position.DistanceTo(m.SpawnPosition)
-		if distFromHome > 18.0 {
-			fmt.Printf("⛓️ [LEASH-SNAP] Monster %s berpaling karena menyerang terlalu jauh (%.2f unit)!\n", m.Name, distFromHome)
+		maxLeash := getMaxLeashRange(m)
+		if distFromHome > maxLeash {
+			fmt.Printf("⛓️ [LEASH-SNAP] Monster %s berpaling karena menyerang terlalu jauh (%.2f/%.2f unit)!\n", m.Name, distFromHome, maxLeash)
 			m.TargetPlayerID = ""
 			m.AIState = "returning"
 			break
@@ -266,12 +281,22 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 			break
 		}
 
-		if time.Since(m.LastAttackTime) < 1000*time.Millisecond {
+		if time.Since(m.LastHitTime) < 220*time.Millisecond {
+			m.Animation = "idle" // Stagger flinch visual lock prevents attack swings
+			break
+		}
+
+		attackInterval := 1200 * time.Millisecond
+		if m.Type == "boss" {
+			attackInterval = 700 * time.Millisecond
+		}
+
+		if time.Since(m.LastAttackTime) < attackInterval {
 			m.Animation = "attack"
 			break
 		}
 
-		if time.Since(m.LastAttackTime) >= 1500*time.Millisecond {
+		if time.Since(m.LastAttackTime) >= attackInterval {
 			m.Animation = "attack"
 			m.LastAttackTime = time.Now()
 
@@ -289,6 +314,11 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 			}
 
 			u.activePlayersMu.Lock()
+			if !pData.SpawnProtectedUntil.IsZero() && time.Now().Before(pData.SpawnProtectedUntil) {
+				u.activePlayersMu.Unlock()
+				fmt.Printf("🛡️ Player %s kebal karena masa perlindungan spawn aktif!\n", pData.Username)
+				break
+			}
 			pData.HP -= finalDamage
 			if pData.HP <= 0 {
 				pData.HP = 0
@@ -357,24 +387,29 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 		}
 
 	case "returning":
-		if m.TargetPlayerID != "" {
-			u.activePlayersMu.RLock()
-			pData, exists := u.activePlayers[m.TargetPlayerID]
-			u.activePlayersMu.RUnlock()
-			if exists && pData != nil && pData.HP > 0 {
-				m.AIState = "chase"
-				break
+		m.TargetPlayerID = "" // Completely ignore and drop any targets while returning
+
+		// Rapidly heal/regenerate HP back to 100% while returning (25% MaxHP per second)
+		if m.HP < m.MaxHP {
+			m.HP += m.MaxHP * 0.25 * dt
+			if m.HP > m.MaxHP {
+				m.HP = m.MaxHP
 			}
-			m.TargetPlayerID = ""
+			// Synchronize ECS Health component in real-time
+			if healthComp, found := u.registry.GetComponent(domain.EntityID(m.ID), "Health"); found {
+				h := healthComp.(*domain.HealthComponent)
+				h.HP = m.HP
+			}
 		}
 
 		dirX := m.SpawnPosition.X - m.Position.X
 		dirZ := m.SpawnPosition.Z - m.Position.Z
 		dist := float32(math.Sqrt(float64(dirX*dirX + dirZ*dirZ)))
 		if dist > 0.3 {
-			m.Position.X += (dirX / dist) * m.Speed * 0.85 * dt
-			m.Position.Z += (dirZ / dist) * m.Speed * 0.85 * dt
-			m.Animation = "walk"
+			// Super fast return running speed (2.5x base speed)
+			m.Position.X += (dirX / dist) * m.Speed * 2.5 * dt
+			m.Position.Z += (dirZ / dist) * m.Speed * 2.5 * dt
+			m.Animation = "run"
 		} else {
 			m.Position = m.SpawnPosition
 			m.HP = m.MaxHP

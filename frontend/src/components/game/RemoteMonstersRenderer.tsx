@@ -12,8 +12,6 @@ import { getTerrainElevation } from "@/src/core/utils/terrainHeight";
 import { useEditorStore } from "@/src/state/useEditorStore";
 import { API_BASE_URL } from "@/src/core/config";
 
-// ─── Shared reusable Box3 to avoid allocation per monster ────────────────────
-const _sharedBox3 = new THREE.Box3();
 // ─── Shared scratch vectors to avoid per-frame allocations ───────────────────
 const _v3 = new THREE.Vector3();
 // ─── Module-level LOD thresholds (hoisted out of useFrame to avoid re-eval every frame) ─
@@ -152,6 +150,8 @@ export const RemoteMonsterInstance = ({
   const lastHpRatio = useRef(-1);
   // Smooth lerp target for HP bar — avoids jarring instant jump when HP changes
   const smoothHpRatio = useRef(1);
+  const prevHp = useRef(-1);
+  const flinchEndTime = useRef(0);
 
   useEffect(() => {
     return () => {
@@ -161,13 +161,6 @@ export const RemoteMonsterInstance = ({
 
 
 
-  // Pre-compute HP bar height once (not every frame)
-  const hpBarY = useMemo(() => {
-    _sharedBox3.setFromObject(clone);
-    const maxY = _sharedBox3.max.y > 0 ? _sharedBox3.max.y : 1.8;
-    const scale = isBoss ? 2.3 : 0.9;
-    return (maxY * scale) + 0.35;
-  }, [clone, isBoss]);
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
@@ -187,7 +180,15 @@ export const RemoteMonsterInstance = ({
       if (activeAction.current) activeAction.current.paused = true;
       return;
     }
-
+    // Flinch stagger detection
+    if (prevHp.current === -1) {
+      prevHp.current = data.hp;
+    } else if (data.hp < prevHp.current) {
+      flinchEndTime.current = performance.now() + 220; // 220ms stagger lock duration
+      prevHp.current = data.hp;
+    } else {
+      prevHp.current = data.hp;
+    }
     // ─── Density Culling — limit maximum rendered monster count when gathered ──────
     // Disable density culling if overall monster count is low to prevent desync hiding
     const isDensityCulled = (_worldMonstersRef.current && _worldMonstersRef.current.length > 12) &&
@@ -202,9 +203,23 @@ export const RemoteMonsterInstance = ({
     const isCurrentlyVisible = !isDensityCulled && camDistSq <= MONSTER_FAR_SQ;
 
     // Get client terrain elevation to map server's flat 2D movement cleanly onto 3D sculpted landscape
-    const activeEnv = useStore.getState().environment;
-    const terrainConfig = useEditorStore.getState().terrainConfig;
-    const terrainY = getTerrainElevation(data.x, data.z, activeEnv, 24, terrainConfig);
+    let terrainY = data.y;
+    if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
+      const raycastH = (window as any).getGroundHeight(data.x, data.z, -999);
+      if (raycastH !== -999) {
+        terrainY = raycastH;
+      } else {
+        const activeEnv = useStore.getState().environment;
+        const terrainConfig = useEditorStore.getState().terrainConfig;
+        const baseDistance = activeEnv === "STORM" ? 45.0 : 35.0;
+        terrainY = getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
+      }
+    } else {
+      const activeEnv = useStore.getState().environment;
+      const terrainConfig = useEditorStore.getState().terrainConfig;
+      const baseDistance = activeEnv === "STORM" ? 45.0 : 35.0;
+      terrainY = getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
+    }
 
     // Snap position and rotation if culled to keep state synchronized
     if (!isCurrentlyVisible) {
@@ -320,7 +335,9 @@ export const RemoteMonsterInstance = ({
 
     // ─── Determine desired animation state ───────────────────────────────────
     let desiredState = "idle";
+    const isFlinching = performance.now() < flinchEndTime.current;
     if (data.is_dead || serverAnim === "death") desiredState = "death";
+    else if (isFlinching) desiredState = "idle"; // Flinch stagger animation lock
     else if (serverAnim === "attack") desiredState = "attack";
     else if (serverAnim === "run")    desiredState = "run";
     else if (serverAnim === "walk")   desiredState = "walk";
@@ -340,6 +357,17 @@ export const RemoteMonsterInstance = ({
       hasInitializedPrevVisual.current = true;
     } else {
       groupRef.current.position.set(targetX, targetY, targetZ);
+    }
+
+    // Flinch stagger visual feedback: tilt backwards slightly (removed position shake/pushback to prevent jitter)
+    if (isFlinching && desiredState !== "death") {
+      const remainingTime = flinchEndTime.current - performance.now();
+      const factor = Math.max(0, Math.min(1, remainingTime / 220));
+      
+      // Tilt backwards
+      groupRef.current.rotation.x = -0.15 * factor;
+    } else {
+      groupRef.current.rotation.x = 0;
     }
 
     const currentMeshX = groupRef.current.position.x;
@@ -458,7 +486,7 @@ export const RemoteMonsterInstance = ({
 
   return (
     <group ref={groupRef}>
-      <Billboard ref={billboardGroupRef} position={[0, hpBarY, 0]} follow={true} visible={false}>
+      <Billboard ref={billboardGroupRef} position={[0, 0.25, 0]} follow={true} visible={false}>
         <Text
           ref={textRef}
           font="/Press_Start_2P/PressStart2P-Regular.ttf"

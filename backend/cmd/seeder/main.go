@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 
-	"gorm.io/gorm"
 	"mmorpg-backend/internal/domain"
 	"mmorpg-backend/internal/repository/postgres"
 	"mmorpg-backend/pkg/config"
@@ -19,28 +18,51 @@ func main() {
 	// 2. Connect to GORM PostgreSQL
 	db := postgres.NewPostgreSQLConnection(cfg)
 
-	// Ensure the Asset table exists
-	_ = db.AutoMigrate(&domain.Asset{})
+	// 3. Drop all tables CASCADE to ensure zero remnants of deprecated CON and WIS columns
+	fmt.Println("🧹 Dropping all existing database tables CASCADE for a 100% clean Ragnarok schema...")
+	tables := []string{
+		"player_skills",
+		"player_quests",
+		"player_items",
+		"players",
+		"users",
+		"monster_configs",
+		"simulation_settings",
+		"class_configs",
+		"map_configs",
+		"map_items",
+		"assets",
+	}
+	for _, table := range tables {
+		if err := db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s CASCADE", table)).Error; err != nil {
+			log.Fatalf("❌ Gagal membersihkan tabel %s: %v", table, err)
+		}
+	}
+	fmt.Println("✨ Database purged of all legacy fields.")
 
-	// 3. Safe delete existing configurations to force fresh re-seeding
-	fmt.Println("🧹 Clearing existing configurations from PostgreSQL...")
-	if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&domain.Asset{}).Error; err != nil {
-		log.Fatalf("❌ Gagal membersihkan assets lama: %v", err)
-	}
-	if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&domain.MonsterConfig{}).Error; err != nil {
-		log.Fatalf("❌ Gagal membersihkan monster_configs lama: %v", err)
-	}
-	if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&domain.SimulationSetting{}).Error; err != nil {
-		log.Fatalf("❌ Gagal membersihkan simulation_settings lama: %v", err)
-	}
-	if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&domain.ClassConfig{}).Error; err != nil {
-		log.Fatalf("❌ Gagal membersihkan class_configs lama: %v", err)
+	// 4. Force safe schema AutoMigrate clean rebuild
+	fmt.Println("🏗️  Rebuilding pristine iRO Stats schemas...")
+	err := db.AutoMigrate(
+		&domain.User{},
+		&domain.Player{},
+		&domain.PlayerItem{},
+		&domain.PlayerSkill{},
+		&domain.PlayerQuest{},
+		&domain.ClassConfig{},
+		&domain.SimulationSetting{},
+		&domain.MonsterConfig{},
+		&domain.MapConfig{},
+		&domain.MapItem{},
+		&domain.Asset{},
+	)
+	if err != nil {
+		log.Fatalf("❌ Gagal melakukan auto-migrasi skema bersih: %v", err)
 	}
 
-	// 4. Trigger database configurations seed
+	// 5. Trigger database configurations seed
 	if err := postgres.SeedConfigurations(db); err != nil {
 		log.Fatalf("❌ Gagal melakukan seeding database: %v", err)
 	}
 
-	fmt.Println("🚀 Seeding musuh baru yang bervariasi selesai dengan SUKSES!")
+	fmt.Println("🚀 Seeding musuh baru selesai dengan SUKSES! Database 100% bersih dan selaras dengan iRO Stats.")
 }

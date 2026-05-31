@@ -136,7 +136,16 @@ func (c *Client) ReadPump() {
 		case "change_class":
 			c.Hub.gameUsecase.ChangeClass(c.PlayerID, msg.NewClass)
 		case "chat":
-			c.Hub.BroadcastChatMessage(c.Username, msg.Msg)
+			if strings.HasPrefix(msg.Msg, "/reload") || strings.HasPrefix(msg.Msg, "/sync") {
+				err := c.Hub.gameUsecase.SyncPlayerStatsFromDB(c.PlayerID)
+				if err != nil {
+					c.Hub.BroadcastChatMessage("Server", fmt.Sprintf("❌ Gagal sinkronisasi data database untuk %s: %v", c.Username, err))
+				} else {
+					c.Hub.BroadcastChatMessage("Server", fmt.Sprintf("🔄 Sukses sinkronisasi data database untuk %s!", c.Username))
+				}
+			} else {
+				c.Hub.BroadcastChatMessage(c.Username, msg.Msg)
+			}
 		case "telemetry_performance":
 			// Record client performance metrics in Prometheus vectors
 			ClientFPSGauge.WithLabelValues(c.PlayerID, c.Username).Set(msg.AvgFPS)

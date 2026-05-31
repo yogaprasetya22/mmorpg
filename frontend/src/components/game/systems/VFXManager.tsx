@@ -51,8 +51,16 @@ export function VFXProvider({ children }: { children: React.ReactNode }) {
     let idx = -1;
     const eff = effect.toLowerCase();
     
-    // Completely disable basic attack smoke/puff effects on player and enemy
-    if (eff.includes('muzzle') || eff.includes('magic') || eff.includes('hit') || eff.includes('spark')) {
+    // Completely disable basic attack smoke/puff/shockwave effects on player and enemy when attacking/hitting
+    if (
+      eff.includes('muzzle') || 
+      eff.includes('magic') || 
+      eff.includes('hit') || 
+      eff.includes('spark') || 
+      eff.includes('shockwave') || 
+      eff.includes('critical-hit') ||
+      eff.includes('smoke')
+    ) {
       return;
     }
 
@@ -79,21 +87,21 @@ export function VFXProvider({ children }: { children: React.ReactNode }) {
     // Determine scale size based on name to prevent huge default clouds
     let maxScale = 2.0;
     if (eff.includes('shockwave')) {
-      maxScale = 8.0;
+      maxScale = 3.5; // Reduced from 8.0 for a cleaner look
     } else if (eff.includes('dust-mote')) {
       maxScale = 0.22; // Very tiny dust particle
     } else if (eff.includes('mist')) {
-      maxScale = 4.5;
+      maxScale = 2.0; // Reduced from 4.5
     } else if (eff.includes('critical-hit')) {
-      maxScale = 3.2;
+      maxScale = 2.0; // Reduced from 3.2
     } else if (eff.includes('spark')) {
-      maxScale = 1.0;
+      maxScale = 0.8; // Reduced from 1.0
     } else if (eff.includes('muzzle')) {
-      maxScale = 1.4;
+      maxScale = 0.6; // Reduced from 1.4 for subtle gun flare
     } else if (eff.includes('magic')) {
-      maxScale = 1.8;
+      maxScale = 1.0; // Reduced from 1.8
     } else if (eff.includes('hit')) {
-      maxScale = 1.2;
+      maxScale = 0.8; // Reduced from 1.2
     }
     pscale[idx] = maxScale;
 

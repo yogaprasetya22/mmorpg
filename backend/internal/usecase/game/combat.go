@@ -39,6 +39,28 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 		return
 	}
 
+	// Authoritative Attack Rate-Limiting based on dynamic ASPD (Ragnarok Renewal / New World style)
+	// Formula matches frontend: hitsPerSecond = 1 + (ASPD% / 125)
+	// With new RO Renewal ASPD scale (0-1000%), this gives 1-9 hits/sec
+	hitsPerSecond := 1.0 + (float64(playerData.ASPD) / 125.0)
+	cooldownMs := time.Duration(1000.0/hitsPerSecond) * time.Millisecond
+	buffer := 30 * time.Millisecond // Reduced buffer for more responsive combat
+	
+	u.activePlayersMu.Lock()
+	if !playerData.LastBasicAttackTime.IsZero() && time.Since(playerData.LastBasicAttackTime) < cooldownMs - buffer {
+		u.activePlayersMu.Unlock()
+		fmt.Printf("⚠️ Authoritative Attack Blocked (Speedhacking prevention): Player %s attack too fast! Cooldown remaining: %v\n", playerData.Username, cooldownMs - time.Since(playerData.LastBasicAttackTime))
+		return
+	}
+	playerData.LastBasicAttackTime = time.Now()
+
+	// Lift spawn protection early when player starts attacking
+	if !playerData.SpawnProtectedUntil.IsZero() && time.Now().Before(playerData.SpawnProtectedUntil) {
+		playerData.SpawnProtectedUntil = time.Time{}
+		fmt.Printf("🛡️ Player %s menyerang, perlindungan spawn dinonaktifkan awal.\n", playerData.Username)
+	}
+	u.activePlayersMu.Unlock()
+
 	if targetType == "monster" {
 		u.monstersMu.Lock()
 		monster, exists := u.monsters[targetID]
@@ -49,6 +71,13 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 				isDeadState = monster.IsDead
 			}
 			fmt.Printf("⚠️ [DEBUG COMBAT CANCEL] Monster ID %s exists=%v | IsDead=%v\n", targetID, exists, isDeadState)
+			return
+		}
+
+		// RO-X Mechanic: If monster is returning home after leash break, it is invulnerable
+		if monster.AIState == "returning" {
+			u.monstersMu.Unlock()
+			fmt.Printf("🛡️ [COMBAT CANCEL] Monster %s kebal (INVULNERABLE) karena sedang kembali ke sarang!\n", monster.Name)
 			return
 		}
 

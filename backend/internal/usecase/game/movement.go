@@ -2,6 +2,10 @@ package game
 
 import (
 	"context"
+	"fmt"
+	"math"
+	"time"
+
 	"mmorpg-backend/internal/domain"
 )
 
@@ -42,6 +46,16 @@ func (u *gameUsecase) UpdatePlayerMovement(playerID string, x, y, z, rotation fl
 	u.activePlayersMu.Lock()
 	pData, existsProfile := u.activePlayers[playerID]
 	if existsProfile && pData != nil {
+		// Lift spawn protection early if player moves actively (>2.0 units)
+		if !pData.SpawnProtectedUntil.IsZero() && time.Now().Before(pData.SpawnProtectedUntil) {
+			dx := float64(x - pData.LastX)
+			dz := float64(z - pData.LastZ)
+			if math.Sqrt(dx*dx+dz*dz) > 2.0 {
+				pData.SpawnProtectedUntil = time.Time{} // Lift early
+				fmt.Printf("🛡️ Player %s mulai bergerak, perlindungan spawn dinonaktifkan awal.\n", pData.Username)
+			}
+		}
+
 		pData.LastX = x
 		pData.LastY = y
 		pData.LastZ = z

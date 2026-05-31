@@ -59,7 +59,7 @@ export function useArenaGameState() {
   const deathOverlayRef = useRef<DeathOverlayRef>(null);
 
   const lastPlayerHp = useRef(0);
-  const playerStatsRef = useRef({ hp: -1, maxHp: -1 });
+  const playerStatsRef = useRef({ hp: -1, maxHp: -1, gold: -1, level: -1, aspd: 150 });
 
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -241,6 +241,12 @@ export function useArenaGameState() {
       if (me && typeof (me as any).hp !== "undefined") {
         const rawHP = (me as any).hp;
         const rawMaxHP = (me as any).maxHp;
+        const rawGold = (me as any).gold;
+        const rawLevel = (me as any).level;
+        const rawASPD = (me as any).aspd ?? 150;
+        
+        playerStatsRef.current.aspd = rawASPD;
+
         if (playerStatsRef.current.hp !== rawHP || playerStatsRef.current.maxHp !== rawMaxHP) {
           if (lastPlayerHp.current > 0 && rawHP < lastPlayerHp.current) {
             (window as any).triggerCameraShake?.(0.35);
@@ -250,6 +256,14 @@ export function useArenaGameState() {
           playerStatsRef.current.maxHp = rawMaxHP;
           statsHudRef.current?.updateHpMp(rawHP, rawMaxHP);
           deathOverlayRef.current?.setDead(rawHP <= 0);
+        }
+        // Real-time gold & level sync via WebSocket — no more waiting for 5s HTTP profile poll
+        if (typeof rawGold === 'number' && typeof rawLevel === 'number') {
+          if (playerStatsRef.current.gold !== rawGold || playerStatsRef.current.level !== rawLevel) {
+            playerStatsRef.current.gold = rawGold;
+            playerStatsRef.current.level = rawLevel;
+            statsHudRef.current?.updateStats({ gold: rawGold, level: rawLevel });
+          }
         }
       }
 
@@ -433,7 +447,7 @@ export function useArenaGameState() {
     localStorage.removeItem("game_active_char_id");
     setSelectedCharacter(null);
     statsHudRef.current?.updateStats({ hp: 100, max_hp: 100, mp: 50, max_mp: 50, level: 1, gold: 0, username: "Hero" });
-    playerStatsRef.current = { hp: -1, maxHp: -1 };
+    playerStatsRef.current = { hp: -1, maxHp: -1, gold: -1, level: -1, aspd: 150 };
     setIsCreatingChar(false);
     setSuccessMsg("");
     setErrorMsg("");
@@ -508,7 +522,7 @@ export function useArenaGameState() {
     setToken("");
     setSelectedCharacter(null);
     statsHudRef.current?.updateStats({ hp: 100, max_hp: 100, mp: 50, max_mp: 50, level: 1, gold: 0, username: "Hero" });
-    playerStatsRef.current = { hp: -1, maxHp: -1 };
+    playerStatsRef.current = { hp: -1, maxHp: -1, gold: -1, level: -1, aspd: 150 };
     setCharacters([]);
     setIsCreatingChar(false);
     connectedPlayersRef.current = [];
@@ -516,7 +530,7 @@ export function useArenaGameState() {
     setSuccessMsg("");
   };
 
-  const handleAuthoritativeAttack = (monsterId: string, damage?: number, isCrit?: boolean) => {
+  const handleAuthoritativeAttack = (monsterId: string, damage?: number, isCrit?: boolean, isMagic?: boolean, customColor?: string) => {
     sendPlayerAttack("monster", monsterId, damage, isCrit);
     const targetMonster = worldMonstersRef.current.find(m => m.id === monsterId);
     if (targetMonster && damageQueue.current) {
@@ -528,7 +542,7 @@ export function useArenaGameState() {
       const posZ = visualPos ? visualPos.z : targetMonster.z;
       damageQueue.current.push({
         value: Math.round(dmg), position: [posX, posY, posZ],
-        isCrit: crit, color: crit ? "#ff3b30" : "#ffcc00",
+        isCrit: crit, isMagic: !!isMagic, color: customColor || (crit ? "#ff3b30" : "#ffcc00"),
         timestamp: performance.now()
       });
       if (crit) {

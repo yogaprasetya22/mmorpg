@@ -70,7 +70,6 @@ const _originVec  = new THREE.Vector3();
 const _fwdVec     = new THREE.Vector3();
 const _fwdAxis        = new THREE.Vector3(0, 0, 1);
 const _tempFwd        = new THREE.Vector3();
-const _tempFwd2       = new THREE.Vector3();
 const _shoulderOffsetVec = new THREE.Vector3();
 
 // Snappy Jump Gating Math Objects
@@ -111,7 +110,7 @@ const ZOOM_MAX   = 20.0;
 const ZOOM_LERP  = 8.0;
 const EYE_HEIGHT = 1.4; // Slightly lower for better center framing
 const SHOULDER_OFFSET = 0.0; // Perfectly centered horizontally
-const AUTO_FIRE_RATE  = 750;   // ms between auto-shots
+// AUTO_FIRE_RATE is now DYNAMIC — derived from attackDuration (ASPD) inside useFrame
 const AUTO_AIM_RADIUS = 40.0;  // world units detection radius (MM Role)
 const AUTO_AIM_RSQ    = AUTO_AIM_RADIUS * AUTO_AIM_RADIUS;
 
@@ -123,37 +122,20 @@ const _raycaster = new THREE.Raycaster();
 // ─── MMORPG STATE MACHINE ────────────────────────────────────────────────────
 const charState = new Uint8Array(1);     // 0=NORMAL, 1=ATTACKING, 2=CHASING
 const attackTimer = new Float64Array(1); // Time spent in attack animation
-const ATTACK_DURATION = 600;             // ms animation lock duration
+// ATTACK_DURATION has been dynamized based on dynamic ASPD formula
 const _chaseDir = new THREE.Vector3();
 const _camProjDir = new THREE.Vector3();
 const _camRightDir = new THREE.Vector3();
 
 
-// ─── COMPONENT ───────────────────────────────────────────────────────────────
-export const PlayerController = ({
-  modelPath = '/assets-model/Chef_Male.glb',
-  playerClass = 'Warrior',
-  damageQueue,
-  settingsRef,
-  paused = false,
-  unitRegistry: _unitRegistry,
-  dealPlayerDamage,
-  mmSpellsRef,
-  spellsRef,
-  fighterSpellsRef,
-  tankSpellsRef,
-  assassinSpellsRef,
-  simTimeRef,
-  sendPlayerState,
-  playerStats,
-}: {
+export const PlayerController = (props: {
+  paused?: boolean;
   modelPath?: string;
   playerClass?: string;
   damageQueue?: React.RefObject<any[]>;
   settingsRef: React.RefObject<any>;
-  paused?: boolean;
   unitRegistry?: React.RefObject<UnitRuntimeData[]>;
-  dealPlayerDamage?: (targetId: string, damage: number, isCrit?: boolean) => void;
+  dealPlayerDamage?: (targetId: string, damage: number, isCrit?: boolean, isMagic?: boolean, customColor?: string) => void;
   mmSpellsRef?: React.RefObject<any[]>;
   spellsRef?: React.RefObject<any[]>;
   fighterSpellsRef?: React.RefObject<any[]>;
@@ -162,7 +144,26 @@ export const PlayerController = ({
   simTimeRef?: React.RefObject<number>;
   sendPlayerState?: (state: { x: number; y: number; z: number; rotation: number; animation: string; targetId?: string }) => void;
   playerStats?: any;
+  playerStatsRef?: React.RefObject<any>;
 }) => {
+  const {
+    paused = false,
+    modelPath = '/assets-model/Chef_Male.glb',
+    playerClass = 'Warrior',
+    damageQueue,
+    settingsRef,
+    unitRegistry,
+    dealPlayerDamage,
+    mmSpellsRef,
+    spellsRef,
+    fighterSpellsRef,
+    tankSpellsRef,
+    assassinSpellsRef,
+    simTimeRef,
+    sendPlayerState,
+    playerStats,
+    playerStatsRef,
+  } = props as any;
   const poolRef      = useRef<ProjectilePoolHandle>(null);
   const ecctrlRef    = useRef<any>(null);
   const characterRef = useRef<THREE.Group>(null!);
@@ -175,6 +176,8 @@ export const PlayerController = ({
   const syncAccumulator = useRef(0);
   const lastHpRef = useRef(1000);
   const lastNearestTargetId = useRef<string>("");
+  const [isTargetingAoE, setIsTargetingAoE] = useState(false);
+  const aoeTargetPos = useRef(new THREE.Vector3());
   const [isSpawning, setIsSpawning] = useState(true);
 
   // Reset spawn stabilizer when unpaused (e.g. when loading screen fades out)
@@ -191,6 +194,28 @@ export const PlayerController = ({
     }
   }, [paused]);
 
+  // ─── AoE Targeting Mouse Handler ───
+  useEffect(() => {
+    const handleMouseDown = (e: MouseEvent) => {
+      if (!isTargetingAoE) return;
+
+      if (e.button === 0) { // Left-click: CAST!
+        e.preventDefault();
+        e.stopPropagation();
+        (window as any).triggerAoECast = true;
+      } else if (e.button === 2) { // Right-click: CANCEL!
+        e.preventDefault();
+        e.stopPropagation();
+        setIsTargetingAoE(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handleMouseDown, true);
+    return () => {
+      window.removeEventListener('mousedown', handleMouseDown, true);
+    };
+  }, [isTargetingAoE]);
+
   const activeEnv = useEditorStore((s) => s.environment);
   const terrainConfig = useEditorStore((s) => s.terrainConfig);
 
@@ -200,7 +225,7 @@ export const PlayerController = ({
   }, [activeEnv, terrainConfig]);
 
   // ─── ASSET LOADING ────────────────────────────────────────────────────────
-  const { scene, animations } = useGLTF(modelPath, true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const { scene, animations } = useGLTF(modelPath, true, true, (l: any) => (l as any).setMeshoptDecoder(MeshoptDecoder)) as any;
   const clone = useMemo(() => {
     const cloned = SkeletonUtils.clone(scene);
     cloned.traverse((child: any) => {
@@ -314,11 +339,29 @@ export const PlayerController = ({
 
   const isDead = playerStats && typeof playerStats.hp !== 'undefined' && playerStats.hp <= 0;
 
-  // ─── SINGLE USEFRAME: Camera + Auto-Aim Combat (priority 1 = runs AFTER physics) ──
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
+    // === RAGNAROK X / NEW WORLD SPEED SYSTEM REFACTOR ===
+    // 1. ATRIBUT UTAMA (FINAL ASPD PERCENT FROM AUTHORITATIVE BACKEND)
+    // Membaca stats ASPD langsung dari backend untuk konsistensi mekanik penuh
+    const finalASPDPercent = playerStatsRef?.current?.aspd ?? (playerStats?.aspd ?? 150);
+
+    // 2. KONVERSI KE HITS PER SECOND (KECEPATAN PUKULAN)
+    // Setiap kenaikan 125% Final ASPD memberikan tambahan 1 pukulan per detik di atas basis dasar 1 hit/detik
+    const hitsPerSecond = 1 + (finalASPDPercent / 125);
+    
+    // Menghitung durasi satu siklus serangan (dalam milidetik) untuk animation lock
+    const attackDuration = 1000 / hitsPerSecond;
+
+    if (isTargetingAoE) {
+      _raycaster.setFromCamera(state.pointer, camera);
+      const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -_charPos.y);
+      _raycaster.ray.intersectPlane(groundPlane, aoeTargetPos.current);
+    }
 
     // ─── CHECK DEATH BLOCK & RESURRECTION TELEPORT ───
-    const currentHp = playerStats && typeof playerStats.hp !== 'undefined' ? playerStats.hp : 1000;
+    const currentHp = playerStatsRef?.current && playerStatsRef.current.hp >= 0
+      ? playerStatsRef.current.hp
+      : (playerStats && typeof playerStats.hp !== 'undefined' ? playerStats.hp : 1000);
 
     // Resurrection Teleport on client side when HP resets to full
     if (lastHpRef.current <= 0 && currentHp > 0) {
@@ -577,13 +620,17 @@ export const PlayerController = ({
     const clickedId = (window as any).clickedTargetId;
     let clickedTarget: UnitRuntimeData | null = null;
     if (clickedId) {
-      const units = _unitRegistry?.current || [];
-      const found = units.find(u => u.id === clickedId && u.type === 'enemy' && u.isActive && !u.isDying);
+      const units = unitRegistry?.current || [];
+      const found = units.find((u: any) => u.id === clickedId && u.type === 'enemy' && u.isActive && !u.isDying);
       if (found) {
         clickedTarget = found;
+        (window as any).isAutoAttacking = true;
       } else {
         (window as any).clickedTargetId = null; // Clear if target is dead/inactive
+        (window as any).isAutoAttacking = false;
       }
+    } else {
+      (window as any).isAutoAttacking = false;
     }
 
     if (clickedTarget) {
@@ -621,7 +668,7 @@ export const PlayerController = ({
       (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
     const keys = isChatFocus ? {} : getKeys();
     const isMovingInput = keys.forward || keys.backward || keys.leftward || keys.rightward;
-    const isAttackInput = keys.action1 || (window as any).hasAttackIntent;
+    const isAttackInput = keys.action1 || (window as any).hasAttackIntent || ((window as any).isAutoAttacking && !isMovingInput);
     if ((window as any).hasAttackIntent) {
       (window as any).hasAttackIntent = false;
     }
@@ -691,72 +738,57 @@ export const PlayerController = ({
 
     // ── Execute Active Class Skill (Q / 1 Key) ──
     if (isSkillInput && now - lastSkillTime > SKILL_COOLDOWN) {
-      if (!hasTarget[0] || !nearestTarget) {
-        const alertBox = document.getElementById("no-target-alert");
-        if (alertBox) {
-          alertBox.style.opacity = "1";
-          if ((window as any)._targetAlertTimeout) {
-            clearTimeout((window as any)._targetAlertTimeout);
-          }
-          (window as any)._targetAlertTimeout = setTimeout(() => {
-            alertBox.style.opacity = "0";
-          }, 1200);
-        }
-        return;
+      if (!isTargetingAoE) {
+        setIsTargetingAoE(true);
+        console.log("🎯 Entered AoE Ground Targeting Mode. Left click to cast, right click to cancel.");
       }
+    }
 
-      // Check if we are facing the target first before starting skill animation / damage
-      const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
-      const fwd = _tempFwd.copy(_fwdAxis);
-      fwd.applyQuaternion(characterRef.current.quaternion);
-      if (characterRef.current.parent) {
-        fwd.applyQuaternion(characterRef.current.parent.quaternion);
-      }
-      const worldRot = Math.atan2(fwd.x, fwd.z);
-      let angleDiff = worldTargetAngle - worldRot;
-      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+    if (isTargetingAoE && (window as any).triggerAoECast) {
+      (window as any).triggerAoECast = false;
+      (window as any).lastSkillTime = now;
+      setIsTargetingAoE(false);
 
-      if (Math.abs(angleDiff) < 0.6) {
-        (window as any).lastSkillTime = now;
+      const mockTarget: any = {
+        id: "ground_target",
+        name: "Ground",
+        type: "enemy",
+        isActive: true,
+        isDying: false,
+        hp: 9999,
+        maxHp: 9999,
+        position: [aoeTargetPos.current.x, aoeTargetPos.current.y, aoeTargetPos.current.z],
+        level: 1,
+        poolIdx: 0,
+      };
 
-        const ctx: CombatExecutionContext = {
-          charPos: _charPos,
-          originVec: _originVec,
-          camDir: _camDir,
-          combo: 0,
-          playerStats,
-          dealPlayerDamage,
-          spawnVFX,
-          camera,
-          simTimeRef,
-          mmSpellsRef,
-          mmSpellPtr,
-          fighterSpellsRef,
-          fighterSpellPtr,
-          assassinSpellsRef,
-          assassinSpellPtr,
-          tankSpellsRef,
-          tankSpellPtr,
-          spellsRef,
-          spellsPtr,
-          poolRef,
-          grid,
-          ecctrlRef,
-          cameraShake: (window as any).cameraShake,
-        };
+      const ctx: CombatExecutionContext = {
+        charPos: _charPos,
+        originVec: _originVec,
+        camDir: _camDir,
+        combo: 0,
+        playerStats,
+        dealPlayerDamage,
+        spawnVFX,
+        camera,
+        simTimeRef,
+        mmSpellsRef,
+        mmSpellPtr,
+        fighterSpellsRef,
+        fighterSpellPtr,
+        assassinSpellsRef,
+        assassinSpellPtr,
+        tankSpellsRef,
+        tankSpellPtr,
+        spellsRef,
+        spellsPtr,
+        poolRef,
+        grid,
+        ecctrlRef,
+        cameraShake: (window as any).cameraShake,
+      };
 
-        executeClassSkill(playerClass, nearestTarget as any, ctx);
-      } else {
-        // Must turn to face the target first
-        (window as any).pendingSkillExecution = true;
-        charState[0] = 3; // TURNING_TO_TARGET
-        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
-        const toast = document.getElementById("facing-alignment-alert");
-        if (toast) {
-          toast.style.opacity = "1";
-        }
-      }
+      executeClassSkill(playerClass, mockTarget, ctx);
     }
 
     // Cooldown overlay DOM synchronizer
@@ -794,7 +826,7 @@ export const PlayerController = ({
     }
 
     // Check Input triggers
-    if (isAttackInput && now - autoFireTimer[0] > AUTO_FIRE_RATE) {
+    if (isAttackInput && now - autoFireTimer[0] > attackDuration) {
       if (hasTarget[0]) {
         const dx = aimTargetX[0] - _charPos.x;
         const dz = aimTargetZ[0] - _charPos.z;
@@ -805,7 +837,7 @@ export const PlayerController = ({
           // 4. Otomatis Mengejar Musuh
           charState[0] = 2; // CHASING
         } else {
-          // Check if facing target first
+          // Rotate character to face target instantly
           const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
           const fwd = _tempFwd.copy(_fwdAxis);
           fwd.applyQuaternion(characterRef.current.quaternion);
@@ -816,34 +848,34 @@ export const PlayerController = ({
           let angleDiff = worldTargetAngle - worldRot;
           while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
           while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+          characterRef.current.rotation.y += angleDiff;
 
-          if (Math.abs(angleDiff) < 0.6) {
-            // 2. Combo Diam di Tempat (Reset timer jika serang lagi)
-            charState[0] = 1; // ATTACKING
-            attackTimer[0] = now;
-            autoFireTimer[0] = now;
-            ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
-            // Hide toast — attack is firing normally
-            const toastOk = document.getElementById("facing-alignment-alert");
-            if (toastOk) toastOk.style.opacity = "0";
-            executeAttack(nearestTarget);
-          } else {
-            // Need to rotate/turn to face target first
-            charState[0] = 3; // TURNING_TO_TARGET
-            ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
-            const toast = document.getElementById("facing-alignment-alert");
-            if (toast) {
-              toast.style.opacity = "1";
-            }
-          }
+          // Start Attacking immediately
+          charState[0] = 1; // ATTACKING
+          attackTimer[0] = now;
+          autoFireTimer[0] = now;
+          ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+          
+          // Hide toast
+          const toastOk = document.getElementById("facing-alignment-alert");
+          if (toastOk) toastOk.style.opacity = "0";
+          
+          executeAttack(nearestTarget);
         }
       } else {
-        // Memukul angin
-        charState[0] = 1; // ATTACKING
-        attackTimer[0] = now;
-        autoFireTimer[0] = now;
-        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
-        executeAttack(null);
+        if ((window as any).isAutoAttacking) {
+          // Stop auto-attacking if target is lost/dead
+          (window as any).isAutoAttacking = false;
+          (window as any).hasAttackIntent = false;
+          charState[0] = 0;
+        } else {
+          // Memukul angin (Manual swing when clicking without target)
+          charState[0] = 1; // ATTACKING
+          attackTimer[0] = now;
+          autoFireTimer[0] = now;
+          ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+          executeAttack(null);
+        }
       }
     }
 
@@ -882,15 +914,31 @@ export const PlayerController = ({
           else if (actions['1H_Melee_Attack_Chop']) targetAnim = '1H_Melee_Attack_Chop';
         }
         const shootAction = actions[targetAnim] || actions[animationSet.shoot];
-        if (shootAction && shootAction !== activeAction.current) {
-          shootAction.reset().play();
-          if (activeAction.current) activeAction.current.crossFadeTo(shootAction, 0.1, true);
-          activeAction.current = shootAction;
+        if (shootAction) {
+          // 5. REFACTOR ANIMASI GAME (ANIMATION SPEED SCALE)
+          // Mengambil durasi asli file animasi menyerang dalam satuan detik
+          const defaultAnimationDuration = shootAction.getClip()?.duration || 1.0;
+          
+          // Rumus: AnimationSpeedScale = HitsPerSecond * DefaultAnimationDuration
+          // Menyesuaikan kecepatan pemutaran animasi agar sinkron sempurna dengan pukulan per detik!
+          const animationSpeedScale = hitsPerSecond * defaultAnimationDuration;
+
+          if (shootAction !== activeAction.current) {
+            shootAction.reset().play();
+            if (activeAction.current) activeAction.current.crossFadeTo(shootAction, 0.1, true);
+            activeAction.current = shootAction;
+          }
+          
+          // Menerapkan nilai pengali kecepatan animasi ke Three.js AnimationAction
+          shootAction.timeScale = animationSpeedScale;
         }
 
         // Check if animation lock is over
-        if (now - attackTimer[0] > ATTACK_DURATION) {
-          charState[0] = 0; // Return to normal
+        if (now - attackTimer[0] > attackDuration) {
+          // If the player is still holding the attack button, keep them in the ATTACKING state to prevent animation stuttering
+          if (!isAttackInput) {
+            charState[0] = 0; // Return to normal
+          }
         }
       }
     } else if (charState[0] === 2) { 
@@ -907,7 +955,7 @@ export const PlayerController = ({
         // While chasing, allow 50% more range area tolerance to immediately trigger melee attack swing without infinite chasing run lag
         const effectiveRangeSq = activeRangeSq * 1.5;
         if (distSq <= effectiveRangeSq) {
-          // Reached Target! Check if facing target first
+          // Reached Target! Rotate character to face target instantly
           const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
           const fwd = _tempFwd.copy(_fwdAxis);
           fwd.applyQuaternion(characterRef.current.quaternion);
@@ -918,25 +966,18 @@ export const PlayerController = ({
           let angleDiff = worldTargetAngle - worldRot;
           while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
           while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+          characterRef.current.rotation.y += angleDiff;
 
-          if (Math.abs(angleDiff) < 0.6) {
-            // Reached Target! Stop and Attack
-            charState[0] = 1;
-            attackTimer[0] = now;
-            autoFireTimer[0] = now;
-            ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
-            const toastOk2 = document.getElementById("facing-alignment-alert");
-            if (toastOk2) toastOk2.style.opacity = "0";
-            executeAttack(nearestTarget);
-          } else {
-            // Reached target but not facing! Turn to face them first
-            charState[0] = 3; // TURNING_TO_TARGET
-            ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
-            const toast = document.getElementById("facing-alignment-alert");
-            if (toast) {
-              toast.style.opacity = "1";
-            }
-          }
+          // Reached Target! Stop and Attack
+          charState[0] = 1;
+          attackTimer[0] = now;
+          autoFireTimer[0] = now;
+          ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+          
+          const toastOk2 = document.getElementById("facing-alignment-alert");
+          if (toastOk2) toastOk2.style.opacity = "0";
+          
+          executeAttack(nearestTarget);
         } else {
           // Keep Chasing (Spoof Joystick Input to run to target)
           _chaseDir.set(dx, 0, dz).normalize();
@@ -968,111 +1009,7 @@ export const PlayerController = ({
         charState[0] = 0;
         ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
       }
-    } else if (charState[0] === 3) {
-      // == STATE: TURNING_TO_TARGET ==
-      if (isMovingInput || keys.jump) {
-        charState[0] = 0; // Cancel turning/attack if player moves manually or jumps
-        (window as any).pendingSkillExecution = false;
-        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
-        const toast = document.getElementById("facing-alignment-alert");
-        if (toast) toast.style.opacity = "0";
-      } else if (hasTarget[0]) {
-        // Lock horizontal velocity
-        const vel = characterStatus.linvel;
-        ecctrlRef.current?.setLinVel({ x: 0, y: vel.y, z: 0 } as any);
-        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
-        
-        // Rotate towards target
-        const worldTargetAngle = Math.atan2(aimTargetX[0] - _charPos.x, aimTargetZ[0] - _charPos.z);
-        const fwd = _tempFwd.copy(_fwdAxis);
-        fwd.applyQuaternion(characterRef.current.quaternion);
-        if (characterRef.current.parent) {
-          fwd.applyQuaternion(characterRef.current.parent.quaternion);
-        }
-        const worldRot = Math.atan2(fwd.x, fwd.z);
-        
-        let diff = worldTargetAngle - worldRot;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        
-        characterRef.current.rotation.y += diff * 18 * delta;
-
-        // Check if we are facing the target now
-        const fwdAfter = _tempFwd2.copy(_fwdAxis);
-        fwdAfter.applyQuaternion(characterRef.current.quaternion);
-        if (characterRef.current.parent) {
-          fwdAfter.applyQuaternion(characterRef.current.parent.quaternion);
-        }
-        const worldRotAfter = Math.atan2(fwdAfter.x, fwdAfter.z);
-        let angleDiff = worldTargetAngle - worldRotAfter;
-        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-        
-        if (Math.abs(angleDiff) < 0.6) {
-          // Hide toast
-          const toast = document.getElementById("facing-alignment-alert");
-          if (toast) toast.style.opacity = "0";
-
-          // Check if we wanted to execute a skill
-          if ((window as any).pendingSkillExecution && nearestTarget) {
-            (window as any).pendingSkillExecution = false;
-            (window as any).lastSkillTime = performance.now();
-            
-            // Build the execution context
-            _originVec.set(_charPos.x, _charPos.y + 1.35, _charPos.z);
-            camera.getWorldDirection(_camDir);
-            _camDir.set(
-              aimTargetX[0] - _charPos.x,
-              aimTargetY[0] - (_charPos.y + 1.35),
-              aimTargetZ[0] - _charPos.z,
-            ).normalize();
-            _fwdVec.copy(_camDir).multiplyScalar(0.7);
-            _originVec.add(_fwdVec);
-            
-            const ctx: CombatExecutionContext = {
-              charPos: _charPos,
-              originVec: _originVec,
-              camDir: _camDir,
-              combo: 0,
-              playerStats,
-              dealPlayerDamage,
-              spawnVFX,
-              camera,
-              simTimeRef,
-              mmSpellsRef,
-              mmSpellPtr,
-              fighterSpellsRef,
-              fighterSpellPtr,
-              assassinSpellsRef,
-              assassinSpellPtr,
-              tankSpellsRef,
-              tankSpellPtr,
-              spellsRef,
-              spellsPtr,
-              poolRef,
-              grid,
-              ecctrlRef,
-              cameraShake: (window as any).cameraShake,
-            };
-            executeClassSkill(playerClass, nearestTarget as any, ctx);
-            charState[0] = 0; // Skill executes and goes to normal
-          } else {
-            // Normal attack
-            charState[0] = 1; // Transition to ATTACKING
-            attackTimer[0] = performance.now();
-            autoFireTimer[0] = performance.now();
-            executeAttack(nearestTarget);
-          }
-        }
-      } else {
-        // Target lost
-        charState[0] = 0;
-        (window as any).pendingSkillExecution = false;
-        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
-        const toast = document.getElementById("facing-alignment-alert");
-        if (toast) toast.style.opacity = "0";
-      }
-    } 
+    }
 
     if (charState[0] === 0) {
       // == STATE: NORMAL ==
@@ -1116,49 +1053,43 @@ export const PlayerController = ({
         }
       }
 
-      // ─── FRAME-LOOP ANIMATION SYNCHRONIZER ───
-      // Poll animation store directly (no useEffect, no React scheduling latency).
-      // This catches state changes on the SAME frame physics transitions happen.
-      const currentAnimStatus = useAnimationStore.getState().animationStatus;
-      if (currentAnimStatus !== prevAnimStatus.current) {
-        prevAnimStatus.current = currentAnimStatus;
-
-        const animName   = ecctrlAnimationSet[currentAnimStatus] ?? animationSet.idle;
-        const nextAction = actions[animName];
-
-        if (nextAction && nextAction !== activeAction.current) {
-          const isJump = animName.toLowerCase().includes('jump');
-          // Ultra-fast transition for jump (0.04s) so it feels instant;
-          // standard crossfade (0.12s) for walk/run/idle to remain smooth.
-          const crossfadeDuration = isJump ? 0.04 : 0.12;
-
-          nextAction.reset().play();
-          if (activeAction.current) {
-            activeAction.current.crossFadeTo(nextAction, crossfadeDuration, true);
-          } else {
-            nextAction.fadeIn(crossfadeDuration);
-          }
-          activeAction.current = nextAction;
-        }
-      }
-
-      // Revert animation if stuck in shoot or melee attack pose
-      const isStuckAttack = activeAction.current === actions[animationSet.shoot] ||
-                            (actions['SwordSlash'] && activeAction.current === actions['SwordSlash']) ||
-                            (actions['1H_Melee_Attack_Chop'] && activeAction.current === actions['1H_Melee_Attack_Chop']);
-      if (isStuckAttack) {
-        const animName   = ecctrlAnimationSet[currentAnimStatus ?? useAnimationStore.getState().animationStatus] ?? animationSet.idle;
-        const nextAction = actions[animName];
-        if (nextAction && nextAction !== activeAction.current) {
-          nextAction.reset().fadeIn(0.1).play();
-          if (activeAction.current) activeAction.current.crossFadeTo(nextAction, 0.12, true);
-          activeAction.current = nextAction;
-        }
-      }
-
       // Revert local rotation offset
       const resetLerpT = Math.min(1, 10 * delta);
       characterRef.current.rotation.y += (0 - characterRef.current.rotation.y) * resetLerpT;
+    }
+
+    // ─── FRAME-LOOP ANIMATION SYNCHRONIZER ───
+    // Poll animation store directly (no useEffect, no React scheduling latency).
+    // This catches state changes on the SAME frame physics transitions happen.
+    const currentAnimStatus = useAnimationStore.getState().animationStatus;
+    const expectedAnimName = ecctrlAnimationSet[currentAnimStatus] ?? animationSet.idle;
+    const expectedAction = actions[expectedAnimName];
+
+    const isAttackingOrCasting = charState[0] === 1 || (window as any).pendingSkillExecution;
+
+    if (!isAttackingOrCasting) {
+      // If not attacking/casting, ensure we are playing the correct movement/idle animation
+      if (expectedAction && (currentAnimStatus !== prevAnimStatus.current || activeAction.current !== expectedAction)) {
+        prevAnimStatus.current = currentAnimStatus;
+
+        const isJump = expectedAnimName.toLowerCase().includes('jump');
+        // Ultra-fast transition for jump (0.04s) so it feels instant;
+        // standard crossfade (0.12s) for walk/run/idle to remain smooth.
+        const crossfadeDuration = isJump ? 0.04 : 0.12;
+
+        expectedAction.reset().play();
+        if (activeAction.current && activeAction.current !== expectedAction) {
+          activeAction.current.crossFadeTo(expectedAction, crossfadeDuration, true);
+        } else if (!activeAction.current) {
+          expectedAction.fadeIn(crossfadeDuration);
+        }
+        activeAction.current = expectedAction;
+      }
+    } else {
+      // Track the physics animation status so that when we stop attacking, we know if it changed.
+      if (currentAnimStatus !== prevAnimStatus.current) {
+        prevAnimStatus.current = currentAnimStatus;
+      }
     }
 
     // Adjust animation timescale dynamically to match actual physics velocity
@@ -1169,11 +1100,18 @@ export const PlayerController = ({
       const linvel = characterStatus.linvel;
       const horizontalSpeed = Math.sqrt(linvel.x * linvel.x + linvel.z * linvel.z);
 
-      if (desired.includes("walk")) {
+      const isAttackAnim = activeAction.current === actions[animationSet.shoot] ||
+                           (actions['SwordSlash'] && activeAction.current === actions['SwordSlash']) ||
+                           (actions['1H_Melee_Attack_Chop'] && activeAction.current === actions['1H_Melee_Attack_Chop']);
+
+      if (isAttackAnim) {
+        // Do not override attack animation timescale with movement speed calculations
+      } else if (desired.includes("walk")) {
         activeAction.current.timeScale = Math.max(0.4, Math.min(1.2, horizontalSpeed / 3.0));
       } else if (desired.includes("run")) {
         activeAction.current.timeScale = Math.max(0.4, Math.min(1.4, horizontalSpeed / 5.5));
-      } else {
+      } else if (!(window as any).pendingSkillExecution) {
+        // Only reset to 1.0 if NOT attacking/casting (so we don't overwrite ASPD scaling!)
         activeAction.current.timeScale = 1.0;
       }
     }
@@ -1226,6 +1164,19 @@ export const PlayerController = ({
           <primitive object={clone} />
         </group>
       </BVHEcctrl>
+
+      {isTargetingAoE && (
+        <group position={[aoeTargetPos.current.x, aoeTargetPos.current.y + 0.05, aoeTargetPos.current.z]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh>
+            <ringGeometry args={[2.5, 2.7, 32]} />
+            <meshBasicMaterial color="#ec4899" side={THREE.DoubleSide} transparent opacity={0.8} />
+          </mesh>
+          <mesh>
+            <circleGeometry args={[2.5, 32]} />
+            <meshBasicMaterial color="#ec4899" side={THREE.DoubleSide} transparent opacity={0.15} />
+          </mesh>
+        </group>
+      )}
     </>
   );
 };

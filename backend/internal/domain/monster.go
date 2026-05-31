@@ -40,6 +40,7 @@ type Monster struct {
 	GoldDrop       int       `json:"gold_drop" msgpack:"gold_drop"`
 	XPDrop         int       `json:"xp_drop" msgpack:"xp_drop"`
 	LastAttackTime time.Time `json:"-" msgpack:"-"` // Tracks server-authoritative attack cooldown
+	LastHitTime    time.Time `json:"-" msgpack:"-"` // Tracks server-authoritative stagger/flinch lock
 }
 
 func (m *Monster) TakeDamage(amount float32) {
@@ -47,6 +48,7 @@ func (m *Monster) TakeDamage(amount float32) {
 		return
 	}
 	m.HP -= amount
+	m.LastHitTime = time.Now()
 	if m.HP <= 0 {
 		m.HP = 0
 		m.IsDead = true

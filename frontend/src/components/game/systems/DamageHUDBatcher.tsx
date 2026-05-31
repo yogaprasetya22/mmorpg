@@ -277,8 +277,17 @@ export function DamageHUDBatcher({ damageQueue }: { damageQueue: React.RefObject
                     }
                 }
 
-                // Parse team color from event — boost to full brightness via HSL
-                e.teamColor.set(ev.color ?? '#ffffff');
+                // Determine team color based on user request (normal white, crit red/yellow, magic/elemental blue/green/cyan)
+                const isElemental = ev.color === '#00e5ff' || ev.isMagic || isMagic;
+                if (isHeal) {
+                    e.teamColor.set('#00ff33'); // Bright Green for heals
+                } else if (isCrit) {
+                    e.teamColor.set('#ff2200'); // Vivid Red for crits
+                } else if (isElemental) {
+                    e.teamColor.set('#00e5ff'); // Electric Blue/Cyan for elemental/magic hits
+                } else {
+                    e.teamColor.set('#ffffff'); // Standard pure white for normal hits
+                }
                 {
                     // Ensure max lightness so it's vivid against dark background
                     const hsl = { h: 0, s: 0, l: 0 };
@@ -286,17 +295,31 @@ export function DamageHUDBatcher({ damageQueue }: { damageQueue: React.RefObject
                     e.teamColor.setHSL(hsl.h, Math.max(hsl.s, 0.85), Math.max(hsl.l, 0.72));
                 }
 
-                // Physics
-                const dx = (Math.random() - 0.5) * (isCrit ? 2.0 : 0.9);
-                const dz = (Math.random() - 0.5) * 0.4;
-                const vy = isCrit ? 8.5 : 5.2;
+                // Physics (RO:TNL Style - gentle arc)
+                const dx = (Math.random() - 0.5) * 0.4;
+                const dz = (Math.random() - 0.5) * 0.2;
+                const vy = isCrit ? 4.5 : 2.5;
+
+                // Vertical Cascade Offset: prevents damage numbers stacking in high ASPD scenarios
+                let targetYOffset = isCrit ? 3.8 : 2.5;
+                let overlapCount = 0;
+                for (let prevI = 0; prevI < MAX_EVENTS; prevI++) {
+                    const prevE = evts[prevI];
+                    if (prevE.alive) {
+                        const distSq = (prevE.wx - ev.position[0])**2 + (prevE.wz - ev.position[2])**2;
+                        if (distSq < 1.0 && Math.abs(prevE.wy - (ev.position[1] + targetYOffset)) < 1.8) {
+                            overlapCount++;
+                        }
+                    }
+                }
+                targetYOffset += overlapCount * 0.72;
 
                 e.alive     = true;
                 e.startTime = now;
-                e.duration  = isCrit ? 1.55 : 1.0;
-                e.wx = ev.position[0]; e.wy = ev.position[1] + (isCrit ? 4.0 : 2.8); e.wz = ev.position[2];
+                e.duration  = isCrit ? 1.35 : 0.85;
+                e.wx = ev.position[0]; e.wy = ev.position[1] + targetYOffset; e.wz = ev.position[2];
                 e.vx = dx; e.vy = vy; e.vz = dz;
-                e.isCrit = isCrit; e.isMagic = isMagic; e.isHeal = isHeal;
+                e.isCrit = isCrit; e.isMagic = isElemental; e.isHeal = isHeal;
                 e.numDigits = dc;
                 e.numChars  = totalChars;
                 evtActive.current[ei] = true;
@@ -339,22 +362,26 @@ export function DamageHUDBatcher({ damageQueue }: { damageQueue: React.RefObject
                 continue;
             }
 
-            // World position
-            const gravity = e.isCrit ? 5.0 : 9.0;
+            // World position (gentler RO:TNL gravity)
+            const gravity = e.isCrit ? 2.0 : 4.0;
             const gx = e.wx + e.vx * t;
             const gy = e.wy + e.vy * t - 0.5 * gravity * t * t;
             const gz = e.wz + e.vz * t;
 
-            // Scale
+            // Scale based on attack type (Crit, Magic/Elemental, Normal)
             let s: number;
             if (e.isCrit) {
-                if      (t < 0.07) s = t / 0.07 * 2.0;
-                else if (t < 0.18) s = 2.0 - (t - 0.07) / 0.11 * 0.6;
-                else               s = 1.4 - Math.min((t - 0.18) / 0.5, 1) * 0.4;
+                if      (t < 0.07) s = t / 0.07 * 2.8;
+                else if (t < 0.18) s = 2.8 - (t - 0.07) / 0.11 * 1.0;
+                else               s = 1.8 - Math.min((t - 0.18) / 0.5, 1) * 0.5;
+            } else if (e.isMagic) {
+                if      (t < 0.06) s = t / 0.06 * 2.2;
+                else if (t < 0.15) s = 2.2 - (t - 0.06) / 0.09 * 0.9;
+                else               s = 1.3 - Math.min((t - 0.15) / 0.5, 1) * 0.3;
             } else {
-                if      (t < 0.06) s = t / 0.06 * 1.8;
-                else if (t < 0.15) s = 1.8 - (t - 0.06) / 0.09 * 0.8;
-                else               s = 1.0 - Math.min((t - 0.15) / 0.5, 1) * 0.25;
+                if      (t < 0.06) s = t / 0.06 * 1.6;
+                else if (t < 0.15) s = 1.6 - (t - 0.06) / 0.09 * 0.7;
+                else               s = 0.9 - Math.min((t - 0.15) / 0.5, 1) * 0.2;
             }
 
             // Opacity: ramp in, hold, fade out

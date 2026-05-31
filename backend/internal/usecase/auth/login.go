@@ -124,6 +124,15 @@ func (u *authUsecase) ValidateToken(tokenStr string) (string, error) {
 		return "", errors.New("token tidak valid")
 	}
 
+	// Verify that the user still exists in the PostgreSQL database (prevents stale token errors on seed/wipe)
+	user, err := u.userRepo.GetByID(claims.UserID)
+	if err != nil {
+		return "", err
+	}
+	if user == nil {
+		return "", errors.New("user tidak ditemukan atau telah dihapus")
+	}
+
 	return claims.UserID, nil
 }
 
@@ -161,12 +170,12 @@ func (u *authUsecase) CreateCharacter(userID string, name string, class string, 
 		Level:      1,
 		XP:         0,
 		Gold:       200,
-		STR:        10,
-		INT:        10,
-		CON:        10,
-		VIT:        10,
-		WIS:        10,
-		LUK:        10,
+		BaseSTR:    10,
+		BaseAGI:    10,
+		BaseVIT:    10,
+		BaseINT:    10,
+		BaseDEX:    10,
+		BaseLUK:    10,
 		StatPoints: 5,
 		HP:         1000,
 		MaxHP:      1000,

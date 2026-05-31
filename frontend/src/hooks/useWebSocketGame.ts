@@ -14,6 +14,9 @@ export interface PlayerNetworkState {
     targetId?: string;
     hp?: number;
     maxHp?: number;
+    gold?: number;
+    level?: number;
+    aspd?: number;
 }
 
 // Lean flat struct — matches the backend domain.MonsterNetworkState exactly.

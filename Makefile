@@ -9,6 +9,7 @@ SHELL := /bin/bash
 # Configuration and Ports
 PORT_BACKEND = 8080
 PORT_FRONTEND = 3000
+PORT_KCP = 9999
 
 # Package Manager Detection for Frontend (bun preferred, npm as fallback)
 BUN := $(shell command -v bun 2> /dev/null)
@@ -70,6 +71,13 @@ kill-backend-port:
 	if [ ! -z "$$pid_backend" ]; then \
 		echo "Force killing backend PID: $$pid_backend"; \
 		kill -9 $$pid_backend 2>/dev/null || true; \
+	fi
+	@echo "🧹 Sweeping processes on KCP UDP port $(PORT_KCP)..."
+	@fuser -k $(PORT_KCP)/udp 2>/dev/null || true
+	@pid_kcp=$$(lsof -t -i udp:$(PORT_KCP) 2>/dev/null); \
+	if [ ! -z "$$pid_kcp" ]; then \
+		echo "Force killing KCP PID: $$pid_kcp"; \
+		kill -9 $$pid_kcp 2>/dev/null || true; \
 	fi
 
 kill-frontend-port:

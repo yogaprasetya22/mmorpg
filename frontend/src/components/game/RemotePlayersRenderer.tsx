@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useRef, Suspense } from "react";
+import { useMemo, useRef, useState, Suspense } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useGLTF, useAnimations, Text } from "@react-three/drei";
+import { useGLTF, useAnimations, Text, Billboard } from "@react-three/drei";
 import * as THREE from 'three';
 import { SkeletonUtils } from 'three-stdlib';
 import { MeshoptDecoder } from 'meshoptimizer';
@@ -79,6 +79,9 @@ export const RemotePlayerInstance = ({
   const groupRef = useRef<THREE.Group>(null!);
   const nameRef = useRef<THREE.Group>(null!);
   const textRef = useRef<any>(null);
+  const hpFillRef = useRef<THREE.Mesh>(null!);
+  const lastHpRatio = useRef(-1);
+  const smoothHpRatio = useRef(1);
   const { actions } = useAnimations(animations, groupRef);
   const activeAction = useRef<THREE.AnimationAction | null>(null);
 
@@ -119,9 +122,23 @@ export const RemotePlayerInstance = ({
     const isCurrentlyVisible = !isDensityCulled && camDistSq <= FAR_SQ;
 
     // Get client terrain elevation to map desynced or flat server coordinates cleanly onto 3D sculpted landscape
-    const activeEnv = useStore.getState().environment;
-    const terrainConfig = useEditorStore.getState().terrainConfig;
-    const terrainY = getTerrainElevation(data.x, data.z, activeEnv, 24, terrainConfig);
+    let terrainY = data.y;
+    if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
+      const raycastH = (window as any).getGroundHeight(data.x, data.z, -999);
+      if (raycastH !== -999) {
+        terrainY = raycastH;
+      } else {
+        const activeEnv = useStore.getState().environment;
+        const terrainConfig = useEditorStore.getState().terrainConfig;
+        const baseDistance = activeEnv === "STORM" ? 45.0 : 35.0;
+        terrainY = getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
+      }
+    } else {
+      const activeEnv = useStore.getState().environment;
+      const terrainConfig = useEditorStore.getState().terrainConfig;
+      const baseDistance = activeEnv === "STORM" ? 45.0 : 35.0;
+      terrainY = getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
+    }
 
     // Snapping position and rotation if culled to keep state synchronized
     if (!isCurrentlyVisible) {
@@ -221,12 +238,31 @@ export const RemotePlayerInstance = ({
         nameRef.current.visible = false;
       } else {
         nameRef.current.visible = true;
+
+        // Smoothly update player HP bar scale under Billboard name tag group
+        if (hpFillRef.current) {
+          const currentHp = data.hp ?? 1000;
+          const maxHp = data.maxHp ?? 1000;
+          const targetRatio = Math.max(0, Math.min(1, currentHp / maxHp));
+          
+          // Lerp HP bar ratio smoothly (6.0 for damage drain, 12.0 for heal refill)
+          const lerpSpeed = targetRatio < smoothHpRatio.current ? 6.0 : 12.0;
+          smoothHpRatio.current += (targetRatio - smoothHpRatio.current) * Math.min(1, lerpSpeed * delta);
+          const ratio = smoothHpRatio.current;
+          
+          if (Math.abs(ratio - lastHpRatio.current) > 0.0005) {
+            hpFillRef.current.scale.x = ratio;
+            hpFillRef.current.position.x = -0.6 * (1 - ratio);
+            lastHpRatio.current = ratio;
+          }
+        }
       }
     }
 
     // Update text only if changed to avoid expensive Troika dirty checking/re-layouts
     if (textRef.current && nameRef.current.visible) {
-      const expectedText = username || id.substring(0, 8);
+      const lvl = data.level || 1;
+      const expectedText = `[Lv.${lvl}] ${username || id.substring(0, 8)}`;
       if (textRef.current.text !== expectedText) {
         textRef.current.text = expectedText;
       }
@@ -280,6 +316,10 @@ export const RemotePlayerInstance = ({
         activeAction.current.timeScale = Math.max(0.4, Math.min(1.4, smoothedSpeed.current / 5.5));
       } else if (desired.includes("jump")) {
         activeAction.current.timeScale = 0.8;
+      } else if (isAttacking) {
+        const remoteAspd = data.aspd ?? 150;
+        const remoteHPS = 50 / (200 - remoteAspd);
+        activeAction.current.timeScale = remoteHPS;
       } else {
         activeAction.current.timeScale = 1.0;
       }
@@ -644,27 +684,43 @@ export const RemotePlayerInstance = ({
       <group scale={1.0} position={[0, -1.3, 0]}>
         <primitive object={clone} />
       </group>
-      <group ref={nameRef} position={[0, 1.75, 0]}>
+      <Billboard ref={nameRef as any} position={[0, -1.1, 0]} follow={true} visible={false}>
         <Text
           ref={textRef}
           font="/Press_Start_2P/PressStart2P-Regular.ttf"
           fontSize={0.22}
+          position={[0, 0.25, 0]}
           anchorX="center"
           anchorY="bottom"
-          outlineWidth={0.03}
+          outlineWidth={0.035}
           outlineColor="#000000"
           color="#06b6d4"
           depthOffset={-5}
         >
           {""}
         </Text>
-      </group>
+
+        <mesh position={[0, 0, -0.001]}>
+          <planeGeometry args={[1.24, 0.16]} />
+          <meshBasicMaterial color="#09090b" toneMapped={false} />
+        </mesh>
+
+        <mesh position={[0, 0, 0]}>
+          <planeGeometry args={[1.2, 0.12]} />
+          <meshBasicMaterial color="#27272a" toneMapped={false} />
+        </mesh>
+
+        <mesh ref={hpFillRef} position={[0, 0, 0.002]}>
+          <planeGeometry args={[1.2, 0.12]} />
+          <meshBasicMaterial color="#10b981" toneMapped={false} />
+        </mesh>
+      </Billboard>
     </group>
   );
 };
 
 export interface RemotePlayersRendererProps {
-  activeRemotePlayers: { id: string; username: string; class: string; gender: string }[];
+  activeRemotePlayers?: { id: string; username: string; class: string; gender: string }[];
   connectedPlayersRef: React.RefObject<PlayerNetworkState[]>;
   gameConfig?: any;
   mmSpellsRef?: React.RefObject<any[]>;
@@ -678,7 +734,7 @@ export interface RemotePlayersRendererProps {
 }
 
 export const RemotePlayersRenderer = ({ 
-  activeRemotePlayers, 
+  activeRemotePlayers: _legacyProp, 
   connectedPlayersRef, 
   gameConfig,
   mmSpellsRef,
@@ -691,10 +747,16 @@ export const RemotePlayersRenderer = ({
   localPlayerId
 }: RemotePlayersRendererProps) => {
   if (settingsRef) { /* bypass */ }
-  if (localPlayerId) { /* bypass */ }
   const { camera } = useThree();
   const playerMapRef = useRef<Map<string, PlayerNetworkState>>(new Map());
   const visiblePlayerIdsRef = useRef<Set<string>>(new Set());
+
+  // ─── Self-derived roster from connectedPlayersRef at 1Hz ──────────────────
+  // This replaces the broken parent React state prop that was always empty [].
+  // By deriving the roster internally, we avoid parent re-renders entirely.
+  const [derivedRoster, setDerivedRoster] = useState<{ id: string; username: string; class: string; gender: string }[]>([]);
+  const lastRosterHash = useRef("");
+  const lastRosterCheck = useRef(0);
 
   const lastSortTime = useRef(-1);
   // Pre-allocated scratch array and object pool to prevent heap allocation per frame
@@ -709,10 +771,30 @@ export const RemotePlayersRenderer = ({
       map.set(players[i].id, players[i]);
     }
 
+    // ─── 1Hz Roster derivation from connectedPlayersRef ──────────────────
+    const now = performance.now();
+    if (now - lastRosterCheck.current >= 1000) {
+      lastRosterCheck.current = now;
+      const remotes = localPlayerId
+        ? players.filter(p => p.id !== localPlayerId)
+        : players;
+      const hash = remotes.map(p => `${p.id}-${p.class || 'B'}-${p.gender || 'M'}`).join(',');
+      if (hash !== lastRosterHash.current) {
+        lastRosterHash.current = hash;
+        const nextList = remotes.map(p => ({
+          id: p.id,
+          username: (p as any).username || '',
+          class: (p as any).class || 'Beginner',
+          gender: (p as any).gender || 'Male',
+        }));
+        setDerivedRoster(nextList);
+      }
+    }
+
     // ─── Throttled distance sort (10Hz max) ──────────────────────────────────
-    const now = state.clock.elapsedTime;
-    if (now - lastSortTime.current >= 0.10) {
-      lastSortTime.current = now;
+    const elapsed = state.clock.elapsedTime;
+    if (elapsed - lastSortTime.current >= 0.10) {
+      lastSortTime.current = elapsed;
 
       const camPos = state.camera.position;
       const scratch = scratchPlayerDistances.current;
@@ -755,7 +837,7 @@ export const RemotePlayersRenderer = ({
   
   return (
     <group>
-      {activeRemotePlayers.map((player) => (
+      {derivedRoster.map((player) => (
         <Suspense key={player.id} fallback={null}>
           <RemotePlayerInstance
             key={player.id}
