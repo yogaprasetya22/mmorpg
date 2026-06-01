@@ -3,8 +3,8 @@ import LandingUnitShowcase from '@/src/components/landing/LandingUnitShowcase';
 import { Sword, Shield, Play, Sparkles, ChevronRight, Zap, Target } from 'lucide-react';
 
 export const metadata = {
-  title: "Seal M: Battle Simulator",
-  description: "The ultimate 3D battle simulation for Seal M: Clover Knight enthusiasts.",
+  title: "Jagres: Battle Simulator",
+  description: "The ultimate 3D battle simulation for Jagres: Clover Knight enthusiasts.",
 };
 
 export default function Home() {
@@ -24,7 +24,7 @@ export default function Home() {
             <Sword className="w-6 h-6 text-white" />
           </div>
           <div>
-            <span className="text-xl font-black italic tracking-tighter text-white uppercase leading-none block">SEAL M</span>
+            <span className="text-xl font-black italic tracking-tighter text-white uppercase leading-none block">Jagres</span>
             <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest leading-none">Battle Simulator</span>
           </div>
         </div>
@@ -48,7 +48,7 @@ export default function Home() {
             Unleash Your <br /> <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">Inner Knight</span>
           </h1>
           <p className="text-lg md:text-xl text-zinc-400 max-w-2xl mx-auto italic leading-relaxed animate-in fade-in duration-1000 delay-300">
-            The most advanced high-density battle simulator for Seal M. Experience cinematic 3D combat, strategic legion management, and legendary class showdowns.
+            The most advanced high-density battle simulator for Jagres. Experience cinematic 3D combat, strategic legion management, and legendary class showdowns.
           </p>
           <div className="pt-8 flex flex-wrap justify-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500">
             <Link href="/arena" className="px-10 py-5 bg-cyan-500 text-white text-xl font-black uppercase tracking-widest rounded-2xl border-b-8 border-cyan-700 hover:translate-y-1 hover:border-b-4 active:translate-y-2 active:border-b-0 transition-all flex items-center gap-3 shadow-2xl shadow-cyan-500/20">
@@ -115,7 +115,7 @@ export default function Home() {
               <h3 className="text-5xl font-black text-white uppercase tracking-tighter italic mb-4 leading-none">COMMANDER <br /> CONSOLE</h3>
               <p className="text-zinc-400 italic">Complete tactical control over the battlefield simulation.</p>
             </div>
-            
+
             <div className="space-y-4">
               {[
                 { label: 'ENVIRONMENT SHIFTER', desc: 'Switch between Whimsical Diorama or Stormy Battlefield with dynamic weather.' },
@@ -166,10 +166,10 @@ export default function Home() {
             <div className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center border border-white/10">
               <Sword className="w-4 h-4 text-cyan-400" />
             </div>
-            <span className="text-xl font-black italic tracking-tighter text-white uppercase">SEAL M SIM</span>
+            <span className="text-xl font-black italic tracking-tighter text-white uppercase">Jagres SIM</span>
           </div>
           <div className="flex gap-8 text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">
-            <Link href="/seal-m" className="hover:text-white transition-colors">Simulator</Link>
+            <Link href="/Jagres" className="hover:text-white transition-colors">Simulator</Link>
             <Link href="/training" className="hover:text-white transition-colors">Training</Link>
             <span className="opacity-30">|</span>
             <span>&copy; 2026 Clover Knight Dev</span>

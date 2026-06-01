@@ -19,6 +19,45 @@ type PlayerNetworkState struct {
 	Level     int     `json:"level" msgpack:"level"`
 	ASPD      float32 `json:"aspd" msgpack:"aspd"`
 	XP        int     `json:"xp" msgpack:"xp"`
+
+	// Talent Stats
+	BasePOW      int `json:"base_pow" msgpack:"base_pow"`
+	BaseSTA      int `json:"base_sta" msgpack:"base_sta"`
+	BaseWIS      int `json:"base_wis" msgpack:"base_wis"`
+	BaseSPL      int `json:"base_spl" msgpack:"base_spl"`
+	BaseCON      int `json:"base_con" msgpack:"base_con"`
+	BaseCRT      int `json:"base_crt" msgpack:"base_crt"`
+	TalentPoints int `json:"talent_points" msgpack:"talent_points"`
+
+	// Amplified Substats
+	PATK  int `json:"p_atk" msgpack:"p_atk"`
+	SMATK int `json:"s_matk" msgpack:"s_matk"`
+	RES   int `json:"res" msgpack:"res"`
+	MRES  int `json:"m_res" msgpack:"m_res"`
+	HPLUS int `json:"h_plus" msgpack:"h_plus"`
+	CRATE int `json:"c_rate" msgpack:"c_rate"`
+
+	// Base Primary Stats
+	BaseSTR    int `json:"base_str" msgpack:"base_str"`
+	BaseAGI    int `json:"base_agi" msgpack:"base_agi"`
+	BaseVIT    int `json:"base_vit" msgpack:"base_vit"`
+	BaseINT    int `json:"base_int" msgpack:"base_int"`
+	BaseDEX    int `json:"base_dex" msgpack:"base_dex"`
+	BaseLUK    int `json:"base_luk" msgpack:"base_luk"`
+	StatPoints int `json:"stat_points" msgpack:"stat_points"`
+
+	// Derived Combat Stats
+	Attack       float32 `json:"attack" msgpack:"attack"`
+	MagicAttack  float32 `json:"magic_attack" msgpack:"magic_attack"`
+	Defense      float32 `json:"defense" msgpack:"defense"`
+	MagicDefense float32 `json:"magic_defense" msgpack:"magic_defense"`
+	CriticalRate float32 `json:"critical_rate" msgpack:"critical_rate"`
+	Speed        float32 `json:"speed" msgpack:"speed"`
+	HIT          int     `json:"hit" msgpack:"hit"`
+	FLEE         int     `json:"flee" msgpack:"flee"`
+	PerfectDodge float32 `json:"perfect_dodge" msgpack:"perfect_dodge"`
+	CastTime     float32 `json:"cast_time" msgpack:"cast_time"`
+	Debuff       string  `json:"debuff" msgpack:"debuff"`
 }
 
 // MonsterNetworkState is the minimal monster snapshot broadcast over WebSocket each tick.

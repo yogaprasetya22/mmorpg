@@ -1,9 +1,24 @@
+if (typeof window === "undefined" && !("ProgressEvent" in global)) {
+  // Polyfill ProgressEvent in Node.js/SSR environment to avoid ReferenceError
+  // when browser-only dependencies (like three.js/drei splat loaders) are imported.
+  (global as any).ProgressEvent = class ProgressEvent {
+    lengthComputable: boolean;
+    loaded: number;
+    total: number;
+    constructor(_type: string, dict: any = {}) {
+      this.lengthComputable = dict.lengthComputable || false;
+      this.loaded = dict.loaded || 0;
+      this.total = dict.total || 0;
+    }
+  };
+}
+
 import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Seal M: Battle Simulator",
-  description: "Advanced 3D Battle Simulation for Seal M: Clover Knight",
+  title: "Jagres: Battle Simulator",
+  description: "Advanced 3D Battle Simulation for Jagres: Clover Knight",
 };
 
 export default function RootLayout({

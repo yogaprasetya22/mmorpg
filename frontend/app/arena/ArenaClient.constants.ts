@@ -39,6 +39,15 @@ export const STAT_ATTRIBUTES = [
   { key: "luk", label: "LUK", name: "Luck", desc: "Meningkatkan Critical Rate & Status Bonus" },
 ];
 
+export const TALENT_ATTRIBUTES = [
+  { key: "pow", label: "POW", name: "Power", desc: "Meningkatkan Status ATK & P.ATK (+1 per poin)" },
+  { key: "sta", label: "STA", name: "Stamina", desc: "Meningkatkan RES (Fisik) (+1 per poin)" },
+  { key: "wis", label: "WIS", name: "Wisdom", desc: "Meningkatkan M.RES (Sihir) (+1 per poin)" },
+  { key: "spl", label: "SPL", name: "Spell", desc: "Meningkatkan Status MATK & S.MATK (+1 per poin)" },
+  { key: "con", label: "CON", name: "Concentration", desc: "Meningkatkan HIT, FLEE, P.ATK & S.MATK (+2 HIT/FLEE, +1 P.ATK/S.MATK)" },
+  { key: "crt", label: "CRT", name: "Creative", desc: "Meningkatkan H.PLUS & C.RATE (+1 H.PLUS/C.RATE)" },
+];
+
 /** Secondary combat stats displayed in the Character Stats Modal. */
 export const COMBAT_STAT_FIELDS = [
   { label: "Serangan Fisik", key: "attack", fallback: 50 },
@@ -53,6 +62,12 @@ export const COMBAT_STAT_FIELDS = [
   { label: "Perfect Dodge", key: "perfect_dodge", fallback: 1.0, format: "percent_direct" },
   { label: "Cast Reduction", key: "cast_time", fallback: 0.0, format: "cast_reduction" },
   { label: "Kecepatan Gerak", key: "speed", fallback: 5.0, format: "decimal" },
+  { label: "P.ATK", key: "p_atk", fallback: 0 },
+  { label: "S.MATK", key: "s_matk", fallback: 0 },
+  { label: "RES", key: "res", fallback: 0 },
+  { label: "M.RES", key: "m_res", fallback: 0 },
+  { label: "Heal Plus", key: "h_plus", fallback: 0 },
+  { label: "C.RATE", key: "c_rate", fallback: 0 },
 ];
 
 /** GLTF model paths to preload at module scope. */

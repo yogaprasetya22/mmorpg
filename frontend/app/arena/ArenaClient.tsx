@@ -11,6 +11,7 @@ import { RemoteMonstersRenderer } from '@/src/components/game/RemoteMonstersRend
 import { Minimap } from '@/src/components/game/Minimap';
 import { EnvironmentMultiGlobal } from '@/src/components/game/environment/EnvironmentMultiGlobal';
 import { ModularMap } from '@/src/components/game/environment/ModularMap';
+import { CameraOcclusionManager } from '@/src/components/game/systems/CameraOcclusionManager';
 import { VFXProvider } from '@/src/components/game/systems/VFXManager';
 import { DamageHUDBatcher } from '@/src/components/game/systems/DamageHUDBatcher';
 import { MMSpellEffect } from '@/src/components/game/systems/effects/MMSpellEffect';
@@ -129,6 +130,7 @@ export default function MultiplayerArena() {
                 onReady={() => { setTimeout(() => { state.setEnvFinished(true); }, 600); }}
               />
               <ModularMap debug={false} />
+              <CameraOcclusionManager />
 
               <MMSpellEffect spellsRef={state.mmSpellsRef} unitRegistry={state.unitRegistryRef} simTimeRef={state.simTimeRef} />
               <FighterSpellEffect fighterSpellsRef={state.fighterSpellsRef} simTimeRef={state.simTimeRef} />
@@ -136,7 +138,10 @@ export default function MultiplayerArena() {
               <AssassinSpellEffect assassinSpellsRef={state.assassinSpellsRef} simTimeRef={state.simTimeRef} />
               <MageSpellEffect spellsRef={state.spellsRef} unitRegistry={state.unitRegistryRef} simTimeRef={state.simTimeRef} />
 
-              <DamageHUDBatcher damageQueue={state.damageQueue} />
+              <DamageHUDBatcher 
+                damageQueue={state.damageQueue} 
+                playerStatsRef={state.playerStatsRef} 
+              />
 
               <PlayerController
                 paused={!state.envReady}

@@ -17,6 +17,7 @@ export interface PlayerNetworkState {
     gold?: number;
     level?: number;
     aspd?: number;
+    debuff?: string;
 }
 
 // Lean flat struct — matches the backend domain.MonsterNetworkState exactly.
@@ -81,6 +82,8 @@ export const useWebSocketGame = (
                     const data = JSON.parse(event.data);
                     if (data && data.type === "chat") {
                         onChatReceived(data.name || "Unknown", data.msg || "");
+                    } else if (data && data.type === "combat_damage_event") {
+                        window.dispatchEvent(new CustomEvent("combat_damage_event", { detail: data.data }));
                     } else {
                         onStateReceived(data as GameStatePayload);
                     }

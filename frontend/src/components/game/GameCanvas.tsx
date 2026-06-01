@@ -28,6 +28,7 @@ import { ModularMap } from "./environment/ModularMap";
 // Imported Standalone Components
 import { SceneAnalyzer } from "./SceneAnalyzer";
 import { AdaptivePerformanceOptimizer } from "./AdaptivePerformanceOptimizer";
+import { CameraOcclusionManager } from "./systems/CameraOcclusionManager";
 
 // Monkey-patch THREE.DataTextureLoader to fix multiple bugs in Three.js core:
 // 1. If onError is undefined, it attempts to execute the local error object as a function (error(error)).
@@ -374,6 +375,7 @@ export const GameCanvas = React.memo(({
           />
 
           <ModularMap debug={debug} />
+          {!isEditor && <CameraOcclusionManager />}
           {isEditor && <WorldEditor />}
 
           <DiagnosticsBridge />

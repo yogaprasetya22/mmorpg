@@ -320,6 +320,39 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 				break
 			}
 			pData.HP -= finalDamage
+
+			// 12% chance to inflict a status debuff if the player doesn't already have one and is still alive
+			if pData.HP > 0 && rand.Float32() < 0.12 && pData.Debuff == "" {
+				debuffs := []string{"stun", "freeze", "silence"}
+				selectedDebuff := debuffs[rand.Intn(len(debuffs))]
+				
+				durationSec := float32(3.0)
+				if selectedDebuff == "stun" {
+					// VIT reduces stun duration: Duration = 3.0s * (1 - VIT/100)
+					reduction := float32(pData.BaseVIT) / 100.0
+					if reduction > 0.9 { reduction = 0.9 }
+					durationSec = 3.0 * (1.0 - reduction)
+				} else if selectedDebuff == "freeze" {
+					// VIT reduces freeze duration: Duration = 4.0s * (1 - VIT/100)
+					reduction := float32(pData.BaseVIT) / 100.0
+					if reduction > 0.9 { reduction = 0.9 }
+					durationSec = 4.0 * (1.0 - reduction)
+				} else if selectedDebuff == "silence" {
+					// INT reduces silence duration: Duration = 5.0s * (1 - INT/100)
+					reduction := float32(pData.BaseINT) / 100.0
+					if reduction > 0.9 { reduction = 0.9 }
+					durationSec = 5.0 * (1.0 - reduction)
+				}
+				
+				if durationSec < 0.5 {
+					durationSec = 0.5 // minimum duration
+				}
+				
+				pData.Debuff = selectedDebuff
+				pData.DebuffUntil = time.Now().Add(time.Duration(float64(durationSec) * float64(time.Second)))
+				fmt.Printf("🔥 DEBUFF: Monster %s memberi efek %s ke Player %s selama %.2fs (Until %v)!\n", m.Name, selectedDebuff, pData.Username, durationSec, pData.DebuffUntil)
+			}
+
 			if pData.HP <= 0 {
 				pData.HP = 0
 				deadPlayerID := m.TargetPlayerID

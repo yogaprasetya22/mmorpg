@@ -259,16 +259,71 @@ export function useArenaGameState() {
           statsHudRef.current?.updateHpMp(rawHP, rawMaxHP);
           deathOverlayRef.current?.setDead(rawHP <= 0);
         }
-        // Real-time gold, level & XP sync via WebSocket — no more waiting for 5s HTTP profile poll
-        if (typeof rawGold === 'number' && typeof rawLevel === 'number') {
-          const rawXP = (me as any).xp ?? 0;
-          const currentStats = playerStatsRef.current as any;
-          if (currentStats.gold !== rawGold || currentStats.level !== rawLevel || currentStats.xp !== rawXP) {
-            currentStats.gold = rawGold;
-            currentStats.level = rawLevel;
-            currentStats.xp = rawXP;
-            statsHudRef.current?.updateStats({ gold: rawGold, level: rawLevel, xp: rawXP });
+
+        // Real-time stats sync via WebSocket — no more waiting for 5s HTTP profile poll
+        const rawXP = (me as any).xp ?? 0;
+        const currentStats = playerStatsRef.current as any;
+        
+        const wsStats = {
+          hp: rawHP,
+          max_hp: rawMaxHP,
+          maxHp: rawMaxHP,
+          gold: rawGold,
+          level: rawLevel,
+          xp: rawXP,
+          aspd: rawASPD,
+          
+          // Talent Stats
+          base_pow: (me as any).base_pow,
+          base_sta: (me as any).base_sta,
+          base_wis: (me as any).base_wis,
+          base_spl: (me as any).base_spl,
+          base_con: (me as any).base_con,
+          base_crt: (me as any).base_crt,
+          talent_points: (me as any).talent_points,
+
+          // Amplified Substats
+          p_atk: (me as any).p_atk,
+          s_matk: (me as any).s_matk,
+          res: (me as any).res,
+          m_res: (me as any).m_res,
+          h_plus: (me as any).h_plus,
+          c_rate: (me as any).c_rate,
+
+          // Base Primary Stats
+          base_str: (me as any).base_str,
+          base_agi: (me as any).base_agi,
+          base_vit: (me as any).base_vit,
+          base_int: (me as any).base_int,
+          base_dex: (me as any).base_dex,
+          base_luk: (me as any).base_luk,
+          stat_points: (me as any).stat_points,
+
+          // Derived Combat Stats
+          attack: (me as any).attack,
+          magic_attack: (me as any).magic_attack,
+          defense: (me as any).defense,
+          magic_defense: (me as any).magic_defense,
+          critical_rate: (me as any).critical_rate,
+          speed: (me as any).speed,
+          hit: (me as any).hit,
+          flee: (me as any).flee,
+          perfect_dodge: (me as any).perfect_dodge,
+          cast_time: (me as any).cast_time,
+          debuff: (me as any).debuff,
+        };
+
+        let changed = false;
+        for (const key in wsStats) {
+          if (currentStats[key] !== (wsStats as any)[key]) {
+            changed = true;
+            break;
           }
+        }
+
+        if (changed) {
+          Object.assign(currentStats, wsStats);
+          statsHudRef.current?.updateStats(wsStats);
         }
       }
 
@@ -312,6 +367,67 @@ export function useArenaGameState() {
       chatRef.current?.appendMessage(sender, msg);
     }
   );
+
+  // ── Authoritative Combat Damage Event Listener ──
+  useEffect(() => {
+    const onCombatDamage = (e: Event) => {
+      const ev = (e as CustomEvent).detail;
+      if (!ev) return;
+
+      const targetId = ev.targetId;
+      const isCrit = !!ev.isCrit;
+      const isMiss = !!ev.isMiss;
+      const isMagic = !!ev.isMagic;
+      const damage = ev.damage;
+
+      // Find target coordinates
+      let targetX = 0, targetY = 1.0, targetZ = 0;
+      if (ev.targetType === "monster") {
+        const targetMonster = worldMonstersRef.current.find(m => m.id === targetId);
+        if (targetMonster) {
+          const visualPos = (window as any).monsterVisualPositions?.get(targetId);
+          targetX = visualPos ? visualPos.x : targetMonster.x;
+          targetY = targetMonster.y + 0.8;
+          targetZ = visualPos ? visualPos.z : targetMonster.z;
+        } else {
+          return;
+        }
+      } else {
+        const targetPlayer = connectedPlayersRef.current.find(p => p.id === targetId);
+        if (targetPlayer) {
+          targetX = targetPlayer.x;
+          targetY = targetPlayer.y + 1.2;
+          targetZ = targetPlayer.z;
+        } else {
+          return;
+        }
+      }
+
+      if (damageQueue.current) {
+        damageQueue.current.push({
+          value: Math.round(damage),
+          position: [targetX, targetY, targetZ],
+          isCrit,
+          isMagic,
+          isMiss,
+          color: isMiss ? "#90a4ae" : (isCrit ? "#ff3b30" : (isMagic ? "#00e5ff" : "#ffcc00")),
+          timestamp: performance.now()
+        });
+
+        // Authoritative camera shakes synced with server hits
+        if (isCrit) {
+          (window as any).triggerCameraShake?.(0.5);
+        } else if (!isMiss) {
+          (window as any).triggerCameraShake?.(0.2);
+        }
+      }
+    };
+
+    window.addEventListener("combat_damage_event", onCombatDamage);
+    return () => {
+      window.removeEventListener("combat_damage_event", onCombatDamage);
+    };
+  }, []);
 
   // ── PROFILE POLLING: requestIdleCallback (DONT-TOUCH: never setInterval) ──
   useEffect(() => {
@@ -540,27 +656,8 @@ export function useArenaGameState() {
     setSuccessMsg("");
   };
 
-  const handleAuthoritativeAttack = (monsterId: string, damage?: number, isCrit?: boolean, isMagic?: boolean, customColor?: string) => {
+  const handleAuthoritativeAttack = (monsterId: string, damage?: number, isCrit?: boolean) => {
     sendPlayerAttack("monster", monsterId, damage, isCrit);
-    const targetMonster = worldMonstersRef.current.find(m => m.id === monsterId);
-    if (targetMonster && damageQueue.current) {
-      const dmg = damage || (Math.random() > 0.85 ? 5000 + Math.random() * 2000 : 2000 + Math.random() * 1000);
-      const crit = isCrit !== undefined ? isCrit : dmg > 4500;
-      const visualPos = (window as any).monsterVisualPositions?.get(monsterId);
-      const posX = visualPos ? visualPos.x : targetMonster.x;
-      const posY = targetMonster.y + 0.8;
-      const posZ = visualPos ? visualPos.z : targetMonster.z;
-      damageQueue.current.push({
-        value: Math.round(dmg), position: [posX, posY, posZ],
-        isCrit: crit, isMagic: !!isMagic, color: customColor || (crit ? "#ff3b30" : "#ffcc00"),
-        timestamp: performance.now()
-      });
-      if (crit) {
-        (window as any).triggerCameraShake?.(0.5);
-      } else {
-        (window as any).triggerCameraShake?.(0.2);
-      }
-    }
   };
 
   const localPlayerModelPath = useMemo(() => {

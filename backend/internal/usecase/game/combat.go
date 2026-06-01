@@ -3,7 +3,6 @@ package game
 import (
 	"fmt"
 	"math/rand"
-	"strings"
 	"time"
 
 	"mmorpg-backend/internal/domain"
@@ -11,7 +10,7 @@ import (
 
 func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, targetID string, clientDmg float32, isCrit bool) {
 	fmt.Printf("⚔️ [DEBUG COMBAT] Player %s menyerang %s (ID: %s) | Dmg: %.2f | Crit: %v\n", playerID, targetType, targetID, clientDmg, isCrit)
-	
+
 	u.playersMu.Lock()
 	if pState, exists := u.players[playerID]; exists {
 		pState.TargetID = targetID
@@ -46,11 +45,11 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 	hitsPerSecond := 1.0 + (float64(playerData.ASPD) / 125.0)
 	cooldownMs := time.Duration(1000.0/hitsPerSecond) * time.Millisecond
 	buffer := 30 * time.Millisecond // Reduced buffer for more responsive combat
-	
+
 	u.activePlayersMu.Lock()
-	if !playerData.LastBasicAttackTime.IsZero() && time.Since(playerData.LastBasicAttackTime) < cooldownMs - buffer {
+	if !playerData.LastBasicAttackTime.IsZero() && time.Since(playerData.LastBasicAttackTime) < cooldownMs-buffer {
 		u.activePlayersMu.Unlock()
-		fmt.Printf("⚠️ Authoritative Attack Blocked (Speedhacking prevention): Player %s attack too fast! Cooldown remaining: %v\n", playerData.Username, cooldownMs - time.Since(playerData.LastBasicAttackTime))
+		fmt.Printf("⚠️ Authoritative Attack Blocked (Speedhacking prevention): Player %s attack too fast! Cooldown remaining: %v\n", playerData.Username, cooldownMs-time.Since(playerData.LastBasicAttackTime))
 		return
 	}
 	playerData.LastBasicAttackTime = time.Now()
@@ -91,17 +90,73 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 			return
 		}
 
-		// Authoritative domain-derived class damage formula calculation
-		var finalDamage float32
-		if clientDmg > 0 {
-			finalDamage = clientDmg
-		} else {
-			var isCritRaw bool
-			finalDamage, isCritRaw = playerData.CalculateDamageTo(monster.Defense)
-			isCrit = isCritRaw
+		// Fallback monster stats scaling for iRO Wiki calculations
+		targetLevel := monster.Level
+		targetLUK := monster.Level
+		targetDefense := monster.Defense // hard defense (soft defense subtracted separately)
+		targetSoftDEF := float32(monster.Level) * 0.5
+		targetRES := monster.Level / 2
+
+		// Standard physical attack (non-Mage, non-crit) HIT vs FLEE check
+		if playerData.Class != "Mage" {
+			// 1. Perfect Dodge check (1% + 1% per 10 LUK)
+			perfectDodgeChance := 1.0 + float32(targetLUK)/10.0
+			if rand.Float32()*100.0 < perfectDodgeChance {
+				// Perfect Dodge succeeded! Trigger MISS visual event.
+				u.monstersMu.Unlock()
+				u.eventCallback("combat_damage_event", map[string]interface{}{
+					"attackerId": playerID,
+					"targetId":   targetID,
+					"targetType": targetType,
+					"damage":     0,
+					"isCrit":     false,
+					"isMiss":     true,
+					"isMagic":    false,
+				})
+				fmt.Printf("💨 MISS (Perfect Dodge): Player %s -> Monster %s\n", playerData.Username, monster.Name)
+				return
+			}
+
+			// 2. HIT vs FLEE check (HitRate = 100 + AttackerHIT - TargetFLEE)
+			// Monster FLEE = 100 + Level + AGI + LUK/5. For monster, fallback AGI = Level, LUK = Level
+			targetFLEE := 100 + monster.Level + monster.Level + (monster.Level / 5)
+			hitRate := 100 + playerData.HIT - targetFLEE
+			if hitRate < 5 {
+				hitRate = 5
+			} else if hitRate > 95 {
+				hitRate = 95
+			}
+
+			if rand.Float32()*100.0 > float32(hitRate) {
+				// Attack missed! Trigger MISS visual event.
+				u.monstersMu.Unlock()
+				u.eventCallback("combat_damage_event", map[string]interface{}{
+					"attackerId": playerID,
+					"targetId":   targetID,
+					"targetType": targetType,
+					"damage":     0,
+					"isCrit":     false,
+					"isMiss":     true,
+					"isMagic":    false,
+				})
+				fmt.Printf("💨 MISS: Player %s -> Monster %s (HitRate: %d%%)\n", playerData.Username, monster.Name, hitRate)
+				return
+			}
 		}
 
-		// Hard cap — only apply to Boss types to prevent instant-melting by hyper-geared players. Standard monsters can be one-shot cleanly!
+		// Calculate damage authoritatively
+		var finalDamage float32
+		var isCritRaw bool
+		finalDamage, isCritRaw = playerData.CalculateDamageTo(
+			targetLevel,
+			targetLUK,
+			targetDefense,
+			targetSoftDEF,
+			targetRES,
+		)
+		isCrit = isCritRaw
+
+		// Hard cap — only apply to Boss types to prevent instant-melting
 		if monster.Type == "boss" {
 			maxHitDmg := monster.MaxHP * 0.35
 			if finalDamage > maxHitDmg {
@@ -118,6 +173,17 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 			critLabel, playerData.Username, monster.Name, finalDamage, monster.HP-finalDamage, monster.MaxHP)
 
 		monster.TakeDamage(finalDamage)
+
+		// Broadcast combat event immediately to WebSocket hub
+		u.eventCallback("combat_damage_event", map[string]interface{}{
+			"attackerId": playerID,
+			"targetId":   targetID,
+			"targetType": targetType,
+			"damage":     finalDamage,
+			"isCrit":     isCrit,
+			"isMiss":     false,
+			"isMagic":    playerData.Class == "Mage",
+		})
 
 		// Automatically aggro the attacker (Dynamic Threat-Swapping generation)
 		if !monster.IsDead {
@@ -137,65 +203,9 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 		}
 
 		if monster.IsDead {
-			fmt.Printf("💀 Monster %s terbunuh oleh %s! Drop: Gold +%d, XP +%d\n",
-				monster.Name, playerData.Username, monster.GoldDrop, monster.XPDrop)
-			
-			// Lock active players write lock to safely modify state in RAM
-			u.activePlayersMu.Lock()
-			// Reward XP & Gold
-			xpGained := playerData.CalculateXPGain(monster.Level, monster.XPDrop)
-			playerData.XP += xpGained
-			playerData.Gold += monster.GoldDrop
-
-			// Check Quest Progress for target monster type
-			hasActiveAfter := false
-			for i := range playerData.Quests {
-				q := &playerData.Quests[i]
-				isMatch := strings.Contains(strings.ToLower(q.QuestID), strings.ToLower(monster.Type)) ||
-					(monster.Type == "default" && strings.Contains(strings.ToLower(q.QuestID), "boar"))
-
-				if isMatch && q.Status == "active" {
-					q.Progress++
-					if q.Progress >= q.TargetCount {
-						q.Progress = q.TargetCount
-						q.Status = "completed"
-						playerData.Gold += q.RewardGold
-						playerData.XP += q.RewardXP
-						fmt.Printf("🏆 QUEST COMPLETE: %s! Reward: +%d Gold, +%d XP\n", q.Title, q.RewardGold, q.RewardXP)
-					} else {
-						hasActiveAfter = true
-					}
-				} else if q.Status == "active" {
-					hasActiveAfter = true
-				}
-			}
-			if !hasActiveAfter {
-				playerData.GenerateDailyQuests()
-			}
-
-			// Handle level up sequence (supports multiple level ups if huge XP chunk is gained)
-			for {
-				xpNeeded := domain.GetRequiredXP(playerData.Level)
-				if playerData.XP >= xpNeeded {
-					playerData.Level++
-					playerData.XP -= xpNeeded
-					playerData.StatPoints += 5 // 5 stat points to allocate!
-					playerData.RecalculateStats()
-					playerData.HP = playerData.MaxHP
-					playerData.MP = playerData.MaxMP
-					fmt.Printf("🌟 LEVEL UP! Player %s naik ke level %d! +5 Stat Points!\n", playerData.Username, playerData.Level)
-				} else {
-					break
-				}
-			}
-			u.activePlayersMu.Unlock()
-
-			// Update player HP in ECS registry
-			if pHcomp, found := u.registry.GetComponent(domain.EntityID(playerID), "Health"); found {
-				h := pHcomp.(*domain.HealthComponent)
-				h.HP = playerData.HP
-				h.MaxHP = playerData.MaxHP
-			}
+			// Delegate XP, Gold, Quest progress, and Level-up to shared handler
+			// (eliminates code duplication with CastPlayerSkill — see player_skills_uc.go)
+			u.handleMonsterKillRewards(playerID, playerData, monster)
 		}
 
 		u.monstersMu.Unlock()
@@ -227,17 +237,77 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 			return
 		}
 
-		// Authoritative domain-derived class damage formula calculation (adjusted by PvP multiplier 0.7)
-		var finalDamage float32
-		if clientDmg > 0 {
-			finalDamage = clientDmg * 0.7
-		} else {
-			dmgVal, isCritRaw := playerData.CalculateDamageTo(targetData.Defense)
-			isCrit = isCritRaw
-			finalDamage = dmgVal * 0.7
+		// Derive exact stats for PvP target
+		targetLevel := targetData.Level
+		targetLUK := targetData.LUK
+		targetDefense := targetData.Defense
+		if playerData.Class == "Mage" {
+			targetDefense = targetData.MagicDefense
+		}
+		targetSoftDEF := float32(targetData.VIT)/2.0 + float32(targetData.AGI)/5.0 + float32(targetData.Level)/15.0 + 10.0
+		if playerData.Class == "Mage" {
+			targetSoftDEF = float32(targetData.INT) + float32(targetData.VIT/5.0) + float32(targetData.DEX/5.0) + float32(targetData.Level)/4.0 + 10.0
+		}
+		targetRES := targetData.RES
+		if playerData.Class == "Mage" {
+			targetRES = targetData.MRES
 		}
 
-		// Hard cap — no single hit can exceed 35% of target's max HP like seal-m
+		// Standard physical attack (non-Mage, non-crit) HIT check
+		if playerData.Class != "Mage" {
+			// 1. Perfect Dodge check
+			perfectDodgeChance := targetData.PerfectDodge
+			if rand.Float32()*100.0 < perfectDodgeChance {
+				// Perfect Dodge succeeded!
+				u.eventCallback("combat_damage_event", map[string]interface{}{
+					"attackerId": playerID,
+					"targetId":   targetID,
+					"targetType": targetType,
+					"damage":     0,
+					"isCrit":     false,
+					"isMiss":     true,
+					"isMagic":    false,
+				})
+				fmt.Printf("💨 MISS (Perfect Dodge): Player %s -> Player %s\n", playerData.Username, targetData.Username)
+				return
+			}
+
+			// 2. HIT vs FLEE check
+			hitRate := 100 + playerData.HIT - targetData.FLEE
+			if hitRate < 5 {
+				hitRate = 5
+			} else if hitRate > 95 {
+				hitRate = 95
+			}
+
+			if rand.Float32()*100.0 > float32(hitRate) {
+				// MISSED!
+				u.eventCallback("combat_damage_event", map[string]interface{}{
+					"attackerId": playerID,
+					"targetId":   targetID,
+					"targetType": targetType,
+					"damage":     0,
+					"isCrit":     false,
+					"isMiss":     true,
+					"isMagic":    false,
+				})
+				fmt.Printf("💨 MISS: Player %s -> Player %s (HitRate: %d%%)\n", playerData.Username, targetData.Username, hitRate)
+				return
+			}
+		}
+
+		// Authoritative domain-derived class damage formula calculation (adjusted by PvP multiplier 0.7)
+		dmgVal, isCritRaw := playerData.CalculateDamageTo(
+			targetLevel,
+			targetLUK,
+			targetDefense,
+			targetSoftDEF,
+			targetRES,
+		)
+		isCrit = isCritRaw
+		finalDamage := dmgVal * 0.7
+
+		// Hard cap — no single hit can exceed 35% of target's max HP like Jagres
 		maxHitDmg := targetData.MaxHP * 0.35
 		if finalDamage > maxHitDmg {
 			finalDamage = maxHitDmg
@@ -249,14 +319,25 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 		}
 
 		fmt.Printf("%s⚔️ PvP Hit: Player %s -> Player %s (Damage: %.2f, Target HP: %.2f/%.2f)\n",
-			critLabel, playerData.Username, targetData.Username, finalDamage, targetData.HP - finalDamage, targetData.MaxHP)
+			critLabel, playerData.Username, targetData.Username, finalDamage, targetData.HP-finalDamage, targetData.MaxHP)
+
+		// Broadcast combat event immediately to WebSocket hub
+		u.eventCallback("combat_damage_event", map[string]interface{}{
+			"attackerId": playerID,
+			"targetId":   targetID,
+			"targetType": targetType,
+			"damage":     finalDamage,
+			"isCrit":     isCrit,
+			"isMiss":     false,
+			"isMagic":    playerData.Class == "Mage",
+		})
 
 		u.activePlayersMu.Lock()
 		targetData.HP -= finalDamage
 		if targetData.HP <= 0 {
 			targetData.HP = 0
 			fmt.Printf("☠️ Player %s mengalahkan %s dalam duel PvP!\n", playerData.Username, targetData.Username)
-			
+
 			// Penalty/respawn handler: restore health and respawn at spawn coordinates
 			go func(tID string, tUser string) {
 				time.Sleep(3 * time.Second)
@@ -265,7 +346,7 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 				var lastX, lastY, lastZ float32
 				if exists && tData != nil {
 					tData.HP = tData.MaxHP
-					
+
 					// Update player HP in ECS registry
 					if pHcomp, found := u.registry.GetComponent(domain.EntityID(tID), "Health"); found {
 						h := pHcomp.(*domain.HealthComponent)
@@ -301,4 +382,3 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 
 // SimulateMonstersTick telah dipindah ke game_usecase.go dengan implementasi
 // processMonsterAIWithSnapshot yang lock-free menggunakan player snapshot.
-

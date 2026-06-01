@@ -45,7 +45,7 @@ export function AuthScreen({
             <Sword className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-3xl font-black italic tracking-tighter uppercase text-white leading-none mt-2">
-            SEAL M <span className="text-cyan-400">ARENA</span>
+            Jagres <span className="text-cyan-400">ARENA</span>
           </h1>
           <p className="text-[10px] text-zinc-500 font-bold tracking-widest uppercase">Go authoritative clean architecture backend</p>
         </div>
@@ -69,8 +69,8 @@ export function AuthScreen({
               <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-zinc-600">
                 <User className="w-4 h-4" />
               </span>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="yoga_hero"
@@ -87,8 +87,8 @@ export function AuthScreen({
               <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-zinc-600">
                 <Key className="w-4 h-4" />
               </span>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
@@ -110,8 +110,8 @@ export function AuthScreen({
                 <RefreshCw className="w-4 h-4 animate-spin" />
               ) : (
                 <>
-                   <Zap className="w-4 h-4 fill-white" />
-                   {isLogin ? "MASUK ARENA" : "DAFTAR AKUN BARU"}
+                  <Zap className="w-4 h-4 fill-white" />
+                  {isLogin ? "MASUK ARENA" : "DAFTAR AKUN BARU"}
                 </>
               )}
             </div>
@@ -121,7 +121,7 @@ export function AuthScreen({
         {/* Toggle register */}
         <div className="text-center text-xs text-zinc-600 font-semibold mt-2">
           {isLogin ? "Belum punya akun?" : "Sudah memiliki akun?"}{" "}
-          <button 
+          <button
             onClick={handleToggle}
             className="text-cyan-400 hover:text-cyan-300 underline font-bold"
           >

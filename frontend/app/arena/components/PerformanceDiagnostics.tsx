@@ -207,7 +207,7 @@ export function PerformanceDiagnostics({
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        alert(`📊 [SEAL M MMORPG PERF REPORT]\n\nLaporan performa sukses diunduh!\n\n- Rata-rata FPS: ${avgFps}\n- 1% Low (Micro-Stutters): ${Math.round(1000 / p99)} FPS\n- Total Lag Spikes Terdeteksi: ${spikesArray.length}\n- Active Entities: Players: ${connectedPlayersRef.current?.length || 0}, Monsters: ${worldMonstersRef.current?.length || 0}\n\nSilakan berikan file JSON tersebut kepada developer untuk analisis mendalam!`);
+        alert(`📊 [Jagres MMORPG PERF REPORT]\n\nLaporan performa sukses diunduh!\n\n- Rata-rata FPS: ${avgFps}\n- 1% Low (Micro-Stutters): ${Math.round(1000 / p99)} FPS\n- Total Lag Spikes Terdeteksi: ${spikesArray.length}\n- Active Entities: Players: ${connectedPlayersRef.current?.length || 0}, Monsters: ${worldMonstersRef.current?.length || 0}\n\nSilakan berikan file JSON tersebut kepada developer untuk analisis mendalam!`);
       }
     };
 

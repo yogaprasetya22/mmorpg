@@ -3,7 +3,7 @@
 /**
  * VFXManager v10 — ECS Batcher
  * 
- * High-performance VFX engine for Seal-M.
+ * High-performance VFX engine for Jagres.
  * - Zero GC: Uses TypedArray pool for active particles.
  * - Single Draw Call: Batching all common particles into InstancedMesh.
  * - Multi-Texture: Uses a single shader that picks from an array of textures (Kenney Pack).
@@ -21,7 +21,7 @@ export type VFXContextValue = {
 };
 
 const VFXContext = createContext<VFXContextValue>({
-  spawnVFX: () => {},
+  spawnVFX: () => { },
 });
 
 const MAX_PARTICLES = 150;
@@ -50,14 +50,14 @@ export function VFXProvider({ children }: { children: React.ReactNode }) {
     // Find next available slot or recycle oldest
     let idx = -1;
     const eff = effect.toLowerCase();
-    
+
     // Completely disable basic attack smoke/puff/shockwave effects on player and enemy when attacking/hitting
     if (
-      eff.includes('muzzle') || 
-      eff.includes('magic') || 
-      eff.includes('hit') || 
-      eff.includes('spark') || 
-      eff.includes('shockwave') || 
+      eff.includes('muzzle') ||
+      eff.includes('magic') ||
+      eff.includes('hit') ||
+      eff.includes('spark') ||
+      eff.includes('shockwave') ||
       eff.includes('critical-hit') ||
       eff.includes('smoke')
     ) {
@@ -77,7 +77,7 @@ export function VFXProvider({ children }: { children: React.ReactNode }) {
     px[idx] = pos[0];
     py[idx] = pos[1];
     pz[idx] = pos[2];
-    
+
     // Map dust-mote to 2 (shrinking particle) instead of 4 (growing shockwave)
     const effType = eff.includes('muzzle') ? 0 : (eff.includes('spark') ? 1 : (eff.includes('magic') ? 2 : (eff.includes('hit') ? 3 : (eff.includes('dust-mote') ? 2 : 4))));
     type[idx] = effType;
@@ -153,18 +153,18 @@ export function VFXProvider({ children }: { children: React.ReactNode }) {
       px[i] += vx[i] * delta;
       py[i] += vy[i] * delta;
       pz[i] += vz[i] * delta;
-      
+
       // Gravity for sparks
       if (type[i] === 1) vy[i] -= 9.8 * delta;
 
       // Update Visuals
       _dummy.position.set(px[i], py[i], pz[i]);
       _dummy.quaternion.copy(camQ); // Billboard
-      
+
       let s = 1.0;
       if (type[i] === 4) s = (1.0 - life[i]) * pscale[i]; // Growing shockwave/mist
       else s = life[i] * pscale[i]; // Shrinking particle (dust-motes, sparks, magic)
-      
+
       _dummy.scale.set(s, s, 1);
       _dummy.updateMatrix();
       meshRef.current.setMatrixAt(i, _dummy.matrix);

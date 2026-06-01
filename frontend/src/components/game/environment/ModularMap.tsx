@@ -5,6 +5,7 @@ import { useGLTF } from '@react-three/drei';
 import { useEditorStore } from '@/src/state/useEditorStore';
 import { InstancedStaticCollider } from 'bvhecctrl';
 import * as THREE from 'three';
+import { registerCollider, unregisterCollider } from '@/src/core/utils/globalRaycaster';
 
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 
@@ -127,6 +128,20 @@ const InstancedMeshPart = ({ meshData, instances }: { meshData: any, instances: 
 
     meshRef.current.instanceMatrix.needsUpdate = true;
     if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
+
+    // CRITICAL: Compute bounding box and sphere so that Three.js Raycaster 
+    // can intersect individual instances across the entire game world!
+    meshRef.current.computeBoundingSphere();
+    meshRef.current.computeBoundingBox();
+  }, [instances, meshData]);
+
+  // Register in global colliders for X-Ray camera occlusion raycasting
+  useEffect(() => {
+    const mesh = meshRef.current;
+    if (mesh) {
+      registerCollider(mesh);
+      return () => unregisterCollider(mesh);
+    }
   }, [instances, meshData]);
 
   return (

@@ -131,3 +131,22 @@ func (h *Hub) BroadcastChatMessage(sender string, msg string) {
 		}
 	}
 }
+
+// BroadcastGenericJSON sends a generic JSON object to all connected clients.
+func (h *Hub) BroadcastGenericJSON(payload interface{}) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+
+	h.clientsMu.RLock()
+	defer h.clientsMu.RUnlock()
+
+	for client := range h.clients {
+		select {
+		case client.Send <- data:
+		default:
+			// Non-blocking send to prevent stalling
+		}
+	}
+}

@@ -1,6 +1,6 @@
 # 🎮 MMORPG Real-Time Game Backend: Go Clean Architecture & Roadmap
 
-Dokumentasi ini mendefinisikan rancangan arsitektur backend, struktur kode bersih (_Clean Architecture_), pilihan teknologi, integrasi database, integrasi sisi frontend, serta tahapan pengembangan (_phases_) untuk mengubah proyek saat ini menjadi game **Multiplayer Battle MMORPG** bergaya _Genshin Impact_ / _Seal M_.
+Dokumentasi ini mendefinisikan rancangan arsitektur backend, struktur kode bersih (_Clean Architecture_), pilihan teknologi, integrasi database, integrasi sisi frontend, serta tahapan pengembangan (_phases_) untuk mengubah proyek saat ini menjadi game **Multiplayer Battle MMORPG** bergaya _Genshin Impact_ / _Jagres_.
 
 ---
 

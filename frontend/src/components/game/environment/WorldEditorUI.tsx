@@ -82,13 +82,13 @@ export const WorldEditorUI = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isEditorOpen) return;
       const { selectedIds } = useEditorStore.getState();
-      
+
       const activeEl = document.activeElement;
       if (
-        activeEl && 
-        (activeEl.tagName === 'INPUT' || 
-         activeEl.tagName === 'TEXTAREA' || 
-         activeEl.getAttribute('contenteditable') === 'true')
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.getAttribute('contenteditable') === 'true')
       ) {
         return;
       }
@@ -189,8 +189,8 @@ export const WorldEditorUI = () => {
 
   return (
     <div className="fixed inset-0 z-[9999] pointer-events-none flex justify-between select-none text-zinc-200">
-      
-      
+
+
       {/* ─── INITIALIZING LOADING OVERLAY ─── */}
       {isEditorOpen && isInitializing && (
         <div className="fixed inset-0 z-[10005] bg-zinc-950/85 backdrop-blur-md flex flex-col items-center justify-center pointer-events-auto">
@@ -203,7 +203,7 @@ export const WorldEditorUI = () => {
       {/* ─── FLOATING OPEN BUTTON (WHEN CLOSED) ─── */}
       {!isEditorOpen && (
         <div className="absolute top-6 right-6 pointer-events-auto">
-          <button 
+          <button
             onClick={() => setIsEditorOpen(true)}
             className="px-6 py-3 rounded-full font-sans text-xs font-semibold tracking-widest bg-blue-600 hover:bg-blue-500 border border-blue-400 text-white shadow-xl hover:scale-[1.03] active:scale-[0.97] transition-all flex items-center gap-2.5"
           >
@@ -216,7 +216,7 @@ export const WorldEditorUI = () => {
       {/* ─── MODULAR LEFT SIDEBAR DOCK (SHADCN UI SPEC) ─── */}
       {isEditorOpen && (
         <div className="world-editor-ui w-[310px] h-screen bg-zinc-950/90 border-r border-zinc-900 flex flex-col pointer-events-auto z-[9999] shadow-2xl relative overflow-hidden font-sans backdrop-blur-xl">
-          
+
           {/* ─── SYNCHRONOUS DATABASE SYNC OVERLAY ─── */}
           {isSaving && (
             <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-md z-[10000] flex flex-col items-center justify-center animate-in fade-in duration-350">
@@ -236,18 +236,18 @@ export const WorldEditorUI = () => {
               </span>
             </div>
           )}
-          
+
           {/* Header Branding */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-900/60 bg-zinc-950/40 flex-shrink-0">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6] animate-pulse" />
               <h3 className="text-[11px] font-extrabold tracking-[0.15em] text-zinc-100 uppercase">
-                SEAL-M MAP STUDIO
+                Jagres MAP STUDIO
               </h3>
             </div>
-            
+
             {/* Quick Exit */}
-            <button 
+            <button
               onClick={() => setIsEditorOpen(false)}
               className="p-1 hover:bg-zinc-900 rounded-md text-zinc-500 hover:text-white transition-all duration-200 outline-none cursor-pointer"
               title="Close Workspace"
@@ -258,7 +258,7 @@ export const WorldEditorUI = () => {
 
           {/* Scrolling Content Panel */}
           <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col">
-            
+
             {/* Module 1: Core Map Settings (Search, circular blue-knob sliders, Save button) */}
             <MapSettingsModule />
 
@@ -268,11 +268,10 @@ export const WorldEditorUI = () => {
                 <div key={sec.id} className="border-b border-zinc-900/40">
                   <button
                     onClick={() => toggleSection(sec.id)}
-                    className={`w-full text-left px-4 py-2.5 text-[10px] font-semibold tracking-wider transition-all duration-200 flex items-center justify-between outline-none cursor-pointer ${
-                      activeSection === sec.id 
-                        ? 'bg-zinc-900/40 text-blue-400 border-l-2 border-blue-500 font-bold' 
+                    className={`w-full text-left px-4 py-2.5 text-[10px] font-semibold tracking-wider transition-all duration-200 flex items-center justify-between outline-none cursor-pointer ${activeSection === sec.id
+                        ? 'bg-zinc-900/40 text-blue-400 border-l-2 border-blue-500 font-bold'
                         : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/10 border-l-2 border-transparent'
-                    }`}
+                      }`}
                   >
                     <span className="uppercase">{sec.label}</span>
                     <ChevronRight className={`w-3 h-3 text-zinc-500 transition-transform duration-200 ${activeSection === sec.id ? 'rotate-90 text-blue-500' : ''}`} />

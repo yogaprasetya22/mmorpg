@@ -27,7 +27,7 @@ export function LoadingScreen({ type, successMsg }: LoadingScreenProps) {
 
           <div className="flex flex-col gap-2">
             <h2 className="text-2xl font-black italic tracking-tighter uppercase text-white leading-none">
-              SEAL M <span className="text-cyan-400">ARENA</span>
+              Jagres <span className="text-cyan-400">ARENA</span>
             </h2>
             <p className="text-cyan-400 text-[10px] font-black uppercase tracking-[0.3em] animate-pulse mt-1">
               Menghubungkan Sesi...
@@ -52,7 +52,7 @@ export function LoadingScreen({ type, successMsg }: LoadingScreenProps) {
         <div className="flex flex-col gap-1 items-center animate-pulse">
           <span className="text-[10px] font-black uppercase text-cyan-400 tracking-[0.3em] ml-1">MENYIAPKAN PETA DUNIA</span>
           <h1 className="text-4xl font-black uppercase tracking-tighter text-white italic">
-            SEAL-M <span className="text-cyan-400">ARENA</span>
+            Jagres <span className="text-cyan-400">ARENA</span>
           </h1>
         </div>
 
@@ -68,7 +68,7 @@ export function LoadingScreen({ type, successMsg }: LoadingScreenProps) {
             Mempersiapkan struktur data BVH untuk stabilitas fisika karakter
           </p>
         </div>
-        
+
         <div className="mt-8 p-4 bg-zinc-900/50 border border-white/5 rounded-2xl text-left">
           <span className="text-[9px] font-black text-cyan-400 uppercase tracking-widest block mb-1">TIPS BERMAIN</span>
           <p className="text-[10px] text-zinc-400 leading-normal">

@@ -144,31 +144,36 @@ Untuk mencegah kembalinya masalah **Garbage Collection (GC) lag spikes** (drop F
 
 ## 🚫 10. DONT-TOUCH ZONE: Sistem Kritis yang Haram Disenggol!
 
-Untuk menjaga kestabilan 60 FPS dan latensi sub-milidetik yang sudah dicapai, arsitektur di bawah ini adalah **zona suci** yang **TIDAK BOLEH** diubah atau dimodifikasi tanpa analisis mendalam:
+Untuk menjaga kestabilan 60 FPS dan latensi sub-milidetik yang sudah dicapai, arsitektur di bawah ini adalah **zona suci** yang **TIDAK BOLEH** diubah atau dimodifikasi tanpa analisis mendalam (lihat panduan pencegahan regresi lengkap di **[Stage 0: Global Architecture & Context Bootstrap](wiki/architecture/00_context_bootstrap.md)**):
 
 ### 1. Metode Deteksi Tanah & Tangga (`BVHEcctrl.config`)
 * **Status Saat Ini:** Menggunakan `SHAPECAST` untuk deteksi pijakan bawah tanah.
 * **Pantangan:** **Jangan pernah diubah kembali ke `RAYCAST` atau `BOTH`!**
   * Mengubah ke `RAYCAST` akan membuat karakter tersangkut (*stuck*) di anak tangga karena ray tidak bervolume.
   * Mengubah ke `BOTH` akan memproses kalkulasi BVH ganda yang langsung membuat frame rate client *drop* parah.
+* **Rujukan Arsitektur:** Dijabarkan lengkap pada **[Stage 0: Context Bootstrap (Bab 3-A)](wiki/architecture/00_context_bootstrap.md#a-aturan-sisi-frontend-client-side-constraints)**.
 
 ### 2. Decoding WebSocket MessagePack (`useWebSocketGame.ts`)
 * **Status Saat Ini:** Menggunakan library lokal `@msgpack/msgpack` secara sinkron langsung di main-thread.
 * **Pantangan:** **Jangan pernah memindahkan kembali proses ini ke Web Worker menggunakan CDN eksternal (`importScripts`)!**
   * Browser memblokir pengunduhan skrip eksternal dari CDN luar di dalam blob worker karena aturan ketat **Content Security Policy (CSP)**.
   * Decoding lokal sangat cepat (hanya **<0.05ms** per pass) dan terbukti aman dari error sandbox browser.
+* **Rujukan Arsitektur:** Dijabarkan lengkap pada **[Stage 7: Network Sync Protocol](wiki/architecture/07_network_sync_protocol.md)**.
 
 ### 3. Lock-Free Monster State Machine (`monster_ai.go`)
 * **Status Saat Ini:** Menggunakan string/enum FSM bawaan langsung (`m.AIState`) tanpa lock mutex global dan tanpa alokasi heap baru.
 * **Pantangan:** **Jangan pernah menggunakan kembali library `looplab/fsm` atau sejenisnya!**
   * Library eksternal tersebut memicu ribuan alokasi objek per detik pada runtime Go, yang menyebabkan *Garbage Collector spikes* dan menghabiskan resource server secara sia-sia saat melayani 100+ monster.
+* **Rujukan Arsitektur:** Dijabarkan lengkap pada **[Stage 0: Context Bootstrap (Bab 3-B)](wiki/architecture/00_context_bootstrap.md#b-aturan-sisi-backend-server-side-constraints)**.
 
 ### 4. 2D Spatial Hash Grid Server-Side (`game_usecase.go` & `monster_ai.go`)
 * **Status Saat Ini:** Menggunakan `SpatialHashGrid` dengan kerapatan 10.0 unit untuk lookup target terdekat musuh secara $O(1)$.
 * **Pantangan:** **Jangan pernah mengembalikan logika pencarian target aggro musuh ke loop linier $O(N)$!**
   * Perbandingan posisi jarak ke seluruh player aktif secara berulang akan menyebabkan *CPU overload* parah di sisi backend seiring bertambahnya jumlah pemain aktif.
+* **Rujukan Arsitektur:** Dijabarkan lengkap pada **[Stage 2: Backend Combat Usecase (Langkah 4)](wiki/architecture/02_backend_combat.md#langkah-4-menerapkan-formula-pengurangan-kerusakan-hard-vs-soft-def-a--b)**.
 
 ### 5. Throttle Pengiriman State Player Client (`sendPlayerState`)
 * **Status Saat Ini:** Pengiriman posisi player ke server dibatasi keras pada frekuensi **20Hz (50ms)** dengan sistem deduplikasi perubahan gerakan.
 * **Pantangan:** **Jangan pernah menaikkan frekuensi pengiriman ke 60Hz atau mematikan deduplikasi!**
   * Melakukan hal tersebut akan membanjiri buffer jaringan WebSocket, meningkatkan latensi ping secara drastis, dan menyebabkan karakter bergetar (*rubberbanding*) di layar pemain lain.
+* **Rujukan Arsitektur:** Dijabarkan lengkap pada **[Stage 7: Network Sync Protocol](wiki/architecture/07_network_sync_protocol.md)**.

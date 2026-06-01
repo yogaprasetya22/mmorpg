@@ -8,24 +8,24 @@
 
 ## 📋 Daftar Isi
 
-| No | Area | Lokasi File | Risiko Jika Diubah |
-|----|------|-------------|-------------------|
-| 1 | Ground Detection Method (BVH SHAPECAST) | `GameCanvas.tsx` | Karakter tersangkut tangga |
-| 2 | WebSocket MessagePack Decoder | `useWebSocketGame.ts` | CSP block, game mati total |
-| 3 | Monster AI State Machine (Lock-Free) | `monster_ai.go` | GC spike server, lag 100+ monster |
-| 4 | 2D Spatial Hash Grid (O(1) Aggro) | `game_usecase.go`, `monster_ai.go` | CPU overload server, game freeze |
-| 5 | Player State Send Rate (20Hz / 50ms) | `PlayerController.tsx` / hooks | Rubberband, network overload |
-| 6 | useFrame — Zero Allocation Rule | `RemoteMonstersRenderer.tsx`, `RemotePlayersRenderer.tsx`, `Minimap.tsx` | GC spike, FPS drop ke 15 |
-| 7 | Sort Throttle 10Hz | `RemoteMonstersRenderer.tsx`, `RemotePlayersRenderer.tsx` | Frame budget overrun |
-| 8 | Object Pool & Scratch Reuse | `RemoteMonstersRenderer.tsx`, `RemotePlayersRenderer.tsx` | Heap fragmentation |
-| 9 | requestIdleCallback (HTTP Polling) | `ArenaClient.hooks.ts` | Main-thread stall, micro-stutter |
-| 10 | LOD & Culling Thresholds | `RemoteMonstersRenderer.tsx`, `RemotePlayersRenderer.tsx` | GPU/CPU overload di keramaian |
-| 11 | DataTextureLoader Monkey-Patch | `GameCanvas.tsx` | Crash `TypeError: error is not a function` |
-| 12 | EnvironmentErrorBoundary | `StormEnvironment.tsx` | Crash tak tertangkap saat asset gagal |
-| 13 | sanitizeCanvasData | `useEditorStore.ts` | 404 EXR/JSON dikirim ke Three.js |
-| 14 | WS Hub Sync Fan-Out (Non-Blocking) | `hub.go` | Goroutine explosion, memory leak |
-| 15 | Monster Leash & Respawn Logic | `monster_ai.go` | Monster exploit, health reset failure |
-| 16 | AdaptivePerformanceOptimizer | `AdaptivePerformanceOptimizer.tsx` | Bloom/shadow tidak mati saat FPS drop |
+| No | Area | Lokasi File | Risiko Jika Diubah | Rujukan Arsitektur (Wiki) |
+|----|------|-------------|-------------------|--------------------------|
+| 1 | Ground Detection Method (BVH SHAPECAST) | `GameCanvas.tsx` | Karakter tersangkut tangga | [Stage 0: Context Bootstrap](wiki/architecture/00_context_bootstrap.md#a-aturan-sisi-frontend-client-side-constraints) |
+| 2 | WebSocket MessagePack Decoder | `useWebSocketGame.ts` | CSP block, game mati total | [Stage 7: Network Sync Protocol](wiki/architecture/07_network_sync_protocol.md) |
+| 3 | Monster AI State Machine (Lock-Free) | `monster_ai.go` | GC spike server, lag 100+ monster | [Stage 0: Context Bootstrap](wiki/architecture/00_context_bootstrap.md#b-aturan-sisi-backend-server-side-constraints) |
+| 4 | 2D Spatial Hash Grid (O(1) Aggro) | `game_usecase.go`, `monster_ai.go` | CPU overload server, game freeze | [Stage 2: Backend Combat Usecase](wiki/architecture/02_backend_combat.md#langkah-4-menerapkan-formula-pengurangan-kerusakan-hard-vs-soft-def-a--b) |
+| 5 | Player State Send Rate (20Hz / 50ms) | `PlayerController.tsx` / hooks | Rubberband, network overload | [Stage 7: Network Sync Protocol](wiki/architecture/07_network_sync_protocol.md) |
+| 6 | useFrame — Zero Allocation Rule | `RemoteMonstersRenderer.tsx`, `RemotePlayersRenderer.tsx`, `Minimap.tsx` | GC spike, FPS drop ke 15 | [Stage 4: Frontend Combat UI](wiki/architecture/04_frontend_combat_ui.md#langkah-3-mengoptimalkan-jittering--batching-damage-hud-popups) |
+| 7 | Sort Throttle 10Hz | `RemoteMonstersRenderer.tsx`, `RemotePlayersRenderer.tsx` | Frame budget overrun | [Stage 4: Frontend Combat UI](wiki/architecture/04_frontend_combat_ui.md) |
+| 8 | Object Pool & Scratch Reuse | `RemoteMonstersRenderer.tsx`, `RemotePlayersRenderer.tsx` | Heap fragmentation | [Stage 4: Frontend Combat UI](wiki/architecture/04_frontend_combat_ui.md) |
+| 9 | requestIdleCallback (HTTP Polling) | `ArenaClient.hooks.ts` | Main-thread stall, micro-stutter | [Stage 3: Frontend Client State](wiki/architecture/03_frontend_state.md) |
+| 10 | LOD & Culling Thresholds | `RemoteMonstersRenderer.tsx`, `RemotePlayersRenderer.tsx` | GPU/CPU overload di keramaian | [Stage 4: Frontend Combat UI](wiki/architecture/04_frontend_combat_ui.md) |
+| 11 | DataTextureLoader Monkey-Patch | `GameCanvas.tsx` | Crash `TypeError: error is not a function` | [Stage 4: Frontend Combat UI](wiki/architecture/04_frontend_combat_ui.md) |
+| 12 | EnvironmentErrorBoundary | `StormEnvironment.tsx` | Crash tak tertangkap saat asset gagal | [Stage 4: Frontend Combat UI](wiki/architecture/04_frontend_combat_ui.md) |
+| 13 | sanitizeCanvasData | `useEditorStore.ts` | 404 EXR/JSON dikirim ke Three.js | [Stage 3: Frontend Client State](wiki/architecture/03_frontend_state.md) |
+| 14 | WS Hub Sync Fan-Out (Non-Blocking) | `hub.go` | Goroutine explosion, memory leak | [Stage 7: Network Sync Protocol](wiki/architecture/07_network_sync_protocol.md) |
+| 15 | Monster Leash & Respawn Logic | `monster_ai.go` | Monster exploit, health reset failure | [Stage 2: Backend Combat Usecase](wiki/architecture/02_backend_combat.md) |
+| 16 | AdaptivePerformanceOptimizer | `AdaptivePerformanceOptimizer.tsx` | Bloom/shadow tidak mati saat FPS drop | [Stage 4: Frontend Combat UI](wiki/architecture/04_frontend_combat_ui.md) |
 
 ---
 

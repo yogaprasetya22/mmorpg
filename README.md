@@ -163,6 +163,18 @@ make clean
 If you are developing this codebase alongside an AI assistant, ensure that the agent reads and strictly adheres to the authoritative compilation, performance guidelines, and critical warnings specified in:
 👉 **[AI Assistant Pairing Rules & Instructions (SKILL.md)](SKILL.md)**
 
+### 🏛️ Ragnarok Online Combat & Stats Architecture Wiki
+Untuk memandu implementasi sistem statistik 4th class dan formula combat iRO Renewal, tim pengembang dan AI Agent wajib membaca panduan arsitektur modular di bawah ini:
+👉 **[Master Navigasi Arsitektur (wiki/architecture/README.md)](wiki/architecture/README.md)**
+*   [Stage 0: Global Architecture & Context Bootstrap](wiki/architecture/00_context_bootstrap.md) - Struktur direktori workspace, dependencies, dan integrasi pengaman DONT_TOUCH.
+*   [Stage 1: Backend Domain & Recalculate Logic](wiki/architecture/01_backend_domain.md) - Integrasi Talent Stats primer dan derived substats in-memory Go.
+*   [Stage 2: Backend Combat Authoritative Validation](wiki/architecture/02_backend_combat.md) - Hit vs Flee rolls, mitigasi A+B DEF, dan Critical Hit Shield.
+*   [Stage 3: Frontend Client State & WebSocket Allocation](wiki/architecture/03_frontend_state.md) - Panel alokasi stat TSX dan payload sinkronisasi WebSocket.
+*   [Stage 4: Frontend Combat UI & Animation Sync](wiki/architecture/04_frontend_combat_ui.md) - Dynamic ASPD anim timeScale, VCT/FCT casting split, dan Damage HUD.
+*   [Stage 5: GORM Database Migrations & Seeding](wiki/architecture/05_database_migrations.md) - Konfigurasi auto-migrasi schema PostgreSQL dan seeds data default.
+*   [Stage 6: Combat Formula Reference Sheet](wiki/architecture/06_combat_formula_ref.md) - Persamaan matematika murni iRO Renewal terperinci.
+*   [Stage 7: Network Sync Protocol & JSON Schema](wiki/architecture/07_network_sync_protocol.md) - Definisi spesifikasi payload WebSocket C2S/S2C lengkap.
+
 > [!WARNING]
 > **DONT-TOUCH ZONE (ZONA SUCI PERFORMA):**
 > Ada 5 komponen kritis arsitektur (termasuk ground physics `SHAPECAST`, decoding MsgPack di main-thread, lock-free Go FSM, 2D Spatial Hash Grid, dan 20Hz WS player send rate) yang **TIDAK BOLEH** diubah demi kestabilan 60 FPS. Panduan lengkap larangan ini wajib dibaca di **[SKILL.md (Bab 10)](SKILL.md#10-dont-touch-zone-sistem-kritis-yang-haram-disenggol)** sebelum menyentuh kode!

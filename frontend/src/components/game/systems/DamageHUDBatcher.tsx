@@ -40,7 +40,7 @@ const STRIDE     = 9;
 const MAX_INST   = MAX_EVENTS * STRIDE;
 
 const ATLAS_COLS = 6;
-const ATLAS_ROWS = 2;
+const ATLAS_ROWS = 4; // Expanded to support alphabetic characters cleanly
 
 // Perspective stack tuning
 const DEPTH_SCALE    = 0.82;  // each depth level shrinks to this fraction
@@ -62,6 +62,7 @@ const C_NORMAL_DIGIT = new THREE.Color('#ffffff'); // Pure white for normal phys
 const C_MAGIC_DIGIT  = new THREE.Color('#00e5ff'); // Electric cyan for magic/skills
 const C_HEAL_DIGIT   = new THREE.Color('#33ff66'); // Lime green for heals
 const C_DEBUFF_DIGIT = new THREE.Color('#00e5ff'); // Cyan for debuffs/negatives
+const C_MISS_DIGIT   = new THREE.Color('#90a4ae'); // Light slate grey for misses
 
 const IDX_PLUS  = 10;
 const IDX_MINUS = 11;
@@ -74,7 +75,7 @@ function buildAtlas(): THREE.CanvasTexture {
     cvs.height = S * ATLAS_ROWS;
     const ctx  = cvs.getContext('2d')!;
 
-    const chars = ['0','1','2','3','4','5','6','7','8','9','+','-'];
+    const chars = ['0','1','2','3','4','5','6','7','8','9','+','-','M','I','S','L','U','C','K','Y'];
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
 
@@ -241,7 +242,13 @@ function makeEvt(): Evt {
 }
 
 // ─── COMPONENT ───────────────────────────────────────────────────────────────
-export function DamageHUDBatcher({ damageQueue }: { damageQueue: React.RefObject<any[]> }) {
+export function DamageHUDBatcher({ 
+    damageQueue,
+    playerStatsRef
+}: { 
+    damageQueue: React.RefObject<any[]>,
+    playerStatsRef?: React.RefObject<any>
+}) {
     const digitMeshRef = useRef<THREE.InstancedMesh>(null!);
     const starMeshRef  = useRef<THREE.InstancedMesh>(null!);
     const { spawnVFX } = useVFX();
@@ -387,18 +394,15 @@ export function DamageHUDBatcher({ damageQueue }: { damageQueue: React.RefObject
                 const ev = damageQueue.current.shift()!;
                 if (!ev.isCrit && damageQueue.current.length > 80) continue;
 
-                const isCrit   = !!ev.isCrit;
-                const isMagic  = !!ev.isMagic || ev.color === '#00e5ff';
-                const isHeal   = !!ev.isHeal;
-                const isDebuff = ev.value < 0;
+                const isMiss   = !!ev.isMiss;
+                const isCrit   = !isMiss && !!ev.isCrit;
+                const isMagic  = !isMiss && (!!ev.isMagic || ev.color === '#00e5ff');
+                const isHeal   = !isMiss && !!ev.isHeal;
+                const isDebuff = !isMiss && ev.value < 0;
 
-                let val = Math.abs(Math.round(ev.value));
-                let dc  = 0;
-                if (val === 0) { _dbuf[0] = 0; dc = 1; }
-                else { while (val > 0 && dc < 8) { _dbuf[dc++] = val % 10; val = (val / 10) | 0; } }
-
-                const hasSign    = isHeal || isDebuff;
-                const totalChars = dc + (hasSign ? 1 : 0);
+                let totalChars = 0;
+                let SW  = isCrit ? 0.9 : 0.75;
+                let GAP = isCrit ? 0.75 : 0.6;
 
                 // ── Cluster check ─────────────────────────────────────────────
                 const px = ev.position[0], py = ev.position[1], pz = ev.position[2];
@@ -432,18 +436,36 @@ export function DamageHUDBatcher({ damageQueue }: { damageQueue: React.RefObject
                     }
                 }
 
-                // Spacing configurations
-                const SW  = isCrit ? 0.9 : 0.75;
-                const GAP = isCrit ? 0.75 : 0.6;
-                let ci    = 0;
-                if (hasSign) { e.charIdx[ci++] = isHeal ? IDX_PLUS : IDX_MINUS; }
-                for (let d = 0; d < dc; d++) {
-                    e.charIdx[ci++] = _dbuf[dc - 1 - d];
+                if (isMiss) {
+                    // Render "MISS" (M=12, I=13, S=14, S=14)
+                    e.charIdx[0] = 12;
+                    e.charIdx[1] = 13;
+                    e.charIdx[2] = 14;
+                    e.charIdx[3] = 14;
+                    totalChars = 4;
+                    SW = 0.65; // Slightly narrower for text
+                    GAP = 0.5;
+                } else {
+                    let val = Math.abs(Math.round(ev.value));
+                    let dc  = 0;
+                    if (val === 0) { _dbuf[0] = 0; dc = 1; }
+                    else { while (val > 0 && dc < 8) { _dbuf[dc++] = val % 10; val = (val / 10) | 0; } }
+
+                    const hasSign = isHeal || isDebuff;
+                    totalChars = dc + (hasSign ? 1 : 0);
+
+                    let ci    = 0;
+                    if (hasSign) { e.charIdx[ci++] = isHeal ? IDX_PLUS : IDX_MINUS; }
+                    for (let d = 0; d < dc; d++) {
+                        e.charIdx[ci++] = _dbuf[dc - 1 - d];
+                    }
                 }
+
                 const totalW = totalChars * GAP;
 
                 // Digit color
-                if      (isHeal)   e.digitColor.copy(C_HEAL_DIGIT);
+                if      (isMiss)   e.digitColor.copy(C_MISS_DIGIT);
+                else if (isHeal)   e.digitColor.copy(C_HEAL_DIGIT);
                 else if (isDebuff) e.digitColor.copy(C_DEBUFF_DIGIT);
                 else if (isCrit)   e.digitColor.copy(C_CRIT_DIGIT);
                 else if (isMagic)  e.digitColor.copy(C_MAGIC_DIGIT);
@@ -521,8 +543,12 @@ export function DamageHUDBatcher({ damageQueue }: { damageQueue: React.RefObject
                     : 0.0;
             }
 
-            // Ideal retro size: 2.4 for Crit, 1.25 for Normal (punchy crits!)
-            const baseScale = e.isCrit ? 2.4 : 1.25;
+            // Ideal retro size: 2.4 for Crit (scales dynamically up to 4.5 based on player's C.RATE), 1.25 for Normal (punchy crits!)
+            const stats = playerStatsRef?.current || {};
+            const cRate = stats.c_rate || 0;
+            const baseScale = e.isCrit 
+                ? Math.min(4.5, 2.4 + (cRate / 100.0) * 1.2) 
+                : 1.25;
             const totalScale = (baseScale + popExtra) * dsc;
 
             const yFloat = di === 0 ? t * 0.4 : 0.0;

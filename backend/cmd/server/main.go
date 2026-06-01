@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"mmorpg-backend/internal/delivery/http"
@@ -112,6 +113,17 @@ func main() {
 	// Instantiate WebSockets Hub
 	hub = ws.NewHub(gameUsecase)
 	go hub.Run()
+
+	// Register event callback to broadcast raw combat events dynamically to the Hub
+	gameUsecase.SetEventCallback(func(eventType string, data interface{}) {
+		if hub != nil {
+			hub.BroadcastGenericJSON(map[string]interface{}{
+				"type":      eventType,
+				"timestamp": time.Now().UnixNano() / int64(time.Millisecond),
+				"data":      data,
+			})
+		}
+	})
 
 	// KCP Server for fast real-time UDP synchronization
 	kcpServer = kcp.NewKCPServer(gameUsecase, authUsecase)
