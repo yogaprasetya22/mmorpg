@@ -2,16 +2,90 @@
 
 import { useMemo, useRef, useState, Suspense } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useGLTF, useAnimations, Text, Billboard } from "@react-three/drei";
+import { Text, Billboard } from "@react-three/drei";
 import * as THREE from 'three';
-import { SkeletonUtils } from 'three-stdlib';
-import { MeshoptDecoder } from 'meshoptimizer';
 import { PlayerNetworkState } from "@/src/hooks/useWebSocketGame";
 import { UnitRuntimeData } from "@/src/core/domain/unit.types";
 import { getTerrainElevation } from "@/src/core/utils/terrainHeight";
 import { useStore } from "@/src/state/useStore";
 import { useEditorStore } from "@/src/state/useEditorStore";
-import { API_BASE_URL } from "@/src/core/config";
+import { AvatarModel } from "./avatar/AvatarModel";
+
+const getDefaultCustomization = (_gender: string, playerClass: string, hairStyle = 1, hairColor = "#5A3E2D") => {
+  let weaponId = "asset_weapon_sword";
+  if (playerClass === "Mage") weaponId = "asset_weapon_scythe";
+  else if (playerClass === "Priest") weaponId = "asset_weapon_hammer";
+  else if (playerClass === "Thief") weaponId = "asset_weapon_scythe";
+  else if (playerClass === "Beginner") weaponId = "asset_weapon_bow";
+
+  const hairAssetId = `asset_hair_${String(hairStyle).padStart(3, '0')}`;
+  
+  return {
+    "Head": {
+      color: "#f5c6a5",
+      asset: { id: "asset_head_001", name: "Head #1", group: "cat_head", url: "/assets/characters/modular/heads/Head.001.glb", thumbnail: "/assets/characters/thumbnails/Head.001.png" }
+    },
+    "Hair": {
+      color: hairColor,
+      asset: { id: hairAssetId, name: `Hair #${hairStyle}`, group: "cat_hair", url: `/assets/characters/modular/hair_and_hats/Hair.${String(hairStyle).padStart(3, '0')}.glb`, thumbnail: `/assets/characters/thumbnails/Hair.${String(hairStyle).padStart(3, '0')}.png` }
+    },
+    "Eyes": {
+      color: "#3c6285",
+      asset: { id: "asset_eyes_001", name: "Eyes #1", group: "cat_eyes", url: "/assets/characters/modular/faces/Eyes.001.glb", thumbnail: "/assets/characters/thumbnails/Eyes.001.png" }
+    },
+    "EyeBrow": {
+      color: "#2d2d2d",
+      asset: { id: "asset_eyebrow_001", name: "EyeBrow #1", group: "cat_eyebrow", url: "/assets/characters/modular/faces/EyeBrow.001.glb", thumbnail: "/assets/characters/thumbnails/EyeBrow.001.png" }
+    },
+    "Nose": {
+      color: "",
+      asset: { id: "asset_nose_004", name: "Nose #4", group: "cat_nose", url: "/assets/characters/modular/faces/Nose.004.glb", thumbnail: "/assets/characters/thumbnails/Nose.004.png" }
+    },
+    "Outfit": {
+      color: "#4a6fa5",
+      asset: { id: "asset_outfit_001", name: "Outfit #1", group: "cat_outfit", url: "/assets/characters/modular/tops/Outfit.001.glb", thumbnail: "/assets/characters/thumbnails/Outfit.001.png" }
+    },
+    "Shoes": {
+      color: "#1a1a1a",
+      asset: { id: "asset_shoes_001", name: "Shoes #1", group: "cat_shoes", url: "/assets/characters/modular/accessories/Shoes.001.glb", thumbnail: "/assets/characters/thumbnails/Shoes.001.png" }
+    },
+    "Weapon": {
+      color: "",
+      asset: {
+        id: weaponId,
+        name: playerClass,
+        group: "cat_weapon",
+        url: `/assets/items/weapons/${weaponId.replace("asset_weapon_", "") === 'sword' ? 'Sword.glb' : weaponId.replace("asset_weapon_", "") === 'scythe' ? 'Battle_Scythe.glb' : weaponId.replace("asset_weapon_", "") === 'hammer' ? 'Battle_Hammer.glb' : 'Battle_Bow.glb'}`,
+        thumbnail: ""
+      }
+    }
+  };
+};
+
+const parseCustomization = (customizationStr?: string, defaultGender = "Male", defaultClass = "Warrior", hairStyle = 1, hairColor = "#5A3E2D") => {
+  if (customizationStr) {
+    try {
+      const parsed = JSON.parse(customizationStr);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch (e) {
+      console.warn("Failed to parse customization JSON:", e);
+    }
+  }
+  return getDefaultCustomization(defaultGender, defaultClass, hairStyle, hairColor);
+};
+
+const mapGameAnimationToAvatarPose = (anim: string) => {
+  const lower = anim.toLowerCase();
+  if (lower.includes("death")) return "Sword And Shield Death";
+  if (lower.includes("hit") || lower.includes("damage")) return "Light Hit To Head";
+  if (lower.includes("attack") || lower.includes("slash") || lower.includes("shoot")) return "Stable Sword Outward Slash";
+  if (lower.includes("skill") || lower.includes("spell") || lower.includes("heal")) return "Magic Heal";
+  if (lower.includes("run")) return "Slow Run";
+  if (lower.includes("walk") || lower.includes("jog")) return "Jogging";
+  return "Idle";
+};
 
 // Pre-built player Map for O(1) lookup inside useFrame (avoids O(n) find every 60fps)
 export type PlayerMapRef = React.RefObject<Map<string, PlayerNetworkState>>;
@@ -42,7 +116,7 @@ export const RemotePlayerInstance = ({
   connectedPlayersRef: _connectedPlayersRef, // kept for API compat
   playerMapRef,
   camera: _camera, // kept for API compat
-  gameConfig,
+  gameConfig: _gameConfig,
   mmSpellsRef,
   spellsRef,
   fighterSpellsRef,
@@ -51,30 +125,23 @@ export const RemotePlayerInstance = ({
   unitRegistry,
   visiblePlayerIdsRef
 }: RemotePlayerInstanceProps) => {
-  // Pre-select model based on actual character Class + Gender from backend registry
-  const modelPath = useMemo(() => {
-    if (gameConfig && gameConfig.character_models) {
-      const genderModels = gameConfig.character_models[gender || "Male"] || gameConfig.character_models["Male"];
-      const path = genderModels[cls || "Beginner"];
-      if (path) return path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
-    }
-    
-    return `${API_BASE_URL}/assets-model/Knight_Golden_Male.glb`;
-  }, [cls, gender, gameConfig]);
+  const [currentPose, setCurrentPose] = useState("Idle");
+  const [currentTimeScale, setCurrentTimeScale] = useState(1.0);
+  const [visible, setVisible] = useState(true);
 
-  const { scene, animations } = useGLTF(modelPath, true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
-  const clone = useMemo(() => {
-    const cloned = SkeletonUtils.clone(scene);
-    cloned.traverse((child: any) => {
-      if (child.isMesh) {
-        // Enable highly optimized shadows for remote players
-        child.castShadow = true;
-        child.receiveShadow = true;
-        child.geometry?.computeBoundingSphere?.();
-      }
-    });
-    return cloned;
-  }, [scene]);
+  const [customAvatarUrl, setCustomAvatarUrl] = useState<string | undefined>(undefined);
+  const [hairStyle, setHairStyle] = useState<number>(1);
+  const [hairColor, setHairColor] = useState<string>("#5A3E2D");
+
+  const remoteCustomization = useMemo(() => {
+    return parseCustomization(
+      customAvatarUrl,
+      gender || 'Male',
+      cls || 'Beginner',
+      hairStyle,
+      hairColor
+    );
+  }, [customAvatarUrl, gender, cls, hairStyle, hairColor]);
 
   const groupRef = useRef<THREE.Group>(null!);
   const nameRef = useRef<THREE.Group>(null!);
@@ -82,8 +149,6 @@ export const RemotePlayerInstance = ({
   const hpFillRef = useRef<THREE.Mesh>(null!);
   const lastHpRatio = useRef(-1);
   const smoothHpRatio = useRef(1);
-  const { actions } = useAnimations(animations, groupRef);
-  const activeAction = useRef<THREE.AnimationAction | null>(null);
 
   const currentAnimState = useRef("Idle");
   const stateBufferRef = useRef<{ x: number, y: number, z: number, rotation: number, timestamp: number }[]>([]);
@@ -146,12 +211,16 @@ export const RemotePlayerInstance = ({
       groupRef.current.position.set(data.x, snapY, data.z);
       groupRef.current.rotation.y = data.rotation;
       groupRef.current.visible = false;
-      if (activeAction.current) activeAction.current.paused = true;
+      if (visible !== false) {
+        setVisible(false);
+      }
       return;
     }
 
     groupRef.current.visible = true;
-    if (activeAction.current) activeAction.current.paused = false;
+    if (visible !== true) {
+      setVisible(true);
+    }
 
     if (prevVisualPos.current === null) {
       prevVisualPos.current = { x: groupRef.current.position.x, z: groupRef.current.position.z };
@@ -271,6 +340,18 @@ export const RemotePlayerInstance = ({
     // Billboard name label: quaternion copy removed — nameRef is a group, not Billboard.
     // Skip camera.quaternion.copy per player — use drei <Billboard> in JSX instead if needed.
 
+    if (data) {
+      if (data.custom_avatar_url !== customAvatarUrl) {
+        setCustomAvatarUrl(data.custom_avatar_url);
+      }
+      if (typeof (data as any).hair_style !== 'undefined' && (data as any).hair_style !== hairStyle) {
+        setHairStyle((data as any).hair_style);
+      }
+      if (typeof (data as any).hair_color !== 'undefined' && (data as any).hair_color !== hairColor) {
+        setHairColor((data as any).hair_color);
+      }
+    }
+
     // Handle animations inside useFrame dynamically without React state re-render!
     const animation = data.animation || "Idle";
     const desired = animation.toLowerCase();
@@ -280,50 +361,28 @@ export const RemotePlayerInstance = ({
     const startedNewAttack = isAttacking && (currentAnimState.current !== animation);
     const startedNewSkill  = isUsingSkill && (currentAnimState.current !== animation);
 
-    if (actions && currentAnimState.current !== animation) {
-      const keys = Object.keys(actions);
-      let clipName = "Idle";
-
-      if (desired.includes("run")) {
-        clipName = keys.find((k) => k === "Run" || k.toLowerCase() === "run") || "Idle";
-      } else if (desired.includes("walk")) {
-        clipName = keys.find((k) => k === "Walk" || k.toLowerCase().includes("walk")) || "Idle";
-      } else if (desired.includes("jump")) {
-        clipName = keys.find((k) => k === "Jump" || k.toLowerCase() === "jump" || k.toLowerCase().includes("jump")) || "Idle";
-      } else if (isAttacking || isUsingSkill) {
-        clipName = keys.find((k) => k.toLowerCase().includes("attack") || k.toLowerCase().includes("slash") || k.toLowerCase().includes("shoot")) || "Idle";
-      } else {
-        clipName = keys.find((k) => k === "Idle" || k.toLowerCase() === "idle") || "Idle";
-      }
-
-      const nextAction = actions[clipName];
-      if (nextAction && nextAction !== activeAction.current) {
-        if (activeAction.current) {
-          nextAction.reset().play();
-          activeAction.current.crossFadeTo(nextAction, 0.15, true);
-        } else {
-          nextAction.reset().fadeIn(0.1).play();
-        }
-        activeAction.current = nextAction;
-      }
-      currentAnimState.current = animation;
+    const nextPose = mapGameAnimationToAvatarPose(animation);
+    if (nextPose !== currentPose) {
+      setCurrentPose(nextPose);
     }
 
-    if (activeAction.current) {
-      if (desired.includes("walk")) {
-        activeAction.current.timeScale = Math.max(0.4, Math.min(1.2, smoothedSpeed.current / 3.0));
-      } else if (desired.includes("run")) {
-        activeAction.current.timeScale = Math.max(0.4, Math.min(1.4, smoothedSpeed.current / 5.5));
-      } else if (desired.includes("jump")) {
-        activeAction.current.timeScale = 0.8;
-      } else if (isAttacking) {
-        const remoteAspd = data.aspd ?? 150;
-        const remoteHPS = 50 / (200 - remoteAspd);
-        activeAction.current.timeScale = remoteHPS;
-      } else {
-        activeAction.current.timeScale = 1.0;
-      }
+    let nextTimeScale = 1.0;
+    if (desired.includes("walk")) {
+      nextTimeScale = Math.max(0.4, Math.min(1.2, smoothedSpeed.current / 3.0));
+    } else if (desired.includes("run")) {
+      nextTimeScale = Math.max(0.4, Math.min(1.4, smoothedSpeed.current / 5.5));
+    } else if (desired.includes("jump")) {
+      nextTimeScale = 0.8;
+    } else if (isAttacking) {
+      const remoteAspd = data.aspd ?? 150;
+      const remoteHPS = 50 / (200 - remoteAspd);
+      nextTimeScale = remoteHPS;
     }
+    if (Math.abs(nextTimeScale - currentTimeScale) > 0.05) {
+      setCurrentTimeScale(nextTimeScale);
+    }
+
+    currentAnimState.current = animation;
 
 
 
@@ -682,7 +741,9 @@ export const RemotePlayerInstance = ({
   return (
     <group ref={groupRef}>
       <group scale={1.0} position={[0, -1.3, 0]}>
-        <primitive object={clone} />
+        <Suspense fallback={null}>
+          <AvatarModel customization={remoteCustomization} pose={currentPose} timeScale={currentTimeScale} paused={!visible} />
+        </Suspense>
       </group>
       <Billboard ref={nameRef as any} position={[0, -1.1, 0]} follow={true} visible={false}>
         <Text

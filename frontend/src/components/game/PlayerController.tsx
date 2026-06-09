@@ -11,24 +11,98 @@
  * - No useState, no useRef for per-frame values (all in ECS)
  */
 
-import { useRef, useEffect, useMemo, useState } from 'react';
+import { useRef, useEffect, useMemo, useState, Suspense } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { useKeyboardControls, useAnimations, useGLTF, Html } from '@react-three/drei';
+import { useKeyboardControls, Html } from '@react-three/drei';
 import BVHEcctrl, { characterStatus } from 'bvhecctrl';
 import * as THREE from 'three';
-import { SkeletonUtils } from 'three-stdlib';
-import { MeshoptDecoder } from 'meshoptimizer';
 import { useVFX } from './systems/VFXManager';
 import ProjectilePool, { ProjectilePoolHandle } from './systems/ProjectilePool';
 import { useStore } from '@/src/state/useStore';
 import { useEditorStore } from '@/src/state/useEditorStore';
 import { getTerrainElevation } from '@/src/core/utils/terrainHeight';
+import { AvatarModel } from './avatar/AvatarModel';
+
+const getDefaultCustomization = (_gender: string, playerClass: string, hairStyle = 1, hairColor = "#5A3E2D") => {
+  let weaponId = "asset_weapon_sword";
+  if (playerClass === "Mage") weaponId = "asset_weapon_scythe";
+  else if (playerClass === "Priest") weaponId = "asset_weapon_hammer";
+  else if (playerClass === "Thief") weaponId = "asset_weapon_scythe";
+  else if (playerClass === "Beginner") weaponId = "asset_weapon_bow";
+
+  const hairAssetId = `asset_hair_${String(hairStyle).padStart(3, '0')}`;
+  
+  return {
+    "Head": {
+      color: "#f5c6a5",
+      asset: { id: "asset_head_001", name: "Head #1", group: "cat_head", url: "/assets/characters/modular/heads/Head.001.glb", thumbnail: "/assets/characters/thumbnails/Head.001.png" }
+    },
+    "Hair": {
+      color: hairColor,
+      asset: { id: hairAssetId, name: `Hair #${hairStyle}`, group: "cat_hair", url: `/assets/characters/modular/hair_and_hats/Hair.${String(hairStyle).padStart(3, '0')}.glb`, thumbnail: `/assets/characters/thumbnails/Hair.${String(hairStyle).padStart(3, '0')}.png` }
+    },
+    "Eyes": {
+      color: "#3c6285",
+      asset: { id: "asset_eyes_001", name: "Eyes #1", group: "cat_eyes", url: "/assets/characters/modular/faces/Eyes.001.glb", thumbnail: "/assets/characters/thumbnails/Eyes.001.png" }
+    },
+    "EyeBrow": {
+      color: "#2d2d2d",
+      asset: { id: "asset_eyebrow_001", name: "EyeBrow #1", group: "cat_eyebrow", url: "/assets/characters/modular/faces/EyeBrow.001.glb", thumbnail: "/assets/characters/thumbnails/EyeBrow.001.png" }
+    },
+    "Nose": {
+      color: "",
+      asset: { id: "asset_nose_004", name: "Nose #4", group: "cat_nose", url: "/assets/characters/modular/faces/Nose.004.glb", thumbnail: "/assets/characters/thumbnails/Nose.004.png" }
+    },
+    "Outfit": {
+      color: "#4a6fa5",
+      asset: { id: "asset_outfit_001", name: "Outfit #1", group: "cat_outfit", url: "/assets/characters/modular/tops/Outfit.001.glb", thumbnail: "/assets/characters/thumbnails/Outfit.001.png" }
+    },
+    "Shoes": {
+      color: "#1a1a1a",
+      asset: { id: "asset_shoes_001", name: "Shoes #1", group: "cat_shoes", url: "/assets/characters/modular/accessories/Shoes.001.glb", thumbnail: "/assets/characters/thumbnails/Shoes.001.png" }
+    },
+    "Weapon": {
+      color: "",
+      asset: {
+        id: weaponId,
+        name: playerClass,
+        group: "cat_weapon",
+        url: `/assets/items/weapons/${weaponId.replace("asset_weapon_", "") === 'sword' ? 'Sword.glb' : weaponId.replace("asset_weapon_", "") === 'scythe' ? 'Battle_Scythe.glb' : weaponId.replace("asset_weapon_", "") === 'hammer' ? 'Battle_Hammer.glb' : 'Battle_Bow.glb'}`,
+        thumbnail: ""
+      }
+    }
+  };
+};
+
+const parseCustomization = (customizationStr?: string, defaultGender = "Male", defaultClass = "Warrior", hairStyle = 1, hairColor = "#5A3E2D") => {
+  if (customizationStr) {
+    try {
+      const parsed = JSON.parse(customizationStr);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch (e) {
+      console.warn("Failed to parse customization JSON:", e);
+    }
+  }
+  return getDefaultCustomization(defaultGender, defaultClass, hairStyle, hairColor);
+};
+
+const mapGameAnimationToAvatarPose = (anim: string) => {
+  const lower = anim.toLowerCase();
+  if (lower.includes("death")) return "Sword And Shield Death";
+  if (lower.includes("hit") || lower.includes("damage")) return "Light Hit To Head";
+  if (lower.includes("attack") || lower.includes("slash") || lower.includes("shoot")) return "Stable Sword Outward Slash";
+  if (lower.includes("skill") || lower.includes("spell") || lower.includes("heal")) return "Magic Heal";
+  if (lower.includes("run")) return "Slow Run";
+  if (lower.includes("walk") || lower.includes("jog")) return "Jogging";
+  return "Idle";
+};
 import { PlayerProps, CastState } from './player/types';
 import { usePlayerControls } from './player/usePlayerControls';
 import { updatePlayerCamera } from './player/usePlayerCamera';
 import { updatePlayerCasting } from './player/usePlayerCasting';
 import { updatePlayerTargeting } from './player/usePlayerTargeting';
-import { updatePlayerAnimation } from './player/usePlayerAnimation';
 import {
   handlePlayerResurrectionAndFailsafe,
   handlePlayerPhysicsJump
@@ -43,8 +117,7 @@ import {
   aimTargetX,
   charState,
   animationSet,
-  ecctrlAnimationSet,
-  attackTimer
+  ecctrlAnimationSet
 } from './player/buffers';
 
 export const keyboardMap = [
@@ -61,7 +134,7 @@ export const keyboardMap = [
 export const PlayerController = (props: PlayerProps) => {
   const {
     paused = false,
-    modelPath = '/assets-model/Chef_Male.glb',
+    modelPath: _modelPath = '/assets-model/Chef_Male.glb',
     playerClass = 'Warrior',
     damageQueue,
     settingsRef,
@@ -76,6 +149,7 @@ export const PlayerController = (props: PlayerProps) => {
     sendPlayerState,
     playerStats,
     playerStatsRef,
+    selectedCharacter,
   } = props;
 
   const poolRef      = useRef<ProjectilePoolHandle>(null);
@@ -153,29 +227,22 @@ export const PlayerController = (props: PlayerProps) => {
     return [0, spawnH + 3.0, 0] as [number, number, number];
   }, [activeEnv, terrainConfig]);
 
-  // ─── ASSET LOADING ────────────────────────────────────────────────────────
-  const { scene, animations } = useGLTF(
-    modelPath,
-    true,
-    true,
-    (l: any) => (l as any).setMeshoptDecoder(MeshoptDecoder)
-  ) as any;
+  const dummyActions = useMemo(() => ({}), []);
+  const dummyActiveAction = useRef<any>(null);
 
-  const clone = useMemo(() => {
-    const cloned = SkeletonUtils.clone(scene);
-    cloned.traverse((child: any) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        child.geometry?.computeBoundingSphere?.();
-        child.raycast = () => {};
-      }
-    });
-    return cloned;
-  }, [scene]);
+  const [currentPose, setCurrentPose] = useState("Idle");
+  const [currentTimeScale, setCurrentTimeScale] = useState(1.0);
 
-  const { actions }  = useAnimations(animations, characterRef);
-  const activeAction = useRef<THREE.AnimationAction | null>(null);
+  const localCustomization = useMemo(() => {
+    const stats = selectedCharacter || playerStatsRef?.current || playerStats || {};
+    return parseCustomization(
+      (stats as any).custom_avatar_url || (stats as any).customAvatarUrl,
+      (stats as any).gender || 'Male',
+      playerClass,
+      (stats as any).hair_style || (stats as any).hairStyle || 1,
+      (stats as any).hair_color || (stats as any).hairColor || '#5A3E2D'
+    );
+  }, [selectedCharacter, playerStats, playerClass]);
 
   // --- RESET CAMERA ON GAME START ---
   const gameState = useStore(s => s.gameState);
@@ -191,7 +258,6 @@ export const PlayerController = (props: PlayerProps) => {
   const [, getKeys]  = useKeyboardControls();
 
   const isDead = playerStats && typeof playerStats.hp !== 'undefined' && playerStats.hp <= 0;
-  const prevAnimStatus = useRef<string>('');
 
   useFrame((state, delta) => {
     const finalASPDPercent = playerStatsRef?.current?.aspd ?? (playerStats?.aspd ?? 150);
@@ -208,6 +274,22 @@ export const PlayerController = (props: PlayerProps) => {
     const currentHp = playerStatsRef?.current && playerStatsRef.current.hp >= 0
       ? playerStatsRef.current.hp
       : (playerStats && typeof playerStats.hp !== 'undefined' ? playerStats.hp : 1000);
+
+    const currentDebuff = playerStatsRef?.current?.debuff || "";
+
+    let anim = "Idle";
+    if (isDead) {
+      anim = "Death";
+    } else if (currentDebuff === "stun" || currentDebuff === "freeze") {
+      anim = "Stun";
+    } else if (charState[0] === 1) {
+      anim = "Attack";
+    } else if (performance.now() - ((window as any).lastSkillTime || 0) < 1000) {
+      anim = "Skill";
+    } else {
+      const status = useStore.getState().gameState === 'PLAYING' ? characterStatus.animationStatus : 'IDLE';
+      anim = ecctrlAnimationSet[status] ?? animationSet.idle;
+    }
 
     _charPos.copy(characterStatus.position as THREE.Vector3);
     (window as any).localPlayerPos = _charPos;
@@ -238,28 +320,7 @@ export const PlayerController = (props: PlayerProps) => {
     handlePlayerResurrectionAndFailsafe(lastHpRef, currentHp, isDead, groundH, ecctrlRef);
 
     if (isDead) {
-      // Play death animation
-      let deathAnim = 'Death';
-      if (!actions[deathAnim] && actions['death']) deathAnim = 'death';
-      if (!actions[deathAnim] && actions['Death_B']) deathAnim = 'Death_B';
-      
-      const deathAction = actions[deathAnim];
-      if (deathAction) {
-        if (deathAction !== activeAction.current) {
-          deathAction.reset().setLoop(THREE.LoopOnce, 1);
-          deathAction.clampWhenFinished = true;
-          deathAction.fadeIn(0.15).play();
-          if (activeAction.current) activeAction.current.crossFadeTo(deathAction, 0.2, true);
-          activeAction.current = deathAction;
-        }
-      } else {
-        const idleAction = actions[animationSet.idle];
-        if (idleAction && idleAction !== activeAction.current) {
-          idleAction.reset().fadeIn(0.2).play();
-          if (activeAction.current) activeAction.current.crossFadeTo(idleAction, 0.2, true);
-          activeAction.current = idleAction;
-        }
-      }
+      // Handled via currentPose state mapping
     }
 
     // Update player position in store (for enemy AI targeting)
@@ -276,16 +337,6 @@ export const PlayerController = (props: PlayerProps) => {
           fwd.applyQuaternion(characterRef.current.parent.quaternion);
         }
         const worldRot = Math.atan2(fwd.x, fwd.z);
-
-        let anim = "Idle";
-        if (charState[0] === 1) {
-          anim = "Attack";
-        } else if (performance.now() - ((window as any).lastSkillTime || 0) < 1000) {
-          anim = "Skill";
-        } else {
-          const status = useStore.getState().gameState === 'PLAYING' ? characterStatus.animationStatus : 'IDLE';
-          anim = ecctrlAnimationSet[status] ?? animationSet.idle;
-        }
 
         sendPlayerState({
           x: _charPos.x,
@@ -329,8 +380,8 @@ export const PlayerController = (props: PlayerProps) => {
         freezeBannerRef,
         silenceVFXRef,
         ecctrlRef,
-        actions,
-        activeAction
+        dummyActions,
+        dummyActiveAction
       );
       if (debuffed) return;
 
@@ -341,8 +392,8 @@ export const PlayerController = (props: PlayerProps) => {
         playerClass,
         ecctrlRef,
         characterRef,
-        actions,
-        activeAction
+        dummyActions,
+        dummyActiveAction
       );
       if (casting) return;
 
@@ -501,32 +552,23 @@ export const PlayerController = (props: PlayerProps) => {
         poolRef
       );
 
-      // Lock Melee/Attack animations timescales
-      if (charState[0] === 1) {
-        let targetAnim = animationSet.shoot;
-        if (playerClass === "Warrior" || playerClass === "Thief" || playerClass === "Beginner") {
-          if (actions['SwordSlash']) targetAnim = 'SwordSlash';
-          else if (actions['1H_Melee_Attack_Chop']) targetAnim = '1H_Melee_Attack_Chop';
-        }
-        const shootAction = actions[targetAnim] || actions[animationSet.shoot];
-        if (shootAction) {
-          const defaultAnimationDuration = shootAction.getClip()?.duration || 1.0;
-          const animationSpeedScale = hitsPerSecond * defaultAnimationDuration;
-          const isNewAttack = now - attackTimer[0] < 30;
-          if (shootAction !== activeAction.current || isNewAttack) {
-            shootAction.reset().play();
-            if (activeAction.current && activeAction.current !== shootAction) {
-              activeAction.current.crossFadeTo(shootAction, 0.05, true);
-            }
-            activeAction.current = shootAction;
-          }
-          shootAction.timeScale = animationSpeedScale;
-        }
+      const nextPose = mapGameAnimationToAvatarPose(anim);
+      if (nextPose !== currentPose) {
+        setCurrentPose(nextPose);
       }
 
-      // Update character animation states
-      const isAttackingOrCasting = charState[0] === 1 || (window as any).pendingSkillExecution || castState.current.isCasting;
-      updatePlayerAnimation(prevAnimStatus, actions, activeAction, isAttackingOrCasting, castState.current.isCasting);
+      // Adjust animation timescale dynamically to match actual physics velocity
+      const linvel = characterStatus.linvel;
+      const horizontalSpeed = Math.sqrt(linvel.x * linvel.x + linvel.z * linvel.z);
+      let nextTimeScale = 1.0;
+      if (nextPose === "Jogging") {
+        nextTimeScale = Math.max(0.4, Math.min(1.2, horizontalSpeed / 3.0));
+      } else if (nextPose === "Slow Run") {
+        nextTimeScale = Math.max(0.4, Math.min(1.4, horizontalSpeed / 5.5));
+      }
+      if (Math.abs(nextTimeScale - currentTimeScale) > 0.05) {
+        setCurrentTimeScale(nextTimeScale);
+      }
 
       // Handle jump overrides
       handlePlayerPhysicsJump(isChatFocus, getKeys, ecctrlRef);
@@ -569,7 +611,9 @@ export const PlayerController = (props: PlayerProps) => {
         collisionPushBackThreshold={0.01}
       >
         <group ref={characterRef} dispose={null} position={[0, -1.3, 0]}>
-          <primitive object={clone} />
+          <Suspense fallback={null}>
+            <AvatarModel customization={localCustomization} pose={currentPose} timeScale={currentTimeScale} />
+          </Suspense>
 
           <group ref={stunVFXRef} position={[0, 2.3, 0]} visible={false}>
             <mesh position={[0.4, 0, 0]}>

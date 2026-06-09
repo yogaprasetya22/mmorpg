@@ -57,7 +57,11 @@ const ANIMATION_FILES: Record<string, string> = {
   "Jogging": "/assets/animations/fbx/Jogging.fbx",
   "Slow Run": "/assets/animations/fbx/Slow Run.fbx",
   "Light Hit To Head": "/assets/animations/fbx/Light Hit To Head.fbx",
-  "Sword And Shield Death": "/assets/animations/fbx/Sword And Shield Death.fbx"
+  "Sword And Shield Death": "/assets/animations/fbx/Sword And Shield Death.fbx",
+  "Stable Sword Outward Slash": "/assets/animations/fbx/Stable Sword Outward Slash.fbx",
+  "Magic Heal": "/assets/animations/fbx/Magic Heal.fbx",
+  "Run With Sword": "/assets/animations/fbx/Run With Sword.fbx",
+  "Standing React Death Right": "/assets/animations/fbx/Standing React Death Right.fbx"
 };
 
 export const loadFBXAnimations = async (): Promise<any[]> => {
