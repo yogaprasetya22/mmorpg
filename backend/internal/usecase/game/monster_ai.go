@@ -321,27 +321,35 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 			}
 			pData.HP -= finalDamage
 
-			// 12% chance to inflict a status debuff if the player doesn't already have one and is still alive
-			if pData.HP > 0 && rand.Float32() < 0.12 && pData.Debuff == "" {
+			// Apply a status debuff if the player doesn't already have one, is alive, and is not immune:
+			// - Boss: 10% chance
+			// - Normal monster: 3% chance
+			debuffChance := float32(0.03)
+			if m.Type == "boss" {
+				debuffChance = 0.10
+			}
+			isImmune := !pData.DebuffImmuneUntil.IsZero() && time.Now().Before(pData.DebuffImmuneUntil)
+
+			if pData.HP > 0 && rand.Float32() < debuffChance && pData.Debuff == "" && !isImmune {
 				debuffs := []string{"stun", "freeze", "silence"}
 				selectedDebuff := debuffs[rand.Intn(len(debuffs))]
 				
-				durationSec := float32(3.0)
+				durationSec := float32(1.0)
 				if selectedDebuff == "stun" {
-					// VIT reduces stun duration: Duration = 3.0s * (1 - VIT/100)
+					// VIT reduces stun duration: Duration = 1.0s * (1 - VIT/100)
 					reduction := float32(pData.BaseVIT) / 100.0
 					if reduction > 0.9 { reduction = 0.9 }
-					durationSec = 3.0 * (1.0 - reduction)
+					durationSec = 1.0 * (1.0 - reduction)
 				} else if selectedDebuff == "freeze" {
-					// VIT reduces freeze duration: Duration = 4.0s * (1 - VIT/100)
+					// VIT reduces freeze duration: Duration = 1.2s * (1 - VIT/100)
 					reduction := float32(pData.BaseVIT) / 100.0
 					if reduction > 0.9 { reduction = 0.9 }
-					durationSec = 4.0 * (1.0 - reduction)
+					durationSec = 1.2 * (1.0 - reduction)
 				} else if selectedDebuff == "silence" {
-					// INT reduces silence duration: Duration = 5.0s * (1 - INT/100)
+					// INT reduces silence duration: Duration = 1.5s * (1 - INT/100)
 					reduction := float32(pData.BaseINT) / 100.0
 					if reduction > 0.9 { reduction = 0.9 }
-					durationSec = 5.0 * (1.0 - reduction)
+					durationSec = 1.5 * (1.0 - reduction)
 				}
 				
 				if durationSec < 0.5 {
@@ -361,7 +369,7 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 				fmt.Printf("☠️ Monster %s membunuh Player %s!\n", m.Name, pData.Username)
 
 				go func(pID string, pUser string) {
-					time.Sleep(5 * time.Second)
+					time.Sleep(1500 * time.Millisecond)
 					u.activePlayersMu.Lock()
 					pl, exists := u.activePlayers[pID]
 					var lastX, lastY, lastZ float32
@@ -373,10 +381,14 @@ func (u *gameUsecase) processMonsterAIWithSnapshot(m *domain.Monster, dt float32
 							h.MaxHP = pl.MaxHP
 						}
 						pl.LastX = 0
-						pl.LastY = 0
+						pl.LastY = 25.0
 						pl.LastZ = 0
+						pl.Debuff = ""
+						pl.DebuffUntil = time.Time{}
+						pl.DebuffImmuneUntil = time.Time{}
+						pl.SpawnProtectedUntil = time.Now().Add(8 * time.Second) // 8 seconds protection (canceled early if player moves)
 						lastX = 0
-						lastY = 0
+						lastY = 25.0
 						lastZ = 0
 					}
 					u.activePlayersMu.Unlock()

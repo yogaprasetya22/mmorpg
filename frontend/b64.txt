@@ -1,1 +1,8 @@
-iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg==
+.
+Assassin
+Fighter
+Mage
+MM
+Tank
+
+1 directory, 7 files

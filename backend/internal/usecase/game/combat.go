@@ -340,7 +340,7 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 
 			// Penalty/respawn handler: restore health and respawn at spawn coordinates
 			go func(tID string, tUser string) {
-				time.Sleep(3 * time.Second)
+				time.Sleep(1500 * time.Millisecond)
 				u.activePlayersMu.Lock()
 				tData, exists := u.activePlayers[tID]
 				var lastX, lastY, lastZ float32
@@ -353,12 +353,16 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 						h.HP = tData.HP
 						h.MaxHP = tData.MaxHP
 					}
-					// Reset coordinates to safe zone (0, 0, 0) to avoid spawn/death loops
+					// Reset coordinates to safe zone (0, 25.0, 0) to avoid spawn/death loops
 					tData.LastX = 0
-					tData.LastY = 0
+					tData.LastY = 25.0
 					tData.LastZ = 0
+					tData.Debuff = ""
+					tData.DebuffUntil = time.Time{}
+					tData.DebuffImmuneUntil = time.Time{}
+					tData.SpawnProtectedUntil = time.Now().Add(8 * time.Second) // 8 seconds protection (canceled early if player moves)
 					lastX = 0
-					lastY = 0
+					lastY = 25.0
 					lastZ = 0
 				}
 				u.activePlayersMu.Unlock() // Release activePlayersMu lock before calling UpdatePlayerMovement to prevent recursive deadlock

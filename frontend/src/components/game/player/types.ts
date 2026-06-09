@@ -17,6 +17,7 @@ export interface PlayerProps {
   sendPlayerState?: (state: { x: number; y: number; z: number; rotation: number; animation: string; targetId?: string }) => void;
   playerStats?: any;
   playerStatsRef?: React.RefObject<any>;
+  selectedCharacter?: any;
 }
 
 export interface CastState {

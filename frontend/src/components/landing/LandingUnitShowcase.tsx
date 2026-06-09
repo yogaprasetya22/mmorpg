@@ -6,6 +6,7 @@ import { useGLTF, useAnimations, PresentationControls, Float, ContactShadows, En
 import { Shield, Sword, Sparkles, Target, Zap, ChevronLeft, ChevronRight, Play, Skull, Trophy, Footprints } from 'lucide-react';
 import * as THREE from 'three';
 import { SkeletonUtils } from 'three-stdlib';
+import { API_BASE_URL } from '@/src/core/config';
 
 const MODELS = {
   fighter: { 
@@ -167,7 +168,7 @@ export default function LandingUnitShowcase() {
             >
               <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.2}>
                 <Suspense fallback={null}>
-                  <Model key={unit.path} path={unit.path} currentAnimType={currentAnim} unitClass={activeTab} />
+                  <Model key={unit.path} path={`${API_BASE_URL}${unit.path}`} currentAnimType={currentAnim} unitClass={activeTab} />
                 </Suspense>
               </Float>
             </PresentationControls>

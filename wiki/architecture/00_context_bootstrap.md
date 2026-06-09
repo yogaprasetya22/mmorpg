@@ -129,3 +129,4 @@ Dengan mengasimilasi panduan global arsitektur ini, Anda sekarang memiliki kenda
 *   [05. Tahap 5: Database Migrations & Data Seeding](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/05_database_migrations.md)
 *   [06. Tahap 6: Lembar Rumus Matematika Combat](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/06_combat_formula_ref.md)
 *   [07. Tahap 7: Protokol WebSocket & Skema JSON](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/07_network_sync_protocol.md)
+*   [08. Tahap 8: Integrasi & Optimasi Modul Kustomisasi Avatar](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/08_avatar_configurator_integration.md)

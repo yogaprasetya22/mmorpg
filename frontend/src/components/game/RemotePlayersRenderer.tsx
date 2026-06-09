@@ -76,14 +76,26 @@ const parseCustomization = (customizationStr?: string, defaultGender = "Male", d
   return getDefaultCustomization(defaultGender, defaultClass, hairStyle, hairColor);
 };
 
-const mapGameAnimationToAvatarPose = (anim: string) => {
+const mapGameAnimationToAvatarPose = (anim: string, hasWeapon: boolean, playerClass: string) => {
   const lower = anim.toLowerCase();
-  if (lower.includes("death")) return "Sword And Shield Death";
+  if (lower.includes("death")) {
+    if (playerClass === "Priest" || playerClass === "Tank") {
+      return "Sword And Shield Death";
+    }
+    return "Standing React Death Right";
+  }
   if (lower.includes("hit") || lower.includes("damage")) return "Light Hit To Head";
-  if (lower.includes("attack") || lower.includes("slash") || lower.includes("shoot")) return "Stable Sword Outward Slash";
+  if (lower.includes("attack") || lower.includes("slash") || lower.includes("shoot")) {
+    if (playerClass === "Mage" || playerClass === "Priest") {
+      return "Magic Heal";
+    }
+    return "Stable Sword Outward Slash";
+  }
   if (lower.includes("skill") || lower.includes("spell") || lower.includes("heal")) return "Magic Heal";
-  if (lower.includes("run")) return "Slow Run";
-  if (lower.includes("walk") || lower.includes("jog")) return "Jogging";
+  if (lower.includes("run") || lower.includes("walk")) {
+    return hasWeapon ? "Run With Sword" : "Slow Run";
+  }
+  if (lower.includes("jog")) return "Jogging";
   return "Idle";
 };
 
@@ -181,8 +193,8 @@ export const RemotePlayerInstance = ({
     const dzCam = state.camera.position.z - data.z;
     const camDistSq = dxCam * dxCam + dyCam * dyCam + dzCam * dzCam;
 
-    const FAR_SQ = 60 * 60;     // > 60 units: cull completely
-    const MED_FAR_SQ = 40 * 40; // > 40 units: hide name tag
+    const FAR_SQ = 100 * 100;     // > 100 units: cull completely (increased range!)
+    const MED_FAR_SQ = 65 * 65;   // > 65 units: hide name tag (increased range!)
 
     const isCurrentlyVisible = !isDensityCulled && camDistSq <= FAR_SQ;
 
@@ -207,7 +219,7 @@ export const RemotePlayerInstance = ({
 
     // Snapping position and rotation if culled to keep state synchronized
     if (!isCurrentlyVisible) {
-      const snapY = (Math.abs(data.y) < 0.001 || data.y < terrainY - 5.0) ? terrainY : data.y;
+      const snapY = (Math.abs(data.y) < 0.001 || data.y < terrainY - 5.0) ? (terrainY + 1.18) : data.y;
       groupRef.current.position.set(data.x, snapY, data.z);
       groupRef.current.rotation.y = data.rotation;
       groupRef.current.visible = false;
@@ -294,7 +306,7 @@ export const RemotePlayerInstance = ({
 
     // Adjust targetY using the terrain height fallback if desynced/flat, but do NOT cap players standing on high elevated obstacles
     if (Math.abs(targetY) < 0.001 || targetY < terrainY - 5.0) {
-      targetY = terrainY;
+      targetY = terrainY + 1.18;
     }
     
     // Set position and rotation directly from the mathematically smooth entity interpolation to achieve 120fps+ fluidity
@@ -361,22 +373,32 @@ export const RemotePlayerInstance = ({
     const startedNewAttack = isAttacking && (currentAnimState.current !== animation);
     const startedNewSkill  = isUsingSkill && (currentAnimState.current !== animation);
 
-    const nextPose = mapGameAnimationToAvatarPose(animation);
+    const hasWeapon = !!remoteCustomization["Weapon"]?.asset;
+    const pClass = data.class || cls || "Warrior";
+    const nextPose = mapGameAnimationToAvatarPose(animation, hasWeapon, pClass);
     if (nextPose !== currentPose) {
       setCurrentPose(nextPose);
     }
 
     let nextTimeScale = 1.0;
+    // Calculate expected speed based on class to avoid network interpolation speed jitter
+    let expectedSpeed = 6.5;
+    if (pClass === "Thief" || pClass === "Assassin") expectedSpeed = 9.1;
+    else if (pClass === "Warrior" || pClass === "Fighter") expectedSpeed = 7.15;
+    else if (pClass === "Beginner" || pClass === "Marksman") expectedSpeed = 6.825;
+    else if (pClass === "Mage") expectedSpeed = 5.85;
+    else if (pClass === "Priest" || pClass === "Tank") expectedSpeed = 6.5;
+
     if (desired.includes("walk")) {
-      nextTimeScale = Math.max(0.4, Math.min(1.2, smoothedSpeed.current / 3.0));
+      nextTimeScale = Math.max(0.4, Math.min(1.2, (expectedSpeed * 0.54) / 3.0));
     } else if (desired.includes("run")) {
-      nextTimeScale = Math.max(0.4, Math.min(1.4, smoothedSpeed.current / 5.5));
+      nextTimeScale = Math.max(0.4, Math.min(2.8, expectedSpeed / 3.2)); // Adjusted divisor and max to prevent sliding using static expected speed
     } else if (desired.includes("jump")) {
       nextTimeScale = 0.8;
     } else if (isAttacking) {
       const remoteAspd = data.aspd ?? 150;
-      const remoteHPS = 50 / (200 - remoteAspd);
-      nextTimeScale = remoteHPS;
+      const remoteHPS = 1 + (remoteAspd / 125); // Synced with local hitsPerSecond formula
+      nextTimeScale = remoteHPS * 1.2; // Sync with attack duration multiplier
     }
     if (Math.abs(nextTimeScale - currentTimeScale) > 0.05) {
       setCurrentTimeScale(nextTimeScale);
@@ -740,9 +762,11 @@ export const RemotePlayerInstance = ({
 
   return (
     <group ref={groupRef}>
-      <group scale={1.0} position={[0, -1.3, 0]}>
+      <group scale={1.0} position={[0, -1.18, 0]}>
         <Suspense fallback={null}>
-          <AvatarModel customization={remoteCustomization} pose={currentPose} timeScale={currentTimeScale} paused={!visible} />
+          {visible && (
+            <AvatarModel customization={remoteCustomization} pose={currentPose} timeScale={currentTimeScale} paused={!visible} />
+          )}
         </Suspense>
       </group>
       <Billboard ref={nameRef as any} position={[0, -1.1, 0]} follow={true} visible={false}>
@@ -884,8 +908,8 @@ export const RemotePlayersRenderer = ({
 
       scratch.sort((a, b) => a.distSq - b.distSq);
 
-      // Adaptive cap: when loadtest saturates server with 40 bots, limit to 8 closest player skeletons
-      const playerCap = players.length > 20 ? 8 : 12;
+      // Adaptive cap: when loadtest saturates server with 40 bots, limit to 20 closest player skeletons, otherwise 35
+      const playerCap = players.length > 30 ? 20 : players.length > 15 ? 28 : 35;
       const visibleSet = visiblePlayerIdsRef.current;
       visibleSet.clear();
 

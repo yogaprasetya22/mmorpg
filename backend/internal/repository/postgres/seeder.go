@@ -447,6 +447,11 @@ func SeedConfigurations(db *gorm.DB) error {
 		return err
 	}
 
+	// 6. Seed Avatar Configurator Data
+	if err := SeedAvatarData(db); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -458,18 +463,23 @@ func SeedAssets(db *gorm.DB) error {
 		dir      string
 		category string
 	}{
-		{"asset-enverement", "env"},
-		{"assets-env", "env"},
-		{"assets-tree", "tree"},
-		{"kingdom", "kingdom"},
+		{"environment/nature/trees", "env"},
+		{"environment/nature/vegetation", "env"},
+		{"environment/nature/terrain", "env"},
+		{"environment/structures/kingdom", "kingdom"},
+		{"environment/structures/platforms", "env"},
+		{"environment/props/interactive", "env"},
+		{"environment/props/obstacles", "env"},
+		{"environment/props/decor", "env"},
+		{"environment/props/siege", "kingdom"},
 	}
 
 	// Find the correct base path (handling running from root or from cmd/server or cmd/seeder)
 	basePaths := []string{
-		"./assets-model",
-		"../assets-model",
-		"../../assets-model",
-		"./backend/assets-model",
+		"./assets",
+		"../assets",
+		"../../assets",
+		"./backend/assets",
 	}
 
 	var assetsModelPath string
@@ -481,7 +491,7 @@ func SeedAssets(db *gorm.DB) error {
 	}
 
 	if assetsModelPath == "" {
-		fmt.Println("⚠️  Warning: assets-model directory not found, skipping asset scraping.")
+		fmt.Println("⚠️  Warning: assets directory not found, skipping asset scraping.")
 		return nil
 	}
 
@@ -498,13 +508,13 @@ func SeedAssets(db *gorm.DB) error {
 				return err
 			}
 			if !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".glb") {
-				// Get relative path from assets-model root
-				rel, err := filepath.Rel(assetsModelPath, path)
-				if err != nil {
-					return err
-				}
-				rel = filepath.ToSlash(rel)
-				webPath := "/assets-model/" + rel
+					// Get relative path from assets root
+					rel, err := filepath.Rel(assetsModelPath, path)
+					if err != nil {
+						return err
+					}
+					rel = filepath.ToSlash(rel)
+					webPath := "/assets/" + rel
 
 				// Format the name: remove extension and replace dashes/underscores with spaces
 				nameWithoutExt := strings.TrimSuffix(info.Name(), filepath.Ext(info.Name()))

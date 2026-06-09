@@ -88,14 +88,26 @@ const parseCustomization = (customizationStr?: string, defaultGender = "Male", d
   return getDefaultCustomization(defaultGender, defaultClass, hairStyle, hairColor);
 };
 
-const mapGameAnimationToAvatarPose = (anim: string) => {
+const mapGameAnimationToAvatarPose = (anim: string, hasWeapon: boolean, playerClass: string) => {
   const lower = anim.toLowerCase();
-  if (lower.includes("death")) return "Sword And Shield Death";
+  if (lower.includes("death")) {
+    if (playerClass === "Priest" || playerClass === "Tank") {
+      return "Sword And Shield Death";
+    }
+    return "Standing React Death Right";
+  }
   if (lower.includes("hit") || lower.includes("damage")) return "Light Hit To Head";
-  if (lower.includes("attack") || lower.includes("slash") || lower.includes("shoot")) return "Stable Sword Outward Slash";
+  if (lower.includes("attack") || lower.includes("slash") || lower.includes("shoot")) {
+    if (playerClass === "Mage" || playerClass === "Priest") {
+      return "Magic Heal";
+    }
+    return "Stable Sword Outward Slash";
+  }
   if (lower.includes("skill") || lower.includes("spell") || lower.includes("heal")) return "Magic Heal";
-  if (lower.includes("run")) return "Slow Run";
-  if (lower.includes("walk") || lower.includes("jog")) return "Jogging";
+  if (lower.includes("run") || lower.includes("walk")) {
+    return hasWeapon ? "Run With Sword" : "Slow Run";
+  }
+  if (lower.includes("jog")) return "Jogging";
   return "Idle";
 };
 import { PlayerProps, CastState } from './player/types';
@@ -167,6 +179,7 @@ export const PlayerController = (props: PlayerProps) => {
   const [isTargetingAoE, setIsTargetingAoE] = useState(false);
   const aoeTargetPos = useRef(new THREE.Vector3());
   const [isSpawning, setIsSpawning] = useState(true);
+  const [currentSpeed, setCurrentSpeed] = useState(6.5);
 
   const castState = useRef<CastState>({
     isCasting: false,
@@ -552,7 +565,8 @@ export const PlayerController = (props: PlayerProps) => {
         poolRef
       );
 
-      const nextPose = mapGameAnimationToAvatarPose(anim);
+      const hasWeapon = !!localCustomization["Weapon"]?.asset;
+      const nextPose = mapGameAnimationToAvatarPose(anim, hasWeapon, playerClass);
       if (nextPose !== currentPose) {
         setCurrentPose(nextPose);
       }
@@ -563,11 +577,19 @@ export const PlayerController = (props: PlayerProps) => {
       let nextTimeScale = 1.0;
       if (nextPose === "Jogging") {
         nextTimeScale = Math.max(0.4, Math.min(1.2, horizontalSpeed / 3.0));
-      } else if (nextPose === "Slow Run") {
-        nextTimeScale = Math.max(0.4, Math.min(1.4, horizontalSpeed / 5.5));
+      } else if (nextPose === "Slow Run" || nextPose === "Run With Sword") {
+        nextTimeScale = Math.max(0.4, Math.min(2.8, horizontalSpeed / 3.2)); // Dynamic legs animation speed to match physics and prevent sliding for high AGI classes
+      } else if (nextPose === "Stable Sword Outward Slash") {
+        nextTimeScale = hitsPerSecond * 1.2; // Sync with attack duration multiplier so weapon swings match authoritative ASPD rate
       }
       if (Math.abs(nextTimeScale - currentTimeScale) > 0.05) {
         setCurrentTimeScale(nextTimeScale);
+      }
+
+      // Sync authoritative speed from backend stats to React state to update BVHEcctrl maxRunSpeed/maxWalkSpeed
+      const statSpeed = playerStatsRef?.current?.speed || (playerStats?.speed || 6.5);
+      if (Math.abs(currentSpeed - statSpeed) > 0.05) {
+        setCurrentSpeed(statSpeed);
       }
 
       // Handle jump overrides
@@ -594,11 +616,11 @@ export const PlayerController = (props: PlayerProps) => {
         floatSensorRadius={0.32}
         floatSpringK={220}
         floatDampingC={40}
-        maxWalkSpeed={3.5}
-        maxRunSpeed={6.5}
-        acceleration={45}
-        deceleration={35}
-        turnSpeed={22}
+        maxWalkSpeed={currentSpeed}
+        maxRunSpeed={currentSpeed}
+        acceleration={65}
+        deceleration={55}
+        turnSpeed={28}
         jumpVel={9.5}
         gravity={24.0}
         fallGravityFactor={1.8}
@@ -610,7 +632,7 @@ export const PlayerController = (props: PlayerProps) => {
         collisionPushBackDamping={0.06}
         collisionPushBackThreshold={0.01}
       >
-        <group ref={characterRef} dispose={null} position={[0, -1.3, 0]}>
+        <group ref={characterRef} dispose={null} position={[0, -1.18, 0]}>
           <Suspense fallback={null}>
             <AvatarModel customization={localCustomization} pose={currentPose} timeScale={currentTimeScale} />
           </Suspense>

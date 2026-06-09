@@ -18,6 +18,9 @@ export interface PlayerNetworkState {
     level?: number;
     aspd?: number;
     debuff?: string;
+    custom_avatar_url?: string;
+    hair_style?: number;
+    hair_color?: string;
 }
 
 // Lean flat struct — matches the backend domain.MonsterNetworkState exactly.

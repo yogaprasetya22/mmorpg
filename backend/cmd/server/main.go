@@ -46,6 +46,8 @@ func main() {
 			&domain.MapConfig{},
 			&domain.MapItem{},
 			&domain.Asset{},
+			&domain.AvatarCategory{},
+			&domain.AvatarAsset{},
 		)
 		if err != nil {
 			log.Fatalf("❌ Gagal melakukan auto-migrasi database: %v", err)
@@ -74,7 +76,7 @@ func main() {
 		authHandler := http.NewAuthHandler(authUsecase)
 		configHandler := http.NewConfigHandler(configRepo, db)
 
-		router := http.SetupAPIRouter(authHandler, configHandler)
+		router := http.SetupAPIRouter(authHandler, configHandler, db)
 		
 		// Run API microservice on Port 8081 (default) or custom port
 		port := os.Getenv("API_PORT")
@@ -154,7 +156,7 @@ func main() {
 		// monolith mode
 		authHandler := http.NewAuthHandler(authUsecase)
 		configHandler := http.NewConfigHandler(configRepo, db)
-		router = http.SetupRouter(authHandler, wsHandler, configHandler)
+		router = http.SetupRouter(authHandler, wsHandler, configHandler, db)
 	}
 
 	addr := ":" + cfg.Port

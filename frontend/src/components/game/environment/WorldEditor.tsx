@@ -46,8 +46,8 @@ const themeAssets: Record<string, { paths: string[], colors?: string[] }> = {
       "/assets-tree/converted/Tree Type0 03.glb",
       "/assets-tree/converted/Tree Type1 01.glb",
       "/assets-tree/converted/Tree Type1 02.glb",
-      "/kingdom/rocks-large.glb",
-      "/kingdom/rocks-small.glb"
+      "/assets/environment/structures/kingdom/rocks-large.glb",
+      "/assets/environment/structures/kingdom/rocks-small.glb"
     ]
   },
   cherry: {
@@ -71,17 +71,17 @@ const themeAssets: Record<string, { paths: string[], colors?: string[] }> = {
   },
   desert: {
     paths: [
-      "/kingdom/tree-log.glb",
-      "/kingdom/tree-trunk.glb",
-      "/kingdom/rocks-large.glb",
-      "/kingdom/rocks-small.glb"
+      "/assets/environment/structures/kingdom/tree-log.glb",
+      "/assets/environment/structures/kingdom/tree-trunk.glb",
+      "/assets/environment/structures/kingdom/rocks-large.glb",
+      "/assets/environment/structures/kingdom/rocks-small.glb"
     ],
     colors: ["#a1a1aa", "#71717a", "#b45309", "#78350f"]
   },
   clover: {
     paths: [
-      "/kingdom/tree-large.glb",
-      "/kingdom/tree-small.glb",
+      "/assets/environment/structures/kingdom/tree-large.glb",
+      "/assets/environment/structures/kingdom/tree-small.glb",
       "/assets-tree/converted/Tree Type6 01.glb",
       "/assets-tree/converted/Tree Type6 02.glb"
     ],

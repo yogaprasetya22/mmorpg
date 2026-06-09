@@ -19,6 +19,9 @@ type PlayerNetworkState struct {
 	Level     int     `json:"level" msgpack:"level"`
 	ASPD      float32 `json:"aspd" msgpack:"aspd"`
 	XP        int     `json:"xp" msgpack:"xp"`
+	CustomAvatarURL string `json:"custom_avatar_url" msgpack:"custom_avatar_url"`
+	HairStyle       int    `json:"hair_style" msgpack:"hair_style"`
+	HairColor       string `json:"hair_color" msgpack:"hair_color"`
 
 	// Talent Stats
 	BasePOW      int `json:"base_pow" msgpack:"base_pow"`

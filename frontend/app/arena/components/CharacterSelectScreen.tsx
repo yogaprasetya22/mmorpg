@@ -2,6 +2,7 @@
 'use client';
 
 import { Sword, Shield, User, LogOut, RefreshCw, Trophy, Zap, Sparkles, Target } from 'lucide-react';
+import Link from 'next/link';
 import { CLASS_LABELS, HAIR_COLORS, CLASS_OPTIONS, CLASS_DESCRIPTIONS } from '../ArenaClient.constants';
 
 interface CharacterSelectScreenProps {
@@ -91,6 +92,22 @@ export function CharacterSelectScreen({
               <h2 className="text-lg font-black text-white uppercase tracking-wider flex items-center gap-2">
                 <User className="w-5 h-5 text-cyan-400" /> KUSTOMISASI KARAKTER
               </h2>
+
+              <div className="bg-gradient-to-r from-cyan-950/30 to-indigo-950/30 border border-cyan-500/20 p-5 rounded-2xl flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
+                  <span className="text-[10px] font-black tracking-widest text-cyan-400 uppercase leading-none">REKOMENDASI</span>
+                </div>
+                <p className="text-xs text-zinc-300 font-semibold leading-relaxed">
+                  Gunakan <span className="text-cyan-400 font-extrabold">3D Avatar Creator</span> untuk merancang penampilan karakter Anda secara lengkap (gaya pakaian, sepatu, senjata) secara visual dalam 3D.
+                </p>
+                <Link
+                  href="/character-creation"
+                  className="w-full bg-gradient-to-r from-cyan-500 to-indigo-500 hover:brightness-110 text-white font-black text-xs py-3 rounded-xl border border-cyan-400/20 uppercase tracking-widest transition-all hover:scale-[1.01] active:scale-95 shadow-md shadow-cyan-500/10 flex items-center justify-center gap-2 pointer-events-auto"
+                >
+                  🎨 MASUK KE 3D CREATOR
+                </Link>
+              </div>
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Nama Karakter</label>
@@ -242,17 +259,17 @@ export function CharacterSelectScreen({
             ))}
 
             {/* Add New character placeholder card */}
-            <div 
+            <button 
               onClick={() => setIsCreatingChar(true)}
-              className="cursor-pointer border border-dashed border-white/10 hover:border-cyan-500/30 bg-zinc-950/10 hover:bg-zinc-950/30 rounded-3xl p-8 flex flex-col justify-center items-center gap-3 transition-all min-h-[220px]"
+              className="cursor-pointer border border-dashed border-white/10 hover:border-cyan-500/30 bg-zinc-950/10 hover:bg-zinc-950/30 rounded-3xl p-8 flex flex-col justify-center items-center gap-3 transition-all min-h-[220px] pointer-events-auto"
             >
               <div className="w-12 h-12 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-zinc-500 hover:text-cyan-400 hover:border-cyan-500/30 transition-all">
                 <span className="text-2xl font-black leading-none">+</span>
               </div>
               <span className="text-xs font-black uppercase tracking-widest text-zinc-500 hover:text-cyan-400 transition-colors">
-                Buat Karakter Baru
+                Buat Karakter Baru (3D Creator)
               </span>
-            </div>
+            </button>
           </div>
         )}
       </div>

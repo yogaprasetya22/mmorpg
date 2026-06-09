@@ -16,7 +16,7 @@ type AuthUsecase interface {
 	
 	// Character selection and creation
 	GetCharacters(userID string) ([]*domain.Player, error)
-	CreateCharacter(userID string, name string, class string, gender string, hairStyle int, hairColor string) (*domain.Player, error)
+	CreateCharacter(userID string, name string, class string, gender string, hairStyle int, hairColor string, customAvatarURL string) (*domain.Player, error)
 }
 
 type authUsecase struct {
@@ -142,7 +142,7 @@ func (u *authUsecase) GetCharacters(userID string) ([]*domain.Player, error) {
 }
 
 // CreateCharacter authoritatively creates a new custom RPG character
-func (u *authUsecase) CreateCharacter(userID string, name string, class string, gender string, hairStyle int, hairColor string) (*domain.Player, error) {
+func (u *authUsecase) CreateCharacter(userID string, name string, class string, gender string, hairStyle int, hairColor string, customAvatarURL string) (*domain.Player, error) {
 	if len(name) < 3 {
 		return nil, errors.New("nama karakter minimal 3 karakter")
 	}
@@ -160,14 +160,15 @@ func (u *authUsecase) CreateCharacter(userID string, name string, class string, 
 	
 	// Create RPG character object
 	player := &domain.Player{
-		ID:         playerID,
-		UserID:     userID,
-		Username:   name, // Stored in Username column to maintain compatibility
-		Class:      class,
-		Gender:     gender,
-		HairStyle:  hairStyle,
-		HairColor:  hairColor,
-		Level:      1,
+		ID:              playerID,
+		UserID:          userID,
+		Username:        name, // Stored in Username column to maintain compatibility
+		Class:           class,
+		Gender:          gender,
+		HairStyle:       hairStyle,
+		HairColor:       hairColor,
+		CustomAvatarURL: customAvatarURL,
+		Level:           1,
 		XP:         0,
 		Gold:       200,
 		BaseSTR:    10,

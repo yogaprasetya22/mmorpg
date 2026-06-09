@@ -7,7 +7,8 @@ import {
   _downRayOrigin,
   _downRayDir,
   _downRaycaster,
-  charState
+  charState,
+  hasCamInit
 } from './buffers';
 
 export function handlePlayerResurrectionAndFailsafe(
@@ -25,6 +26,12 @@ export function handlePlayerResurrectionAndFailsafe(
       const spawnH = getTerrainElevation(0, 0, activeEnv, 24, terrainConfig);
       ecctrlRef.current.group.position.set(0, spawnH + 3.0, 0);
       ecctrlRef.current.resetLinVel();
+      
+      // Update local position buffer immediately to prevent sending stale dead coordinates
+      _charPos.set(0, spawnH + 3.0, 0);
+      // Snap camera instantly to respawn location
+      hasCamInit[0] = 0;
+
       console.log(
         '🛡️ Player resurrected! Teleporting back to starter town center above ground height:',
         spawnH + 3.0

@@ -15,8 +15,8 @@ import { API_BASE_URL } from "@/src/core/config";
 // ─── Shared scratch vectors to avoid per-frame allocations ───────────────────
 const _v3 = new THREE.Vector3();
 // ─── Module-level LOD thresholds (hoisted out of useFrame to avoid re-eval every frame) ─
-const MONSTER_FAR_SQ     = 55 * 55;  // > 55 units: cull completely
-const MONSTER_MED_FAR_SQ = 35 * 35;  // > 35 units: hide billboard + text (much further distance!)
+const MONSTER_FAR_SQ     = 95 * 95;  // > 95 units: cull completely (increased range!)
+const MONSTER_MED_FAR_SQ = 60 * 60;  // > 60 units: hide billboard + text (increased range!)
 
 
 // ─── Global visual position registry (module-level Map, not window) ────────────
@@ -92,11 +92,11 @@ export const RemoteMonsterInstance = ({
       if (path) return path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
     }
 
-    if (isBoss) return `${API_BASE_URL}/assets-model/Zombie_Female.glb`;
+    if (isBoss) return `${API_BASE_URL}/assets/characters/npcs/Zombie_Female.glb`;
     const MONSTER_MODELS = [
-      `${API_BASE_URL}/assets-model/Goblin_Male.glb`,
-      `${API_BASE_URL}/assets-model/Goblin_Female.glb`,
-      `${API_BASE_URL}/assets-model/Zombie_Male.glb`,
+      `${API_BASE_URL}/assets/characters/npcs/Goblin_Male.glb`,
+      `${API_BASE_URL}/assets/characters/npcs/Goblin_Female.glb`,
+      `${API_BASE_URL}/assets/characters/npcs/Zombie_Male.glb`,
     ];
     let hash = 0;
     if (monsterId) {
@@ -626,8 +626,8 @@ export const RemoteMonstersRenderer = ({
       scratch.sort((a, b) => a.distSq - b.distSq);
 
       // Adaptive cap: aggressively reduce skeleton updates under heavy load
-      // 80+ monsters: cap 5 (combined with 40 bots = very heavy), 40+: cap 8, otherwise 12
-      const densityCap = list.length > 60 ? 5 : list.length > 40 ? 8 : 12;
+      // 80+ monsters: cap 15 (combined with 40 bots = very heavy), 40+: cap 25, otherwise 35 (increased visibility limits!)
+      const densityCap = list.length > 60 ? 15 : list.length > 40 ? 25 : 35;
       const limit = Math.min(scratch.length, densityCap);
 
       // Reuse visibleMonsterIdsRef Set in-place — no new Set() allocation

@@ -76,7 +76,7 @@ export const animationSet = {
 
 export const ecctrlAnimationSet: Record<string, string> = {
   IDLE: animationSet.idle,
-  WALK: animationSet.walk,
+  WALK: animationSet.run, // Auto-run behavior
   RUN: animationSet.run,
   JUMP_START: animationSet.jump,
   JUMP_IDLE: animationSet.jump,

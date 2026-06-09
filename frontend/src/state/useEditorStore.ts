@@ -403,9 +403,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             if (kingdomAssets.some(a => fileName.startsWith(a))) {
               // Special case for wall_buttress -> wall
               const finalName = fileName === 'wall-buttress.glb' ? 'wall.glb' : fileName;
-              return { ...item, path: `/kingdom/${finalName}` };
+              return { ...item, path: `/assets/environment/structures/kingdom/${finalName}` };
             } else {
-              return { ...item, path: `/assets-env/${fileName}` };
+              return { ...item, path: `/assets/environment/props/decor/${fileName}` };
             }
           }
           return item;
@@ -553,9 +553,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           const lowerPath = item.path.toLowerCase();
           const lowerName = item.name.toLowerCase();
           
-          if (lowerPath.includes('/kingdom/') || lowerName.includes('wall') || lowerName.includes('tower') || lowerName.includes('gate') || lowerName.includes('stairs') || lowerName.includes('castle') || lowerName.includes('fortress') || lowerName.includes('bridge')) {
+          if (lowerPath.includes('/assets/environment/structures/kingdom/') || lowerPath.includes('/assets/environment/props/siege/') || lowerName.includes('wall') || lowerName.includes('tower') || lowerName.includes('gate') || lowerName.includes('stairs') || lowerName.includes('castle') || lowerName.includes('fortress') || lowerName.includes('bridge')) {
             category = 'kingdom';
-          } else if (lowerPath.includes('/assets-tree/') || lowerPath.includes('/asset-enverement/') || lowerName.includes('tree') || lowerName.includes('pine') || lowerName.includes('birch') || lowerName.includes('oak') || lowerName.includes('grass') || lowerName.includes('flora')) {
+          } else if (lowerPath.includes('/assets/environment/nature/trees/') || lowerPath.includes('/assets/environment/nature/vegetation/') || lowerPath.includes('/assets-tree/') || lowerPath.includes('/asset-enverement/') || lowerName.includes('tree') || lowerName.includes('pine') || lowerName.includes('birch') || lowerName.includes('oak') || lowerName.includes('grass') || lowerName.includes('flora')) {
             category = 'tree';
           }
           
@@ -660,7 +660,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         
         const sanitizedItems = (data.items || []).map((item: any) => {
           let path = item.path;
-          if (path.startsWith('/assets-model/') || path.startsWith('/kingdom/') || path.startsWith('/assets-tree/')) {
+          if (path.startsWith('/assets/') || path.startsWith('/assets-model/') || path.startsWith('/assets/environment/structures/kingdom/') || path.startsWith('/assets-tree/')) {
             path = `${API_BASE_URL}${path}`;
           }
           return { ...item, path };
@@ -879,8 +879,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           "/assets-tree/converted/Tree Type0 03.glb",
           "/assets-tree/converted/Tree Type1 01.glb",
           "/assets-tree/converted/Tree Type1 02.glb",
-          "/kingdom/rocks-large.glb",
-          "/kingdom/rocks-small.glb"
+          "/assets/environment/structures/kingdom/rocks-large.glb",
+          "/assets/environment/structures/kingdom/rocks-small.glb"
         ]
       },
       cherry: {
@@ -904,17 +904,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       },
       desert: {
         paths: [
-          "/kingdom/tree-log.glb",
-          "/kingdom/tree-trunk.glb",
-          "/kingdom/rocks-large.glb",
-          "/kingdom/rocks-small.glb"
+          "/assets/environment/structures/kingdom/tree-log.glb",
+          "/assets/environment/structures/kingdom/tree-trunk.glb",
+          "/assets/environment/structures/kingdom/rocks-large.glb",
+          "/assets/environment/structures/kingdom/rocks-small.glb"
         ],
         colors: ["#a1a1aa", "#71717a", "#b45309", "#78350f"]
       },
       clover: {
         paths: [
-          "/kingdom/tree-large.glb",
-          "/kingdom/tree-small.glb",
+          "/assets/environment/structures/kingdom/tree-large.glb",
+          "/assets/environment/structures/kingdom/tree-small.glb",
           "/assets-tree/converted/Tree Type6 01.glb",
           "/assets-tree/converted/Tree Type6 02.glb"
         ],

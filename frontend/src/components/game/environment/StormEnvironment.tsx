@@ -806,8 +806,8 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
   const sky = useEditorStore(s => s.sky) || 'sunset';
 
   const skyFile = useMemo(() => {
-    if (sky === 'night') return `${API_BASE_URL}/assets-model/Textures/qwantani_night_1k.exr`;
-    if (sky === 'sunset') return `${API_BASE_URL}/assets-model/Textures/qwantani_sunset_1k.exr`;
+    if (sky === 'night') return `${API_BASE_URL}/assets/textures/skyboxes/qwantani_night_1k.exr`;
+    if (sky === 'sunset') return `${API_BASE_URL}/assets/textures/skyboxes/qwantani_sunset_1k.exr`;
     return null;
   }, [sky]);
 

@@ -1,6 +1,14 @@
 /** ArenaClient — thin page-level wrapper composing all Arena sub-modules. */
 'use client';
 
+import { Suspense } from 'react';
+import dynamic from 'next/dynamic';
+const AvatarExperience = dynamic(
+  () => import('@/src/components/game/avatar/AvatarExperience'),
+  { ssr: false }
+);
+import { AvatarConfiguratorUI } from '@/src/components/game/avatar/AvatarConfiguratorUI';
+
 import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
 import { KeyboardControls } from '@react-three/drei';
@@ -76,6 +84,36 @@ export default function MultiplayerArena() {
 
   // View 2: Character Selection
   if (state.token && !state.selectedCharacter) {
+    if (state.isCreatingChar) {
+      return (
+        <div className="w-screen h-screen relative overflow-hidden bg-[#0a0a0e]">
+          <AvatarConfiguratorUI onClose={() => state.setIsCreatingChar(false)} />
+          <Canvas
+            camera={{
+              position: [0, 1.2, 3.2],
+              fov: 45,
+            }}
+            gl={{
+              preserveDrawingBuffer: true,
+              antialias: true,
+              powerPreference: "high-performance",
+            }}
+            dpr={[1, 1.5]}
+            shadows
+            className="w-full h-full"
+          >
+            <color attach="background" args={["#0a0a0e"]} />
+            <fog attach="fog" args={["#0a0a0e", 8, 30]} />
+            <group position-y={-0.6}>
+              <Suspense fallback={null}>
+                <AvatarExperience />
+              </Suspense>
+            </group>
+          </Canvas>
+        </div>
+      );
+    }
+
     return (
       <CharacterSelectScreen
         username={state.username} characters={state.characters}
@@ -159,6 +197,7 @@ export default function MultiplayerArena() {
                 sendPlayerState={state.sendPlayerState}
                 playerStats={state.playerStatsRef.current.hp >= 0 ? state.playerStatsRef.current : undefined}
                 playerStatsRef={state.playerStatsRef}
+                selectedCharacter={state.selectedCharacter}
               />
 
               <RemotePlayersRenderer

@@ -112,6 +112,7 @@ func (u *gameUsecase) SimulateMonstersTick(dt float32) {
 				fmt.Printf("✅ DEBUG DEBUFF CLEARED: Player=%s, Debuff=%s, Until=%v, Now=%v\n", pData.Username, pData.Debuff, pData.DebuffUntil, time.Now())
 				pData.Debuff = ""
 				pData.DebuffUntil = time.Time{}
+				pData.DebuffImmuneUntil = time.Now().Add(6 * time.Second)
 			}
 		}
 	}

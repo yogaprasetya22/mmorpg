@@ -70,6 +70,24 @@ export function useArenaGameState() {
   const [activeRemotePlayers] = useState<{ id: string; username: string; class: string; gender: string }[]>([]);
   const [isRecoveringSession, setIsRecoveringSession] = useState(false);
   const activeRemotePlayersRef = useRef<{ id: string; username: string; class: string; gender: string }[]>([]);
+
+  // ── Pre-initialize playerStatsRef when selectedCharacter changes ──
+  useEffect(() => {
+    if (selectedCharacter) {
+      playerStatsRef.current = {
+        ...playerStatsRef.current,
+        hp: selectedCharacter.hp ?? playerStatsRef.current.hp,
+        maxHp: selectedCharacter.max_hp ?? selectedCharacter.maxHp ?? playerStatsRef.current.maxHp,
+        gold: selectedCharacter.gold ?? playerStatsRef.current.gold,
+        level: selectedCharacter.level ?? playerStatsRef.current.level,
+        xp: selectedCharacter.xp ?? playerStatsRef.current.xp,
+        custom_avatar_url: selectedCharacter.custom_avatar_url ?? (selectedCharacter as any).customAvatarUrl,
+        gender: selectedCharacter.gender || "Male",
+        hair_style: selectedCharacter.hair_style ?? (selectedCharacter as any).hairStyle ?? 1,
+        hair_color: selectedCharacter.hair_color ?? (selectedCharacter as any).hairColor ?? "#5A3E2D",
+      } as any;
+    }
+  }, [selectedCharacter]);
   const lastRosterUpdate = useRef(0);
 
   const connectedPlayersRef = useRef<any[]>([]);
@@ -139,15 +157,20 @@ export function useArenaGameState() {
           console.warn("Failed to fetch map list on mount:", e);
         }
 
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomParam = urlParams.get("room");
+
         const resSettings = await fetch(`${API_BASE_URL}/api/config/settings`);
         if (resSettings.ok) {
           const dataSettings = await resSettings.json();
           Object.assign(INITIAL_SETTINGS, dataSettings);
           console.log("🎮 INITIAL_SETTINGS dynamically synced from database!", INITIAL_SETTINGS);
-          if (dataSettings.activeMapId) {
-            console.log(`🎮 Setting active map from database settings: ${dataSettings.activeMapId}`);
-            if (useEditorStore.getState().selectedMapId !== dataSettings.activeMapId) {
-              await useEditorStore.getState().setSelectedMapId(dataSettings.activeMapId);
+          
+          const targetMapId = roomParam || dataSettings.activeMapId;
+          if (targetMapId) {
+            console.log(`🎮 Setting active map: ${targetMapId} (room parameter override: ${!!roomParam})`);
+            if (useEditorStore.getState().selectedMapId !== targetMapId) {
+              await useEditorStore.getState().setSelectedMapId(targetMapId);
             } else {
               await useEditorStore.getState().loadFromDatabase();
             }
@@ -193,12 +216,10 @@ export function useArenaGameState() {
             if (savedCharId) {
               const matchedChar = charList.find((c: any) => c.id === savedCharId);
               if (matchedChar) {
-                setTimeout(() => {
-                  setEnvReady(false);
-                  setSelectedCharacter(matchedChar);
-                  setSuccessMsg("Sesi karakter dikembalikan!");
-                  setIsRecoveringSession(false);
-                }, 800);
+                setEnvReady(false);
+                setSelectedCharacter(matchedChar);
+                setSuccessMsg("Sesi karakter dikembalikan!");
+                setIsRecoveringSession(false);
               } else {
                 setIsRecoveringSession(false);
               }
@@ -272,6 +293,10 @@ export function useArenaGameState() {
           level: rawLevel,
           xp: rawXP,
           aspd: rawASPD,
+          custom_avatar_url: (me as any).custom_avatar_url,
+          gender: (me as any).gender,
+          hair_style: (me as any).hair_style,
+          hair_color: (me as any).hair_color,
           
           // Talent Stats
           base_pow: (me as any).base_pow,

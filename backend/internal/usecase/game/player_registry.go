@@ -136,10 +136,13 @@ func (u *gameUsecase) RegisterPlayer(playerID string, username string) {
 	if pData.HP <= 0 {
 		pData.HP = pData.MaxHP
 		pData.LastX = 0
-		pData.LastY = 0
+		pData.LastY = 25.0
 		pData.LastZ = 0
+		pData.Debuff = ""
+		pData.DebuffUntil = time.Time{}
+		pData.DebuffImmuneUntil = time.Time{}
 		_ = u.playerRepo.Update(pData)
-		fmt.Printf("🛡️ Player %s has been resurrected on login because they were dead. Relocated to (0, 0, 0).\n", username)
+		fmt.Printf("🛡️ Player %s has been resurrected on login because they were dead. Relocated to (0, 25.0, 0).\n", username)
 	}
 
 	// 2. Cache player data in memory
@@ -165,6 +168,9 @@ func (u *gameUsecase) RegisterPlayer(playerID string, username string) {
 		Level:     pData.Level,
 		ASPD:      pData.ASPD,
 		XP:        pData.XP,
+		CustomAvatarURL: pData.CustomAvatarURL,
+		HairStyle: pData.HairStyle,
+		HairColor: pData.HairColor,
 
 		// Talent Stats
 		BasePOW:      pData.BasePOW,

@@ -63,6 +63,9 @@ func (u *gameUsecase) GetStatePayload() domain.GameStatePayload {
 			playerStates[i].PerfectDodge = pData.PerfectDodge
 			playerStates[i].CastTime = pData.CastTime
 			playerStates[i].Debuff = pData.Debuff
+			playerStates[i].CustomAvatarURL = pData.CustomAvatarURL
+			playerStates[i].HairStyle = pData.HairStyle
+			playerStates[i].HairColor = pData.HairColor
 		}
 	}
 	u.activePlayersMu.RUnlock()

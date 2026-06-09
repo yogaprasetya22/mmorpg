@@ -19,7 +19,8 @@ type Player struct {
 	Class     string `json:"class" gorm:"default:'Beginner'"` // Beginner, Warrior, Mage, Priest, Thief
 	Gender    string `json:"gender" gorm:"default:'Male'"`
 	HairStyle int    `json:"hair_style" gorm:"default:1"`
-	HairColor string `json:"hair_color" gorm:"default:'#5A3E2D'"`
+	HairColor       string `json:"hair_color" gorm:"default:'#5A3E2D'"`
+	CustomAvatarURL string `json:"custom_avatar_url" gorm:"default:''"` // URL to baked GLB from Avatar Configurator
 
 	// Level Progression
 	Level int `json:"level" gorm:"default:1"`
@@ -110,6 +111,7 @@ type Player struct {
 	CastTime     float32 `json:"cast_time" gorm:"-"` // Cast speed multiplier (0.0 to 1.0)
 	Debuff       string    `json:"debuff" gorm:"-"`
 	DebuffUntil  time.Time `json:"-" gorm:"-"`
+	DebuffImmuneUntil time.Time `json:"-" gorm:"-"`
 
 	// Map Coordinate Persistence
 	MapName string  `json:"map_name" gorm:"default:'Starter Zone'"`
@@ -285,7 +287,20 @@ func (p *Player) RecalculateStats() {
 	if p.CriticalRate > 0.80 {
 		p.CriticalRate = 0.80 // Cap Critical Rate at 80%
 	}
-	p.Speed = 5.0 + float32(p.AGI)*0.015
+	classMult := float32(1.0)
+	switch p.Class {
+	case "Thief": // Assassin
+		classMult = 1.4
+	case "Warrior": // Fighter
+		classMult = 1.1
+	case "Mage":
+		classMult = 0.9
+	case "Beginner": // Marksman / MM
+		classMult = 1.05
+	case "Priest": // Tank
+		classMult = 1.0
+	}
+	p.Speed = (5.0 + float32(p.AGI)*0.015) * classMult
 
 	// 5. HIT & FLEE & PerfectDodge & CastTime calculation (100% iROWiki match, augmented with CON)
 	p.HIT = 175 + p.Level + p.DEX + (p.LUK / 3) + (p.CON * 2)
@@ -322,9 +337,15 @@ func (p *Player) RecalculateStats() {
 	if roASPD > 193.0 {
 		roASPD = 193.0 // Hard cap like RO
 	}
-	// Convert RO ASPD (0-200 scale) to our percentage scale (0-1000%)
-	// roASPD 150 = ~300%, roASPD 180 = ~700%, roASPD 193 = ~1000%
-	p.ASPD = float32((roASPD / 193.0) * 1000.0)
+	// Convert RO ASPD (130-193 scale) to our percentage scale (0-1000%)
+	// roASPD 130 = 0%, roASPD 150 = ~317%, roASPD 180 = ~793%, roASPD 193 = 1000%
+	roASPDMin := 130.0
+	roASPDMax := 193.0
+	percentASPD := ((roASPD - roASPDMin) / (roASPDMax - roASPDMin)) * 1000.0
+	if percentASPD < 0 {
+		percentASPD = 0
+	}
+	p.ASPD = float32(percentASPD)
 
 	// 6. Accumulate item bonus values from all equipped items in the Inventory list
 	for _, item := range p.Inventory {

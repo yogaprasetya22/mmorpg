@@ -21,18 +21,18 @@ if (!(THREE.BufferGeometry.prototype as any)._bvhPatched) {
 // ASSET PATHS
 // ─────────────────────────────────────────────────────────────────────────────
 const BIRCH_PATHS: string[] = [
-    '/assets-model/asset-enverement/BirchTree_1.glb',
-    '/assets-model/asset-enverement/BirchTree_2.glb',
-    '/assets-model/asset-enverement/BirchTree_3.glb',
-    '/assets-model/asset-enverement/BirchTree_4.glb',
-    '/assets-model/asset-enverement/BirchTree_5.glb',
+    '/assets/environment/nature/trees/BirchTree_1.glb',
+    '/assets/environment/nature/trees/BirchTree_2.glb',
+    '/assets/environment/nature/trees/BirchTree_3.glb',
+    '/assets/environment/nature/trees/BirchTree_4.glb',
+    '/assets/environment/nature/trees/BirchTree_5.glb',
 ];
 const MAPLE_PATHS: string[] = [
-    '/assets-model/asset-enverement/MapleTree_1.glb',
-    '/assets-model/asset-enverement/MapleTree_2.glb',
-    '/assets-model/asset-enverement/MapleTree_3.glb',
-    '/assets-model/asset-enverement/MapleTree_4.glb',
-    '/assets-model/asset-enverement/MapleTree_5.glb',
+    '/assets/environment/nature/trees/MapleTree_1.glb',
+    '/assets/environment/nature/trees/MapleTree_2.glb',
+    '/assets/environment/nature/trees/MapleTree_3.glb',
+    '/assets/environment/nature/trees/MapleTree_4.glb',
+    '/assets/environment/nature/trees/MapleTree_5.glb',
 ];
 const ALL_TREE_PATHS = [...BIRCH_PATHS, ...MAPLE_PATHS];
 

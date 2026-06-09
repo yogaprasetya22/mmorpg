@@ -4,7 +4,7 @@ import { NodeIO } from "@gltf-transform/core";
 import { dedup, draco, prune, quantize } from "@gltf-transform/functions";
 import { useAnimations, useGLTF } from "@react-three/drei";
 import { Suspense, useEffect, useRef, useMemo, useState } from "react";
-import { GLTFExporter, FBXLoader } from "three-stdlib";
+import { GLTFExporter, FBXLoader, SkeletonUtils } from "three-stdlib";
 import { API_BASE_URL } from "@/src/core/config";
 import { useAvatarConfiguratorStore } from "@/src/state/useAvatarConfiguratorStore";
 import { AvatarAsset } from "./AvatarAsset";
@@ -53,15 +53,15 @@ let globalCachedClips: any[] | null = null;
 let animationLoadingPromise: Promise<any[]> | null = null;
 
 const ANIMATION_FILES: Record<string, string> = {
-  "Idle": "/assets/animations/fbx/Idle.fbx",
-  "Jogging": "/assets/animations/fbx/Jogging.fbx",
-  "Slow Run": "/assets/animations/fbx/Slow Run.fbx",
-  "Light Hit To Head": "/assets/animations/fbx/Light Hit To Head.fbx",
-  "Sword And Shield Death": "/assets/animations/fbx/Sword And Shield Death.fbx",
-  "Stable Sword Outward Slash": "/assets/animations/fbx/Stable Sword Outward Slash.fbx",
-  "Magic Heal": "/assets/animations/fbx/Magic Heal.fbx",
-  "Run With Sword": "/assets/animations/fbx/Run With Sword.fbx",
-  "Standing React Death Right": "/assets/animations/fbx/Standing React Death Right.fbx"
+  "Idle": "/assets/animations/fbx/locomotion/idle.fbx",
+  "Jogging": "/assets/animations/fbx/locomotion/jogging.fbx",
+  "Slow Run": "/assets/animations/fbx/locomotion/slow_run.fbx",
+  "Run With Sword": "/assets/animations/fbx/locomotion/run_with_sword.fbx",
+  "Stable Sword Outward Slash": "/assets/animations/fbx/combat/stable_sword_outward_slash.fbx",
+  "Magic Heal": "/assets/animations/fbx/combat/magic_heal.fbx",
+  "Light Hit To Head": "/assets/animations/fbx/damage/light_hit_to_head.fbx",
+  "Standing React Death Right": "/assets/animations/fbx/damage/standing_react_death_right.fbx",
+  "Sword And Shield Death": "/assets/animations/fbx/damage/sword_and_shield_death.fbx"
 };
 
 export const loadFBXAnimations = async (): Promise<any[]> => {
@@ -110,7 +110,7 @@ export const loadFBXAnimations = async (): Promise<any[]> => {
               v.applyQuaternion(correction);
               values[i] = v.x;
               values[i+1] = v.y;
-              values[i+2] = v.z;
+              values[i+2] = v.z - 8.11; // Offset Hips translation to align foot animation with ground
             }
           }
 
@@ -135,8 +135,22 @@ export const loadFBXAnimations = async (): Promise<any[]> => {
 };
 
 const AvatarModelStatic = ({ customization, ...props }: any) => {
-  const { nodes } = useGLTF(`${API_BASE_URL}/assets/characters/base/Armature.glb`) as any;
+  const gltf = useGLTF(`${API_BASE_URL}/assets/characters/base/Armature.glb`) as any;
   const equippedWeaponAsset = customization["Weapon"]?.asset;
+
+  // Clone the cached GLTF scene to ensure each static player has unique bones/skeletons
+  const clone = useMemo(() => SkeletonUtils.clone(gltf.scene), [gltf.scene]);
+
+  // Re-build nodes lookup from unique clone
+  const nodes = useMemo(() => {
+    const result: Record<string, any> = {};
+    clone.traverse((child: any) => {
+      if (child.name) {
+        result[child.name] = child;
+      }
+    });
+    return result;
+  }, [clone]);
 
   useEffect(() => {
     // Hide all internal hardcoded weapon meshes in Armature.glb
@@ -195,9 +209,23 @@ const AvatarModelAnimated = ({
   ...props
 }: any) => {
   const group = useRef<THREE.Group>(null);
-  const { nodes } = useGLTF(`${API_BASE_URL}/assets/characters/base/Armature.glb`) as any;
+  const gltf = useGLTF(`${API_BASE_URL}/assets/characters/base/Armature.glb`) as any;
   const { actions } = useAnimations(animations, group);
   const setDownload = useAvatarConfiguratorStore((state) => state.setDownload);
+
+  // Clone the cached GLTF scene to ensure each player instance has unique bones/skeletons
+  const clone = useMemo(() => SkeletonUtils.clone(gltf.scene), [gltf.scene]);
+
+  // Re-build nodes lookup from unique clone
+  const nodes = useMemo(() => {
+    const result: Record<string, any> = {};
+    clone.traverse((child: any) => {
+      if (child.name) {
+        result[child.name] = child;
+      }
+    });
+    return result;
+  }, [clone]);
 
   useFrame(() => {
     const action = actions[pose];

@@ -8,35 +8,43 @@ import * as THREE from 'three';
 import { MeshoptDecoder } from 'meshoptimizer';
 import { VFX_TEXTURES } from '@/src/components/game/systems/effects/VFXAssets';
 import { API_BASE_URL } from '@/src/core/config';
+import { loadFBXAnimations } from '@/src/components/game/avatar/AvatarModel';
 
 export const ModelsPreloader = ({ onReady }: { onReady: () => void }) => {
   const { gl, camera } = useThree();
 
   // Preload all character models
-  const g1 = useGLTF(API_BASE_URL + '/assets-model/Chef_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  const g2 = useGLTF(API_BASE_URL + '/assets-model/Chef_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  const g3 = useGLTF(API_BASE_URL + '/assets-model/Knight_Golden_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  const g4 = useGLTF(API_BASE_URL + '/assets-model/Knight_Golden_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  const g5 = useGLTF(API_BASE_URL + '/assets-model/Wizard.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  const g6 = useGLTF(API_BASE_URL + '/assets-model/Witch.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  const g7 = useGLTF(API_BASE_URL + '/assets-model/Viking_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  const g8 = useGLTF(API_BASE_URL + '/assets-model/Viking_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  const g9 = useGLTF(API_BASE_URL + '/assets-model/Ninja_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  const g10 = useGLTF(API_BASE_URL + '/assets-model/Ninja_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  const g11 = useGLTF(API_BASE_URL + '/assets-model/Knight_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  const g12 = useGLTF(API_BASE_URL + '/assets-model/Cowboy_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g1 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Chef_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g2 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Chef_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g3 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Knight_Golden_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g4 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Knight_Golden_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g5 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Wizard.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g6 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Witch.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g7 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Viking_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g8 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Viking_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g9 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Ninja_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g10 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Ninja_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g11 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Knight_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g12 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Cowboy_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
 
   // Preload all monster models
-  const g13 = useGLTF(API_BASE_URL + '/assets-model/Goblin_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  const g14 = useGLTF(API_BASE_URL + '/assets-model/Goblin_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  const g15 = useGLTF(API_BASE_URL + '/assets-model/Zombie_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
-  const g16 = useGLTF(API_BASE_URL + '/assets-model/Zombie_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g13 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Goblin_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g14 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Goblin_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g15 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Zombie_Male.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
+  const g16 = useGLTF(API_BASE_URL + '/assets/characters/npcs/Zombie_Female.glb', true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder));
 
   useEffect(() => {
     let active = true;
 
     const compileAll = async () => {
       console.log("🚀 Starting Asynchronous GPU Shader/Texture Compilation...");
+
+      // Preload and cache Mixamo FBX animations
+      try {
+        await loadFBXAnimations();
+      } catch (err) {
+        console.warn("Failed to preload FBX animations:", err);
+      }
 
       // Pre-upload all VFX textures to GPU to avoid stutter on first spell cast
       const texturesToInit: THREE.Texture[] = [];
