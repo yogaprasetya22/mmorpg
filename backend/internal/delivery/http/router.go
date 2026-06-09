@@ -8,7 +8,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"gorm.io/gorm"
 	"mmorpg-backend/internal/delivery/ws"
+	"mmorpg-backend/internal/repository/postgres"
 )
 
 func CORSMiddleware() gin.HandlerFunc {
@@ -27,7 +29,7 @@ func CORSMiddleware() gin.HandlerFunc {
 	}
 }
 
-func SetupRouter(authHandler *AuthHandler, wsHandler *ws.GameHandler, configHandler *ConfigHandler) *gin.Engine {
+func SetupRouter(authHandler *AuthHandler, wsHandler *ws.GameHandler, configHandler *ConfigHandler, db ...*gorm.DB) *gin.Engine {
 	r := gin.New()
 	
 	// Add middlewares
@@ -45,8 +47,9 @@ func SetupRouter(authHandler *AuthHandler, wsHandler *ws.GameHandler, configHand
 
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// Serve assets-model folder statically over HTTP from the backend
-	r.Static("/assets-model", "./assets-model")
+	// Serve assets folder statically over HTTP from the backend
+	r.Static("/assets", "./assets")
+	r.Static("/assets-model", "./assets/characters/npcs")
 
 	// WebSocket Game Route
 	r.GET("/ws", wsHandler.ServeWS)
@@ -87,13 +90,22 @@ func SetupRouter(authHandler *AuthHandler, wsHandler *ws.GameHandler, configHand
 		// Authoritative Game Endpoints (Resolved by Backend)
 		api.POST("/game/spawn-resolve", configHandler.ResolveSpawn)
 		api.POST("/game/kill-event", configHandler.RegisterKillEvent)
+
+		// Avatar Configurator Endpoints
+		if len(db) > 0 && db[0] != nil {
+			avatar := api.Group("/avatar")
+			{
+				avatar.GET("/categories", postgres.GetAvatarCategories(db[0]))
+				avatar.GET("/assets", postgres.GetAvatarAssets(db[0]))
+			}
+		}
 	}
 
 	return r
 }
 
 // SetupAPIRouter configures the HTTP routes exclusively for the API Microservice
-func SetupAPIRouter(authHandler *AuthHandler, configHandler *ConfigHandler) *gin.Engine {
+func SetupAPIRouter(authHandler *AuthHandler, configHandler *ConfigHandler, db ...*gorm.DB) *gin.Engine {
 	r := gin.New()
 	
 	r.Use(gin.Recovery())
@@ -109,7 +121,8 @@ func SetupAPIRouter(authHandler *AuthHandler, configHandler *ConfigHandler) *gin
 
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	r.Static("/assets-model", "./assets-model")
+	r.Static("/assets", "./assets")
+	r.Static("/assets-model", "./assets/characters/npcs")
 
 	api := r.Group("/api")
 	{
@@ -141,6 +154,15 @@ func SetupAPIRouter(authHandler *AuthHandler, configHandler *ConfigHandler) *gin
 
 		api.POST("/game/spawn-resolve", configHandler.ResolveSpawn)
 		api.POST("/game/kill-event", configHandler.RegisterKillEvent)
+
+		// Avatar Configurator Endpoints
+		if len(db) > 0 && db[0] != nil {
+			avatar := api.Group("/avatar")
+			{
+				avatar.GET("/categories", postgres.GetAvatarCategories(db[0]))
+				avatar.GET("/assets", postgres.GetAvatarAssets(db[0]))
+			}
+		}
 	}
 
 	return r
