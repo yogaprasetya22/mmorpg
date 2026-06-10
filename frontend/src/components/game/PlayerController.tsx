@@ -90,13 +90,19 @@ const parseCustomization = (customizationStr?: string, defaultGender = "Male", d
 
 const mapGameAnimationToAvatarPose = (anim: string, hasWeapon: boolean, playerClass: string) => {
   const lower = anim.toLowerCase();
+  // ── Death ──
   if (lower.includes("death")) {
     if (playerClass === "Priest" || playerClass === "Tank") {
       return "Sword And Shield Death";
     }
     return "Standing React Death Right";
   }
+  // ── Debuffs ──
+  if (lower === "stun" || lower === "stunned") return "Stunned";
+  if (lower === "freeze" || lower === "frozen" || lower === "dizzy") return "Dizzy";
+  // ── Damage ──
   if (lower.includes("hit") || lower.includes("damage")) return "Light Hit To Head";
+  // ── Combat ──
   if (lower.includes("attack") || lower.includes("slash") || lower.includes("shoot")) {
     if (playerClass === "Mage" || playerClass === "Priest") {
       return "Magic Heal";
@@ -104,10 +110,13 @@ const mapGameAnimationToAvatarPose = (anim: string, hasWeapon: boolean, playerCl
     return "Stable Sword Outward Slash";
   }
   if (lower.includes("skill") || lower.includes("spell") || lower.includes("heal")) return "Magic Heal";
-  if (lower.includes("run") || lower.includes("walk")) {
+  // ── Locomotion ──
+  if (lower.includes("jump")) return "Jump With Sword";
+  if (lower.includes("walk")) return "Walking";
+  if (lower.includes("jog")) return "Jogging";
+  if (lower.includes("run")) {
     return hasWeapon ? "Run With Sword" : "Slow Run";
   }
-  if (lower.includes("jog")) return "Jogging";
   return "Idle";
 };
 import { PlayerProps, CastState } from './player/types';
@@ -126,6 +135,9 @@ import {
   _camDir,
   _fwdAxis,
   _tempFwd,
+  _idleTargetQuat,
+  _idleLookMatrix,
+  _lookAt,
   aimTargetX,
   charState,
   animationSet,
@@ -272,6 +284,25 @@ export const PlayerController = (props: PlayerProps) => {
 
   const isDead = playerStats && typeof playerStats.hp !== 'undefined' && playerStats.hp <= 0;
 
+  // ── Death/Respawn stabilization ──
+  // When the player dies OR respawns, trigger isSpawning to keep BVHEcctrl
+  // paused through the transition.  Without this, the physics controller
+  // unpauses instantly on respawn while the teleport hasn't executed yet,
+  // causing the capsule to fall through the terrain.
+  const prevIsDeadRef = useRef(false);
+  useEffect(() => {
+    if (isDead !== prevIsDeadRef.current) {
+      prevIsDeadRef.current = isDead;
+      // Both death (false→true) and respawn (true→false) need stabilization
+      setIsSpawning(true);
+      const timer = setTimeout(() => {
+        setIsSpawning(false);
+        console.log(`🎮 ${isDead ? 'Death' : 'Respawn'} stabilization complete.`);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [isDead]);
+
   useFrame((state, delta) => {
     const finalASPDPercent = playerStatsRef?.current?.aspd ?? (playerStats?.aspd ?? 150);
     const hitsPerSecond = 1 + (finalASPDPercent / 125);
@@ -300,7 +331,7 @@ export const PlayerController = (props: PlayerProps) => {
     } else if (performance.now() - ((window as any).lastSkillTime || 0) < 1000) {
       anim = "Skill";
     } else {
-      const status = useStore.getState().gameState === 'PLAYING' ? characterStatus.animationStatus : 'IDLE';
+      const status = characterStatus.animationStatus;
       anim = ecctrlAnimationSet[status] ?? animationSet.idle;
     }
 
@@ -572,18 +603,23 @@ export const PlayerController = (props: PlayerProps) => {
       }
 
       // Adjust animation timescale dynamically to match actual physics velocity
+      // so legs sync with ground movement and don't "moonwalk" or slide.
       const linvel = characterStatus.linvel;
       const horizontalSpeed = Math.sqrt(linvel.x * linvel.x + linvel.z * linvel.z);
       let nextTimeScale = 1.0;
-      if (nextPose === "Jogging") {
+      if (nextPose === "Walking") {
+        nextTimeScale = Math.max(0.3, Math.min(1.4, horizontalSpeed / 1.8));
+      } else if (nextPose === "Jogging") {
         nextTimeScale = Math.max(0.4, Math.min(1.2, horizontalSpeed / 3.0));
       } else if (nextPose === "Slow Run" || nextPose === "Run With Sword") {
-        nextTimeScale = Math.max(0.4, Math.min(2.8, horizontalSpeed / 3.2)); // Dynamic legs animation speed to match physics and prevent sliding for high AGI classes
+        nextTimeScale = Math.max(0.4, Math.min(2.8, horizontalSpeed / 3.2));
       } else if (nextPose === "Stable Sword Outward Slash") {
-        nextTimeScale = hitsPerSecond * 1.2; // Sync with attack duration multiplier so weapon swings match authoritative ASPD rate
+        nextTimeScale = hitsPerSecond * 1.2;
       }
-      if (Math.abs(nextTimeScale - currentTimeScale) > 0.05) {
-        setCurrentTimeScale(nextTimeScale);
+      // Smooth interpolation: avoid jarring speed jumps by easing toward target
+      const lerpedTimeScale = currentTimeScale + (nextTimeScale - currentTimeScale) * 0.15;
+      if (Math.abs(lerpedTimeScale - currentTimeScale) > 0.01) {
+        setCurrentTimeScale(lerpedTimeScale);
       }
 
       // Sync authoritative speed from backend stats to React state to update BVHEcctrl maxRunSpeed/maxWalkSpeed
@@ -594,6 +630,57 @@ export const PlayerController = (props: PlayerProps) => {
 
       // Handle jump overrides
       handlePlayerPhysicsJump(isChatFocus, getKeys, ecctrlRef);
+
+      // ── Idle rotation recovery: smoothly face camera when not moving ──
+      // BVHEcctrl rotates its internal "BVHEcctrl-Model" group (parent of characterRef)
+      // when there's movement input. After attacking, the model stays facing the attack
+      // direction. This smoothly slerps the MODEL GROUP back to camera-facing when idle.
+      //
+      // Additionally, the targeting code (usePlayerTargeting) accumulates Y rotation on
+      // characterRef (the CHILD group) during attacks. This child rotation compounds with
+      // the parent's rotation, causing a visible offset. We lerp it back to 0 here.
+      //
+      // The character's visual forward is +X in model group space (determined empirically
+      // from BVHEcctrl's lookAt convention: lookAt(inputDir, origin, up) orients +X toward
+      // inputDir). Target angle θ where Rot_Y(θ) · (1,0,0) = camDir:
+      //   θ = atan2(-camDir.z, camDir.x)
+      const modelGroup = ecctrlRef.current?.model;
+      if (modelGroup && !isDead &&
+          currentDebuff !== "stun" && currentDebuff !== "freeze") {
+        const idleSpeed = Math.sqrt(linvel.x * linvel.x + linvel.z * linvel.z);
+
+        // ── Reset child group Y rotation accumulated during attack/chase ──
+        // usePlayerTargeting adds to characterRef.rotation.y when attacking.
+        // Smoothly lerp it back to 0 when NOT in attack or chase state.
+        if (charState[0] === 0 && characterRef.current) {
+          const childRotY = characterRef.current.rotation.y;
+          if (Math.abs(childRotY) > 0.001) {
+            const resetFactor = 1 - Math.exp(-12.0 * delta);
+            characterRef.current.rotation.y += (0 - childRotY) * resetFactor;
+          }
+        }
+
+        // ── Parent model group: slerp to camera-facing when idle ──
+        if (charState[0] !== 1 && idleSpeed < 0.5) {
+          // Get camera forward direction projected onto XZ plane
+          camera.getWorldDirection(_camDir);
+          _camDir.y = 0;
+          if (_camDir.lengthSq() > 0.001) {
+            _camDir.normalize();
+            // Target angle where +X (character forward) faces camDir
+            const targetAngle = Math.atan2(-_camDir.z, _camDir.x);
+            // Build a pure Y-axis rotation quaternion (no X/Z tilt)
+            _idleTargetQuat.setFromAxisAngle(
+              _lookAt.set(0, 1, 0),
+              targetAngle
+            );
+            // Smooth exponential slerp — converges in ~300ms
+            const idleRotSpeed = 8.0;
+            const slerpFactor = 1 - Math.exp(-idleRotSpeed * delta);
+            modelGroup.quaternion.slerp(_idleTargetQuat, slerpFactor);
+          }
+        }
+      }
     }
   }, 1);
 

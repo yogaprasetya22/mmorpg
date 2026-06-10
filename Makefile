@@ -21,7 +21,7 @@ BUILD_FRONTEND_CMD = $(if $(BUN),bun run build,npm run build)
 AIR := $(shell command -v air 2> /dev/null)
 RUN_BACKEND_CMD = $(if $(AIR),air,go run cmd/server/main.go)
 
-.PHONY: all help kill kill-backend-port kill-frontend-port run run-backend run-backend-heavy-monsters run-frontend seed-enemy check check-backend check-frontend clean build build-backend build-frontend loadtest loadtest-peaceful loadtest-extreme loadtest-fast-combat loadtest-massive-enemies accuracy-test
+.PHONY: all help kill kill-backend-port kill-frontend-port run run-backend run-backend-heavy-monsters run-frontend seed-enemy check check-backend check-frontend clean build build-backend build-frontend loadtest loadtest-peaceful loadtest-extreme loadtest-fast-combat loadtest-massive-enemies loadtest-anim-stress loadtest-mixed accuracy-test
 
 # Default target displays the help menu
 all: help
@@ -51,7 +51,8 @@ help:
 	@echo "  make loadtest-peaceful         - Run peaceful movement test (50 players, NO attack)"
 	@echo "  make loadtest-extreme          - Run extreme player stress test (120 players, NO attack)"
 	@echo "  make loadtest-fast-combat      - Run rapid attack VFX stress test (40 players, 500ms attack rate)"
-	@echo "  make loadtest-massive-enemies  - Run massive enemy density test (50 players, 80 monsters)"
+	@echo "  make loadtest-anim-stress     - Animation stress test (20 players, diverse states)"
+	@echo "  make loadtest-mixed           - Mixed scenario test (30 players, combat + movement)"
 	@echo ""
 	@echo "📦 PRODUCTION BUILD & DEPLOYMENT:"
 	@echo "  make build                     - Compile both Go backend and Next.js frontend for production"
@@ -177,5 +178,13 @@ loadtest-massive-enemies:
 	@echo "👾 Running Massive Enemy Density Load Test (50 players, 80 extra monsters)..."
 	@echo "⚠️  Make sure backend is running with: make run-backend-heavy-monsters"
 	@cd backend && go run cmd/loadtest/main.go -players=50 -duration=45s -attack=true -radius=15.0
+
+loadtest-anim-stress:
+	@echo "🎭 Running Animation Stress Test (20 players, diverse idle/walk/run/attack/skill states)..."
+	@cd backend && go run cmd/loadtest/main.go -players=20 -duration=60s -attack=true -attack-rate=15 -radius=12.0
+
+loadtest-mixed:
+	@echo "🎮 Running Mixed Scenario Test (30 players, combat + movement + idle cycles)..."
+	@cd backend && go run cmd/loadtest/main.go -players=30 -duration=45s -attack=true -attack-rate=20 -radius=18.0
 
 

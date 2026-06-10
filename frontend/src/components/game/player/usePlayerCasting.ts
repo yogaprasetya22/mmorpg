@@ -63,7 +63,7 @@ export function updatePlayerCasting(
     }
 
     // Force casting animation
-    const castAnim = actions['Spell'] || actions[animationSet.shoot] || actions[animationSet.idle];
+    const castAnim = actions['Spell'] || actions[animationSet.skill] || actions[animationSet.idle];
     if (castAnim && activeAction.current !== castAnim) {
       castAnim.reset().play();
       if (activeAction.current) activeAction.current.crossFadeTo(castAnim, 0.1, true);

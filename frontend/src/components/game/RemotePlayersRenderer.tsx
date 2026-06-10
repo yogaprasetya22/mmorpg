@@ -7,9 +7,11 @@ import * as THREE from 'three';
 import { PlayerNetworkState } from "@/src/hooks/useWebSocketGame";
 import { UnitRuntimeData } from "@/src/core/domain/unit.types";
 import { getTerrainElevation } from "@/src/core/utils/terrainHeight";
+import { getCachedTerrainHeight } from "@/src/core/utils/terrainCache";
 import { useStore } from "@/src/state/useStore";
 import { useEditorStore } from "@/src/state/useEditorStore";
-import { AvatarModel } from "./avatar/AvatarModel";
+import { AvatarModel, AvatarHandle } from "./avatar/AvatarModel";
+import { HpBarPlanes } from "./shared/HpBarPlanes";
 
 const getDefaultCustomization = (_gender: string, playerClass: string, hairStyle = 1, hairColor = "#5A3E2D") => {
   let weaponId = "asset_weapon_sword";
@@ -78,13 +80,19 @@ const parseCustomization = (customizationStr?: string, defaultGender = "Male", d
 
 const mapGameAnimationToAvatarPose = (anim: string, hasWeapon: boolean, playerClass: string) => {
   const lower = anim.toLowerCase();
+  // ── Death ──
   if (lower.includes("death")) {
     if (playerClass === "Priest" || playerClass === "Tank") {
       return "Sword And Shield Death";
     }
     return "Standing React Death Right";
   }
+  // ── Debuffs ──
+  if (lower === "stun" || lower === "stunned") return "Stunned";
+  if (lower === "freeze" || lower === "frozen" || lower === "dizzy") return "Dizzy";
+  // ── Damage ──
   if (lower.includes("hit") || lower.includes("damage")) return "Light Hit To Head";
+  // ── Combat ──
   if (lower.includes("attack") || lower.includes("slash") || lower.includes("shoot")) {
     if (playerClass === "Mage" || playerClass === "Priest") {
       return "Magic Heal";
@@ -92,10 +100,13 @@ const mapGameAnimationToAvatarPose = (anim: string, hasWeapon: boolean, playerCl
     return "Stable Sword Outward Slash";
   }
   if (lower.includes("skill") || lower.includes("spell") || lower.includes("heal")) return "Magic Heal";
-  if (lower.includes("run") || lower.includes("walk")) {
+  // ── Locomotion ──
+  if (lower.includes("jump")) return "Jump With Sword";
+  if (lower.includes("walk")) return "Walking";
+  if (lower.includes("jog")) return "Jogging";
+  if (lower.includes("run")) {
     return hasWeapon ? "Run With Sword" : "Slow Run";
   }
-  if (lower.includes("jog")) return "Jogging";
   return "Idle";
 };
 
@@ -137,10 +148,14 @@ export const RemotePlayerInstance = ({
   unitRegistry,
   visiblePlayerIdsRef
 }: RemotePlayerInstanceProps) => {
-  const [currentPose, setCurrentPose] = useState("Idle");
-  const [currentTimeScale, setCurrentTimeScale] = useState(1.0);
-  const [visible, setVisible] = useState(true);
+  // ── Refs for per-frame values (zero React re-renders) ──
+  const poseRef = useRef("Idle");
+  const timeScaleRef = useRef(1.0);
+  const avatarControlRef = useRef<AvatarHandle>(null);
+  const shadowEnabledRef = useRef(true);  // Track shadow state to avoid redundant toggles
+  const animPausedRef = useRef(false);    // Track animation pause state to avoid per-frame calls
 
+  // These change rarely (only on server-side appearance update) — useState OK
   const [customAvatarUrl, setCustomAvatarUrl] = useState<string | undefined>(undefined);
   const [hairStyle, setHairStyle] = useState<number>(1);
   const [hairColor, setHairColor] = useState<string>("#5A3E2D");
@@ -163,9 +178,11 @@ export const RemotePlayerInstance = ({
   const smoothHpRatio = useRef(1);
 
   const currentAnimState = useRef("Idle");
-  const stateBufferRef = useRef<{ x: number, y: number, z: number, rotation: number, timestamp: number }[]>([]);
-  const prevVisualPos = useRef<{ x: number, z: number } | null>(null);
-  const smoothedSpeed = useRef(0);
+  // Smoothed position/rotation for exponential interpolation (replaces buffer-based system).
+  // Converges in ~160ms (matching the old 160ms visual buffer delay) without any
+  // object allocation or array operations per frame.
+  const smoothPos = useRef<{ x: number, y: number, z: number } | null>(null);
+  const smoothRot = useRef(0);
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
@@ -199,23 +216,22 @@ export const RemotePlayerInstance = ({
     const isCurrentlyVisible = !isDensityCulled && camDistSq <= FAR_SQ;
 
     // Get client terrain elevation to map desynced or flat server coordinates cleanly onto 3D sculpted landscape
+    // ─── Terrain height with spatial cache ──────────────────────────────────
     let terrainY = data.y;
-    if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
-      const raycastH = (window as any).getGroundHeight(data.x, data.z, -999);
-      if (raycastH !== -999) {
-        terrainY = raycastH;
-      } else {
+    terrainY = getCachedTerrainHeight(data.x, data.z, () => {
+      if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
+        const raycastH = (window as any).getGroundHeight(data.x, data.z, -999);
+        if (raycastH !== -999) return raycastH;
         const activeEnv = useStore.getState().environment;
         const terrainConfig = useEditorStore.getState().terrainConfig;
         const baseDistance = activeEnv === "STORM" ? 45.0 : 35.0;
-        terrainY = getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
+        return getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
       }
-    } else {
       const activeEnv = useStore.getState().environment;
       const terrainConfig = useEditorStore.getState().terrainConfig;
       const baseDistance = activeEnv === "STORM" ? 45.0 : 35.0;
-      terrainY = getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
-    }
+      return getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
+    });
 
     // Snapping position and rotation if culled to keep state synchronized
     if (!isCurrentlyVisible) {
@@ -223,95 +239,63 @@ export const RemotePlayerInstance = ({
       groupRef.current.position.set(data.x, snapY, data.z);
       groupRef.current.rotation.y = data.rotation;
       groupRef.current.visible = false;
-      if (visible !== false) {
-        setVisible(false);
+      // Pause animation ONLY on the transition frame (not every frame)
+      if (!animPausedRef.current) {
+        animPausedRef.current = true;
+        avatarControlRef.current?.setPaused(true);
       }
       return;
     }
 
     groupRef.current.visible = true;
-    if (visible !== true) {
-      setVisible(true);
+    // Resume animation when becoming visible after culling
+    if (animPausedRef.current) {
+      animPausedRef.current = false;
+      avatarControlRef.current?.setPaused(false);
     }
 
-    if (prevVisualPos.current === null) {
-      prevVisualPos.current = { x: groupRef.current.position.x, z: groupRef.current.position.z };
-    }
-    const currentMeshX = groupRef.current.position.x;
-    const currentMeshZ = groupRef.current.position.z;
-    const visualDx = currentMeshX - prevVisualPos.current.x;
-    const visualDz = currentMeshZ - prevVisualPos.current.z;
-    const visualDistance = Math.sqrt(visualDx * visualDx + visualDz * visualDz);
-    prevVisualPos.current = { x: currentMeshX, z: currentMeshZ };
-
-    const currentSpeed = visualDistance / Math.max(0.0001, delta);
-    smoothedSpeed.current += (currentSpeed - smoothedSpeed.current) * Math.min(1, 10.0 * delta);
-
-    // Push new network state to buffer if it differs from the last pushed state
-    const buf = stateBufferRef.current;
-    if (buf.length === 0 || 
-        buf[buf.length - 1].x !== data.x || 
-        buf[buf.length - 1].y !== data.y || 
-        buf[buf.length - 1].z !== data.z || 
-        buf[buf.length - 1].rotation !== data.rotation) {
-      buf.push({
-        x: data.x,
-        y: data.y,
-        z: data.z,
-        rotation: data.rotation,
-        timestamp: (data as any).receivedAt || performance.now()
-      });
-      if (buf.length > 30) buf.shift(); // Limit queue length to 30 frames
+    // ─── Distance-based shadow toggle (avoid expensive shadow map render for far players) ──
+    const SHADOW_DIST_SQ = 40 * 40;  // 40 units
+    const shouldShadow = camDistSq < SHADOW_DIST_SQ;
+    if (shouldShadow !== shadowEnabledRef.current) {
+      shadowEnabledRef.current = shouldShadow;
+      avatarControlRef.current?.setShadowEnabled(shouldShadow);
     }
 
-    // Perform Entity Interpolation with a 160ms visual buffer delay to absorb 20Hz network jitter
-    const renderTime = performance.now() - 160;
-    let targetX = data.x;
+    // ─── Exponential smoothing (replaces buffer-based interpolation) ──────────
+    // Network data arrives at 20Hz. We smooth at 60fps with a ~160ms time constant.
+    // This eliminates per-frame object allocation, array push/shift, and buffer search.
+    const SMOOTH_TAU = 0.08; // time constant: converges ~90% in 160ms
+    const factor = 1 - Math.exp(-delta / SMOOTH_TAU);
+
+    const targetX = data.x;
     let targetY = data.y;
-    let targetZ = data.z;
-    let targetRot = data.rotation;
+    const targetZ = data.z;
+    const targetRot = data.rotation;
 
-    if (buf.length >= 2) {
-      let i = 0;
-      for (; i < buf.length - 1; i++) {
-        if (buf[i].timestamp <= renderTime && buf[i+1].timestamp > renderTime) {
-          break;
-        }
-      }
-
-      if (i < buf.length - 1) {
-        const start = buf[i];
-        const end = buf[i+1];
-        const elapsed = renderTime - start.timestamp;
-        const duration = end.timestamp - start.timestamp;
-        const alpha = Math.min(1, Math.max(0, elapsed / (duration || 1)));
-
-        targetX = start.x + (end.x - start.x) * alpha;
-        targetY = start.y + (end.y - start.y) * alpha;
-        targetZ = start.z + (end.z - start.z) * alpha;
-
-        // Correctly handle angle wrapping (Slerp)
-        let diffRot = end.rotation - start.rotation;
-        while (diffRot < -Math.PI) diffRot += Math.PI * 2;
-        while (diffRot > Math.PI) diffRot -= Math.PI * 2;
-        targetRot = start.rotation + diffRot * alpha;
-      } else {
-        // Fallback: If network lag causes buffer starvation, fallback to the latest known state
-        targetX = buf[buf.length - 1].x;
-        targetY = buf[buf.length - 1].y;
-        targetZ = buf[buf.length - 1].z;
-        targetRot = buf[buf.length - 1].rotation;
-      }
-    }
-
-    // Adjust targetY using the terrain height fallback if desynced/flat, but do NOT cap players standing on high elevated obstacles
+    // Adjust targetY using terrain height fallback
     if (Math.abs(targetY) < 0.001 || targetY < terrainY - 5.0) {
       targetY = terrainY + 1.18;
     }
-    
-    // Set position and rotation directly from the mathematically smooth entity interpolation to achieve 120fps+ fluidity
-    groupRef.current.position.set(targetX, targetY, targetZ);
-    groupRef.current.rotation.y = targetRot;
+
+    if (smoothPos.current === null) {
+      // First frame — snap to position
+      smoothPos.current = { x: targetX, y: targetY, z: targetZ };
+      smoothRot.current = targetRot;
+    } else {
+      // Exponential smoothing
+      smoothPos.current.x += (targetX - smoothPos.current.x) * factor;
+      smoothPos.current.y += (targetY - smoothPos.current.y) * factor;
+      smoothPos.current.z += (targetZ - smoothPos.current.z) * factor;
+      // Angle wrapping for rotation slerp
+      let diffRot = targetRot - smoothRot.current;
+      while (diffRot < -Math.PI) diffRot += Math.PI * 2;
+      while (diffRot > Math.PI) diffRot -= Math.PI * 2;
+      smoothRot.current += diffRot * factor;
+    }
+
+    groupRef.current.position.set(smoothPos.current.x, smoothPos.current.y, smoothPos.current.z);
+    groupRef.current.rotation.y = smoothRot.current;
 
     // Billboard name label or hide if too far
     if (nameRef.current) {
@@ -376,8 +360,10 @@ export const RemotePlayerInstance = ({
     const hasWeapon = !!remoteCustomization["Weapon"]?.asset;
     const pClass = data.class || cls || "Warrior";
     const nextPose = mapGameAnimationToAvatarPose(animation, hasWeapon, pClass);
-    if (nextPose !== currentPose) {
-      setCurrentPose(nextPose);
+    // Drive animation imperatively — zero React re-renders
+    if (nextPose !== poseRef.current) {
+      poseRef.current = nextPose;
+      avatarControlRef.current?.setPose(nextPose);
     }
 
     let nextTimeScale = 1.0;
@@ -400,8 +386,9 @@ export const RemotePlayerInstance = ({
       const remoteHPS = 1 + (remoteAspd / 125); // Synced with local hitsPerSecond formula
       nextTimeScale = remoteHPS * 1.2; // Sync with attack duration multiplier
     }
-    if (Math.abs(nextTimeScale - currentTimeScale) > 0.05) {
-      setCurrentTimeScale(nextTimeScale);
+    if (Math.abs(nextTimeScale - timeScaleRef.current) > 0.05) {
+      timeScaleRef.current = nextTimeScale;
+      avatarControlRef.current?.setTimeScale(nextTimeScale);
     }
 
     currentAnimState.current = animation;
@@ -764,9 +751,13 @@ export const RemotePlayerInstance = ({
     <group ref={groupRef}>
       <group scale={1.0} position={[0, -1.18, 0]}>
         <Suspense fallback={null}>
-          {visible && (
-            <AvatarModel customization={remoteCustomization} pose={currentPose} timeScale={currentTimeScale} paused={!visible} />
-          )}
+          <AvatarModel
+            customization={remoteCustomization}
+            pose={poseRef.current}
+            timeScale={timeScaleRef.current}
+            controlRef={avatarControlRef}
+            skipAnimControl
+          />
         </Suspense>
       </group>
       <Billboard ref={nameRef as any} position={[0, -1.1, 0]} follow={true} visible={false}>
@@ -785,20 +776,7 @@ export const RemotePlayerInstance = ({
           {""}
         </Text>
 
-        <mesh position={[0, 0, -0.001]}>
-          <planeGeometry args={[1.24, 0.16]} />
-          <meshBasicMaterial color="#09090b" toneMapped={false} />
-        </mesh>
-
-        <mesh position={[0, 0, 0]}>
-          <planeGeometry args={[1.2, 0.12]} />
-          <meshBasicMaterial color="#27272a" toneMapped={false} />
-        </mesh>
-
-        <mesh ref={hpFillRef} position={[0, 0, 0.002]}>
-          <planeGeometry args={[1.2, 0.12]} />
-          <meshBasicMaterial color="#10b981" toneMapped={false} />
-        </mesh>
+        <HpBarPlanes type="player" fillRef={hpFillRef} />
       </Billboard>
     </group>
   );

@@ -11,11 +11,12 @@ import { AvatarConfiguratorUI } from '@/src/components/game/avatar/AvatarConfigu
 
 import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
-import { KeyboardControls } from '@react-three/drei';
+import { KeyboardControls, Stats } from '@react-three/drei';
 import { EffectComposer, Bloom, ToneMapping } from '@react-three/postprocessing';
 import { PlayerController, keyboardMap } from '@/src/components/game/PlayerController';
 import { RemotePlayersRenderer } from '@/src/components/game/RemotePlayersRenderer';
 import { RemoteMonstersRenderer } from '@/src/components/game/RemoteMonstersRenderer';
+import { FPSCounterUpdater } from './components/FPSCounter';
 import { Minimap } from '@/src/components/game/Minimap';
 import { EnvironmentMultiGlobal } from '@/src/components/game/environment/EnvironmentMultiGlobal';
 import { ModularMap } from '@/src/components/game/environment/ModularMap';
@@ -224,6 +225,11 @@ export default function MultiplayerArena() {
                 localPlayerId={state.selectedCharacter?.id}
                 gameConfig={state.gameConfig}
               />
+
+              {/* R3F performance stats — shows FPS, draw calls, triangles, memory */}
+              <Stats className="!top-auto !bottom-2 !left-2" />
+              {/* FPS counter that dispatches custom events for the top-bar FPSBadge */}
+              <FPSCounterUpdater />
             </VFXProvider>
 
             {!state.settingsRef.current.potatoMode && (

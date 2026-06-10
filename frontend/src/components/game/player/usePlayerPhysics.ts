@@ -45,7 +45,8 @@ export function handlePlayerResurrectionAndFailsafe(
     if (ecctrlRef.current) {
       ecctrlRef.current.resetLinVel();
       ecctrlRef.current.setMovement?.({ joystick: { x: 0, y: 0 } });
-      ecctrlRef.current.group.position.y = groundH;
+      // Position capsule center above terrain so model sits ON ground, not inside it
+      ecctrlRef.current.group.position.y = groundH + 1.18;
     }
     charState[0] = 0; // Return to normal state
   } else {

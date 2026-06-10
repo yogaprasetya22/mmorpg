@@ -7,10 +7,19 @@ import { charState, ATTACK_DURATION, attackTimer } from '../PlayerController.buf
 
 export const animationSet = {
   idle:  'Idle',
-  walk:  'Walk',
-  run:   'Run',
-  jump:  'Jump',
-  shoot: 'Shoot_OneHanded',
+  walk:  'Walking',
+  jog:   'Jogging',
+  run:   'Slow Run',
+  fastRun: 'Fast Run',
+  runWithSword: 'Run With Sword',
+  jump:  'Jump With Sword',
+  attack: 'Stable Sword Outward Slash',
+  skill: 'Magic Heal',
+  hit:   'Light Hit To Head',
+  stunned: 'Stunned',
+  dizzy: 'Dizzy',
+  death: 'Standing React Death Right',
+  deathHeavy: 'Sword And Shield Death',
 };
 
 export const ecctrlAnimationSet: Record<string, string> = {
@@ -63,12 +72,12 @@ export function usePlayerAnimations(
     // == FORCED ATTACK/SKILL ANIMATIONS ==
     const now = performance.now();
     if (charState[0] === 1) {
-      let targetAnim = animationSet.shoot;
+      let targetAnim = animationSet.attack;
       if (playerClass === "Warrior" || playerClass === "Thief" || playerClass === "Beginner") {
         if (actions['SwordSlash']) targetAnim = 'SwordSlash';
         else if (actions['1H_Melee_Attack_Chop']) targetAnim = '1H_Melee_Attack_Chop';
       }
-      const shootAction = actions[targetAnim] || actions[animationSet.shoot];
+      const shootAction = actions[targetAnim] || actions[animationSet.attack];
       if (shootAction && shootAction !== activeAction.current) {
         shootAction.reset().play();
         if (activeAction.current) activeAction.current.crossFadeTo(shootAction, 0.1, true);
@@ -103,7 +112,7 @@ export function usePlayerAnimations(
       }
 
       // Revert animation if stuck in shoot or attack poses
-      const isStuckAttack = activeAction.current === actions[animationSet.shoot] ||
+      const isStuckAttack = activeAction.current === actions[animationSet.attack] ||
                             (actions['SwordSlash'] && activeAction.current === actions['SwordSlash']) ||
                             (actions['1H_Melee_Attack_Chop'] && activeAction.current === actions['1H_Melee_Attack_Chop']);
       if (isStuckAttack) {

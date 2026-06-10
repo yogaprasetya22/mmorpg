@@ -49,7 +49,7 @@ export function updatePlayerAnimation(
     const horizontalSpeed = Math.sqrt(linvel.x * linvel.x + linvel.z * linvel.z);
 
     const isAttackAnim =
-      activeAction.current === actions[animationSet.shoot] ||
+      activeAction.current === actions[animationSet.attack] ||
       (actions['SwordSlash'] && activeAction.current === actions['SwordSlash']) ||
       (actions['1H_Melee_Attack_Chop'] && activeAction.current === actions['1H_Melee_Attack_Chop']);
 

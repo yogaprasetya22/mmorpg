@@ -3,7 +3,7 @@
 import { NodeIO } from "@gltf-transform/core";
 import { dedup, draco, prune, quantize } from "@gltf-transform/functions";
 import { useAnimations, useGLTF } from "@react-three/drei";
-import { Suspense, useEffect, useRef, useMemo, useState } from "react";
+import { Suspense, useEffect, useRef, useMemo, useState, useImperativeHandle } from "react";
 import { GLTFExporter, FBXLoader, SkeletonUtils } from "three-stdlib";
 import { API_BASE_URL } from "@/src/core/config";
 import { useAvatarConfiguratorStore } from "@/src/state/useAvatarConfiguratorStore";
@@ -53,16 +53,33 @@ let globalCachedClips: any[] | null = null;
 let animationLoadingPromise: Promise<any[]> | null = null;
 
 const ANIMATION_FILES: Record<string, string> = {
+  // ── Locomotion ──
   "Idle": "/assets/animations/fbx/locomotion/idle.fbx",
+  "Walking": "/assets/animations/fbx/locomotion/walking.fbx",
   "Jogging": "/assets/animations/fbx/locomotion/jogging.fbx",
   "Slow Run": "/assets/animations/fbx/locomotion/slow_run.fbx",
   "Run With Sword": "/assets/animations/fbx/locomotion/run_with_sword.fbx",
+  "Fast Run": "/assets/animations/fbx/locomotion/fast_run.fbx",
+  "Jump With Sword": "/assets/animations/fbx/locomotion/jump_with_sword.fbx",
+  // ── Combat ──
   "Stable Sword Outward Slash": "/assets/animations/fbx/combat/stable_sword_outward_slash.fbx",
   "Magic Heal": "/assets/animations/fbx/combat/magic_heal.fbx",
+  // ── Damage / Debuff ──
   "Light Hit To Head": "/assets/animations/fbx/damage/light_hit_to_head.fbx",
+  "Stunned": "/assets/animations/fbx/locomotion/stunned.fbx",
+  "Dizzy": "/assets/animations/fbx/locomotion/dizzy.fbx",
+  // ── Death ──
   "Standing React Death Right": "/assets/animations/fbx/damage/standing_react_death_right.fbx",
   "Sword And Shield Death": "/assets/animations/fbx/damage/sword_and_shield_death.fbx"
 };
+
+// Locomotion clips: strip root Hips position & rotation tracks so BVHEcctrl
+// has full control over world-space movement and facing direction.
+// Without this, the FBX's forward hip displacement causes visible "snap-back"
+// on loop, and the hip rotation fights BVHEcctrl's turn logic.
+const LOCOMOTION_CLIPS = new Set([
+  "Walking", "Jogging", "Slow Run", "Run With Sword", "Fast Run", "Jump With Sword",
+]);
 
 export const loadFBXAnimations = async (): Promise<any[]> => {
   if (globalCachedClips) return globalCachedClips;
@@ -84,39 +101,55 @@ export const loadFBXAnimations = async (): Promise<any[]> => {
           const clip = fbx.animations[0].clone();
           clip.name = name; // Rename to our friendly name
           
-          // Mixamo FBX animations have a 90-degree offset on the X axis, causing the model to lie down.
-          // We rotate the root tracks back by -90 degrees on the X-axis to correct this.
-          const hipsRotTrack = clip.tracks.find((t: any) => t.name === "mixamorigHips.quaternion" || t.name === "mixamorig:Hips.quaternion");
+          const isLocomotion = LOCOMOTION_CLIPS.has(name);
           const correction = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-          if (hipsRotTrack) {
-            const values = hipsRotTrack.values;
-            const q = new THREE.Quaternion();
-            for (let i = 0; i < values.length; i += 4) {
-              q.set(values[i], values[i+1], values[i+2], values[i+3]);
-              q.premultiply(correction);
-              values[i] = q.x;
-              values[i+1] = q.y;
-              values[i+2] = q.z;
-              values[i+3] = q.w;
-            }
-          }
 
-          const hipsPosTrack = clip.tracks.find((t: any) => t.name === "mixamorigHips.position" || t.name === "mixamorig:Hips.position");
-          if (hipsPosTrack) {
-            const values = hipsPosTrack.values;
-            const v = new THREE.Vector3();
-            for (let i = 0; i < values.length; i += 3) {
-              v.set(values[i], values[i+1], values[i+2]);
-              v.applyQuaternion(correction);
-              values[i] = v.x;
-              values[i+1] = v.y;
-              values[i+2] = v.z - 8.11; // Offset Hips translation to align foot animation with ground
+          if (isLocomotion) {
+            // ── Locomotion: strip root Hips tracks entirely ──
+            // BVHEcctrl drives world-space position & rotation.  Keeping the
+            // FBX hips.position track would cause forward-displacement snap-back
+            // on loop; keeping hips.quaternion would fight the controller's turn.
+            clip.tracks = clip.tracks.filter((t: any) => {
+              const n = t.name;
+              if (n.startsWith("Armature.")) return false;
+              if (n === "mixamorigHips.position" || n === "mixamorig:Hips.position") return false;
+              if (n === "mixamorigHips.quaternion" || n === "mixamorig:Hips.quaternion") return false;
+              return true;
+            });
+          } else {
+            // ── Combat / Damage / Death: keep root tracks with correction ──
+            // These clips need hips rotation for dramatic effect (flinch tilt,
+            // death fall direction) and hips position for vertical bounce.
+            const hipsRotTrack = clip.tracks.find((t: any) => t.name === "mixamorigHips.quaternion" || t.name === "mixamorig:Hips.quaternion");
+            if (hipsRotTrack) {
+              const values = hipsRotTrack.values;
+              const q = new THREE.Quaternion();
+              for (let i = 0; i < values.length; i += 4) {
+                q.set(values[i], values[i+1], values[i+2], values[i+3]);
+                q.premultiply(correction);
+                values[i] = q.x;
+                values[i+1] = q.y;
+                values[i+2] = q.z;
+                values[i+3] = q.w;
+              }
             }
-          }
 
-          // Prune root tracks targeting "Armature" (e.g., Armature.quaternion) to prevent
-          // Three.js AnimationMixer from overriding the React group's default rotation.
-          clip.tracks = clip.tracks.filter((t: any) => !t.name.startsWith("Armature."));
+            const hipsPosTrack = clip.tracks.find((t: any) => t.name === "mixamorigHips.position" || t.name === "mixamorig:Hips.position");
+            if (hipsPosTrack) {
+              const values = hipsPosTrack.values;
+              const v = new THREE.Vector3();
+              for (let i = 0; i < values.length; i += 3) {
+                v.set(values[i], values[i+1], values[i+2]);
+                v.applyQuaternion(correction);
+                values[i] = v.x;
+                values[i+1] = v.y;
+                values[i+2] = v.z - 8.11; // Offset Hips translation to align foot animation with ground
+              }
+            }
+
+            // Prune root tracks targeting "Armature"
+            clip.tracks = clip.tracks.filter((t: any) => !t.name.startsWith("Armature."));
+          }
           
           clips.push(clip);
         }
@@ -140,6 +173,22 @@ const AvatarModelStatic = ({ customization, ...props }: any) => {
 
   // Clone the cached GLTF scene to ensure each static player has unique bones/skeletons
   const clone = useMemo(() => SkeletonUtils.clone(gltf.scene), [gltf.scene]);
+
+  // Auto-compute Y offset so character feet sit exactly at model origin (ground level).
+  // The GLB's Armature applies rotation [0.707,0,0,0.707] + scale 0.01, so after
+  // our React rotation [PI/2,0,0] + scale 0.01 the net transform places feet below
+  // Y=0 in world space. We measure the bounding box and compensate inside the
+  // Armature's local coordinate space (before rotation & scale).
+  const armatureLocalYOffset = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(gltf.scene);
+    const feetWorldY = box.min.y;
+    if (feetWorldY >= -0.01) return 0;
+    // In world space the net transform maps Armature local Y to world Y with a
+    // sign flip (local +Y → world -Y) and 0.01 scale, so:
+    //   worldY = -(armatureLocalY) * 0.01 + currentFeetWorldY
+    // To bring feet to world Y = 0:  armatureLocalY = -feetWorldY / 0.01
+    return Math.round(-feetWorldY / 0.01 * 10) / 10;
+  }, [gltf.scene]);
 
   // Re-build nodes lookup from unique clone
   const nodes = useMemo(() => {
@@ -166,7 +215,7 @@ const AvatarModelStatic = ({ customization, ...props }: any) => {
   return (
     <group {...props} dispose={null}>
       <group name="Scene">
-        <group name="Armature" rotation={[Math.PI / 2, 0, 0]} scale={0.01}>
+        <group name="Armature" rotation={[Math.PI / 2, 0, 0]} scale={0.01} position={[0, armatureLocalYOffset, 0]}>
           <primitive object={nodes["mixamorig:Hips"] || nodes.mixamorigHips} />
           {Object.keys(customization).map(
             (key) =>
@@ -206,6 +255,8 @@ const AvatarModelAnimated = ({
   paused,
   animations,
   propCustomization,
+  controlRef,
+  skipAnimControl,
   ...props
 }: any) => {
   const group = useRef<THREE.Group>(null);
@@ -215,6 +266,14 @@ const AvatarModelAnimated = ({
 
   // Clone the cached GLTF scene to ensure each player instance has unique bones/skeletons
   const clone = useMemo(() => SkeletonUtils.clone(gltf.scene), [gltf.scene]);
+
+  // Auto-compute Y offset so character feet sit exactly at model origin (ground level).
+  const armatureLocalYOffset = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(gltf.scene);
+    const feetWorldY = box.min.y;
+    if (feetWorldY >= -0.01) return 0;
+    return Math.round(-feetWorldY / 0.01 * 10) / 10;
+  }, [gltf.scene]);
 
   // Re-build nodes lookup from unique clone
   const nodes = useMemo(() => {
@@ -228,11 +287,98 @@ const AvatarModelAnimated = ({
   }, [clone]);
 
   useFrame(() => {
+    if (skipAnimControl) return; // External controller manages timescale
     const action = actions[pose];
     if (action) {
       action.timeScale = paused ? 0 : timeScale;
     }
   });
+
+  // Track the currently active action for proper crossFade transitions.
+  // Without this, fadeIn/fadeOut plays both clips in parallel causing a
+  // visible "standing pose" artifact during the blend window.
+  const activeActionRef = useRef<THREE.AnimationAction | null>(null);
+  const prevPoseRef = useRef<string>("");
+
+  useEffect(() => {
+    if (skipAnimControl) return; // External controller manages crossfade
+    const nextAction = actions[pose];
+    if (!nextAction) return;
+
+    const currentAction = activeActionRef.current;
+
+    // Determine crossfade duration: locomotion transitions need longer
+    // blending to avoid the "stiff standing pose" artifact.
+    const locomotionPoses = new Set([
+      "Idle", "Walking", "Jogging", "Slow Run", "Run With Sword", "Fast Run", "Jump With Sword",
+    ]);
+    const isLocomotionTransition =
+      locomotionPoses.has(prevPoseRef.current) && locomotionPoses.has(pose);
+    const duration = isLocomotionTransition ? 0.25 : 0.12;
+
+    if (currentAction && currentAction !== nextAction) {
+      // Proper crossfade: smoothly blends from current → next over `duration` seconds.
+      // This avoids the "parallel play" artifact where both clips fight each other.
+      nextAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1);
+      currentAction.crossFadeTo(nextAction, duration, true);
+      nextAction.fadeIn(duration).play();
+    } else if (!currentAction) {
+      // First animation — just fade in.
+      nextAction.reset().fadeIn(0.15).play();
+    }
+    // If currentAction === nextAction, do nothing (already playing).
+
+    activeActionRef.current = nextAction;
+    prevPoseRef.current = pose;
+  }, [actions, pose, skipAnimControl]);
+
+  // ── Imperative handle for external animation control ──
+  // Allows parent components (e.g. RemotePlayerInstance) to drive
+  // animation transitions directly from useFrame, bypassing React entirely.
+  const _meshCache = useRef<THREE.Mesh[]>([]);
+  useImperativeHandle(controlRef, () => ({
+    setPose: (newPose: string) => {
+      if (!actions || prevPoseRef.current === newPose) return;
+      const nextAction = actions[newPose];
+      if (!nextAction) return;
+      const currentAction = activeActionRef.current;
+      const locomotionPoses = new Set([
+        "Idle", "Walking", "Jogging", "Slow Run", "Run With Sword", "Fast Run", "Jump With Sword",
+      ]);
+      const isLoco = locomotionPoses.has(prevPoseRef.current) && locomotionPoses.has(newPose);
+      const dur = isLoco ? 0.25 : 0.12;
+      if (currentAction && currentAction !== nextAction) {
+        nextAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1);
+        currentAction.crossFadeTo(nextAction, dur, true);
+        nextAction.fadeIn(dur).play();
+      } else if (!currentAction) {
+        nextAction.reset().fadeIn(0.15).play();
+      }
+      activeActionRef.current = nextAction;
+      prevPoseRef.current = newPose;
+    },
+    setTimeScale: (ts: number) => {
+      const action = activeActionRef.current;
+      if (action) action.timeScale = ts;
+    },
+    setPaused: (p: boolean) => {
+      const action = activeActionRef.current;
+      if (action) action.timeScale = p ? 0 : action.timeScale || 1;
+    },
+    setShadowEnabled: (enabled: boolean) => {
+      // Cache mesh list on first call to avoid traversal every frame
+      if (_meshCache.current.length === 0 && group.current) {
+        group.current.traverse((child: any) => {
+          if (child.isMesh) _meshCache.current.push(child);
+        });
+      }
+      for (let i = 0; i < _meshCache.current.length; i++) {
+        _meshCache.current[i].castShadow = enabled;
+      }
+    },
+    actions,
+    group,
+  }), [actions]);
 
   useEffect(() => {
     if (propCustomization) return; // Skip in-game export registration
@@ -335,20 +481,13 @@ const AvatarModelAnimated = ({
     });
   }, [nodes]);
 
-  useEffect(() => {
-    const action = actions[pose];
-    if (action) {
-      action.fadeIn(0.2).play();
-      return () => {
-        action.fadeOut(0.2).stop();
-      };
-    }
-  }, [actions, pose]);
+  // Note: animation playback is now handled by the crossFade useEffect above.
+  // This effect only tracks customization changes for the export/download feature.
 
   return (
     <group ref={group} {...props} dispose={null}>
       <group name="Scene">
-        <group name="Armature" rotation={[Math.PI / 2, 0, 0]} scale={0.01}>
+        <group name="Armature" rotation={[Math.PI / 2, 0, 0]} scale={0.01} position={[0, armatureLocalYOffset, 0]}>
           <primitive object={nodes["mixamorig:Hips"] || nodes.mixamorigHips} />
           {Object.keys(customization).map(
             (key) =>
@@ -381,7 +520,16 @@ const AvatarModelAnimated = ({
   );
 };
 
-export const AvatarModel = ({ customization: propCustomization, pose: propPose, timeScale: propTimeScale, paused: propPaused, ...props }: any) => {
+export interface AvatarHandle {
+  setPose: (pose: string) => void;
+  setTimeScale: (ts: number) => void;
+  setPaused: (paused: boolean) => void;
+  setShadowEnabled: (enabled: boolean) => void;
+  actions: Record<string, THREE.AnimationAction | null> | null | undefined;
+  group: React.RefObject<THREE.Group>;
+}
+
+export const AvatarModel = ({ customization: propCustomization, pose: propPose, timeScale: propTimeScale, paused: propPaused, controlRef, skipAnimControl, ...props }: any) => {
   const [animations, setAnimations] = useState<any[]>(() => globalCachedClips || []);
   
   useEffect(() => {
@@ -409,6 +557,8 @@ export const AvatarModel = ({ customization: propCustomization, pose: propPose, 
       paused={propPaused}
       animations={animations}
       propCustomization={propCustomization}
+      controlRef={controlRef}
+      skipAnimControl={skipAnimControl}
       {...props}
     />
   );

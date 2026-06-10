@@ -9,8 +9,10 @@ import { MeshoptDecoder } from 'meshoptimizer';
 import { MonsterNetworkState, PlayerNetworkState } from "@/src/hooks/useWebSocketGame";
 import { useStore } from "@/src/state/useStore";
 import { getTerrainElevation } from "@/src/core/utils/terrainHeight";
+import { getCachedTerrainHeight } from "@/src/core/utils/terrainCache";
 import { useEditorStore } from "@/src/state/useEditorStore";
 import { API_BASE_URL } from "@/src/core/config";
+import { HpBarPlanes } from "./shared/HpBarPlanes";
 
 // ─── Shared scratch vectors to avoid per-frame allocations ───────────────────
 const _v3 = new THREE.Vector3();
@@ -202,24 +204,22 @@ export const RemoteMonsterInstance = ({
 
     const isCurrentlyVisible = !isDensityCulled && camDistSq <= MONSTER_FAR_SQ;
 
-    // Get client terrain elevation to map server's flat 2D movement cleanly onto 3D sculpted landscape
+    // Get client terrain elevation with spatial cache (avoids 600+ BVH raycasts/sec)
     let terrainY = data.y;
-    if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
-      const raycastH = (window as any).getGroundHeight(data.x, data.z, -999);
-      if (raycastH !== -999) {
-        terrainY = raycastH;
-      } else {
+    terrainY = getCachedTerrainHeight(data.x, data.z, () => {
+      if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
+        const raycastH = (window as any).getGroundHeight(data.x, data.z, -999);
+        if (raycastH !== -999) return raycastH;
         const activeEnv = useStore.getState().environment;
         const terrainConfig = useEditorStore.getState().terrainConfig;
         const baseDistance = activeEnv === "STORM" ? 45.0 : 35.0;
-        terrainY = getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
+        return getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
       }
-    } else {
       const activeEnv = useStore.getState().environment;
       const terrainConfig = useEditorStore.getState().terrainConfig;
       const baseDistance = activeEnv === "STORM" ? 45.0 : 35.0;
-      terrainY = getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
-    }
+      return getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
+    });
 
     // Snap position and rotation if culled to keep state synchronized
     if (!isCurrentlyVisible) {
@@ -502,20 +502,7 @@ export const RemoteMonsterInstance = ({
           {""}
         </Text>
 
-        <mesh position={[0, 0, -0.001]}>
-          <planeGeometry args={[1.24, 0.16]} />
-          <meshBasicMaterial color="#09090b" toneMapped={false} />
-        </mesh>
-
-        <mesh position={[0, 0, 0]}>
-          <planeGeometry args={[1.2, 0.12]} />
-          <meshBasicMaterial color="#27272a" toneMapped={false} />
-        </mesh>
-
-        <mesh ref={hpFillRef} position={[0, 0, 0.002]}>
-          <planeGeometry args={[1.2, 0.12]} />
-          <meshBasicMaterial color={isBoss ? "#ef4444" : "#f43f5e"} toneMapped={false} />
-        </mesh>
+        <HpBarPlanes type={isBoss ? "boss" : "monster"} fillRef={hpFillRef} />
       </Billboard>
 
       <group

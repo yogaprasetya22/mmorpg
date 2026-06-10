@@ -217,7 +217,7 @@ func main() {
 			} else {
 				// Create a character with dynamic class spread
 				classes := []string{"Warrior", "Mage", "Priest", "Thief"}
-				selectedClass := classes[idx % len(classes)]
+				selectedClass := classes[idx%len(classes)]
 
 				charPayload, _ := json.Marshal(map[string]interface{}{
 					"name":       fmt.Sprintf("char_%d_%d", timestamp, idx),
@@ -432,31 +432,90 @@ func main() {
 			centerX := 0.0
 			centerZ := 0.0
 
-			var attackCounter int = 0
-			var animLockTicks int = 0
+			// ── Realistic Bot Behavior FSM ──
+			// States: idle → walk → run → attack → skill → idle
+			// Each bot has a randomized schedule to simulate organic player behavior.
+			type botState int
+			const (
+				stateIdle botState = iota
+				stateWalk
+				stateRun
+				stateAttack
+				stateSkill
+			)
+
+			var state botState = stateRun
+			var stateTicks int = rand.Intn(40) + 20 // ticks until next state change
 			var currentAnim string = "Run"
+			var animLockTicks int = 0
 
 			for {
 				select {
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					// Circle movement path simulation (only if not animation locked)
 					var px, pz float64
 					var rotY float32
 
+					// ── State Machine Transitions ──
 					if animLockTicks > 0 {
 						animLockTicks--
-						// Stay in current animation and position to simulate realistic animation locking
+					} else {
+						stateTicks--
+						if stateTicks <= 0 {
+							// Roll for next state with weighted probabilities
+							roll := rand.Float64()
+							switch {
+							case roll < 0.15:
+								state = stateIdle
+								stateTicks = rand.Intn(30) + 10 // idle 0.5-2s
+								currentAnim = "Idle"
+							case roll < 0.40:
+								state = stateWalk
+								stateTicks = rand.Intn(60) + 20 // walk 1-4s
+								currentAnim = "Walk"
+							case roll < 0.75:
+								state = stateRun
+								stateTicks = rand.Intn(80) + 30 // run 1.5-5.5s
+								currentAnim = "Run"
+							case roll < 0.90 && *enableAttack:
+								state = stateAttack
+								stateTicks = rand.Intn(8) + 4 // attack 0.2-0.6s
+								currentAnim = "Attack"
+								animLockTicks = stateTicks
+							default:
+								state = stateSkill
+								stateTicks = rand.Intn(12) + 8 // skill 0.4-1s
+								currentAnim = "Skill"
+								animLockTicks = stateTicks
+							}
+						}
+					}
+
+					// ── Movement based on state ──
+					switch state {
+					case stateIdle:
+						// Stand still at current position
 						px = centerX + radius*math.Cos(angle)
 						pz = centerZ + radius*math.Sin(angle)
 						rotY = float32(-angle + math.Pi/2)
-					} else {
-						angle += 0.05
+					case stateWalk:
+						angle += 0.02 // slow movement
+						px = centerX + radius*math.Cos(angle)
+						pz = centerZ + radius*math.Sin(angle)
+						rotY = float32(-angle + math.Pi/2)
+						currentAnim = "Walk"
+					case stateRun:
+						angle += 0.05 // fast movement
 						px = centerX + radius*math.Cos(angle)
 						pz = centerZ + radius*math.Sin(angle)
 						rotY = float32(-angle + math.Pi/2)
 						currentAnim = "Run"
+					case stateAttack, stateSkill:
+						// Hold position during attack/skill animation lock
+						px = centerX + radius*math.Cos(angle)
+						pz = centerZ + radius*math.Sin(angle)
+						rotY = float32(-angle + math.Pi/2)
 					}
 
 					// Send client movement
@@ -502,10 +561,9 @@ func main() {
 						}
 					}
 
-					// Periodic attack
-					attackCounter++
-					if *enableAttack && attackCounter >= *attackRate && animLockTicks == 0 {
-						attackCounter = 0
+					// ── Send attack/skill messages when FSM enters combat states ──
+					if *enableAttack && (state == stateAttack || state == stateSkill) && animLockTicks == stateTicks {
+						// Just entered combat state — send the attack/skill WS message
 						monsterMutex.RLock()
 						targetID := ""
 						if len(monsterIDs) > 0 {
@@ -514,42 +572,11 @@ func main() {
 						monsterMutex.RUnlock()
 
 						if targetID != "" {
-							isCrit := rand.Float64() < 0.15
-							dmg := float32(100 + rand.Intn(100))
-							if isCrit {
-								dmg *= 1.5
-							}
-
-							// 30% chance to cast a class active skill, 70% chance standard attack
-							if rand.Float64() < 0.30 {
-								// Skill Cast Action
+							if state == stateSkill {
 								skillId := "strike"
 								if idx%2 == 0 {
 									skillId = "heal"
 								}
-
-								currentAnim = "Skill"
-								animLockTicks = 12
-
-								// Immediately send movement packet with "Skill" animation
-								moveMsg.Animation = currentAnim
-								if *useKcp && kcpSess != nil {
-									kcpMoveMsg := KCPIncomingMessage{
-										Action:    "move",
-										X:         px,
-										Y:         0.0,
-										Z:         pz,
-										Rotation:  float64(rotY),
-										Animation: currentAnim,
-									}
-									moveData, _ := msgpack.Marshal(kcpMoveMsg)
-									_, _ = kcpSess.Write(moveData)
-								} else {
-									moveData, _ := json.Marshal(moveMsg)
-									_ = conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
-									_ = conn.WriteMessage(websocket.TextMessage, moveData)
-								}
-
 								skillMsg := WSIncomingMessage{
 									Action:     "cast_skill",
 									TargetType: "monster",
@@ -564,29 +591,11 @@ func main() {
 									atomic.AddInt64(&metrics.BytesSent, int64(len(skillData)))
 								}
 							} else {
-								// Standard Attack Action
-								currentAnim = "Attack"
-								animLockTicks = 8
-
-								// Immediately send movement packet with "Attack" animation
-								moveMsg.Animation = currentAnim
-								if *useKcp && kcpSess != nil {
-									kcpMoveMsg := KCPIncomingMessage{
-										Action:    "move",
-										X:         px,
-										Y:         0.0,
-										Z:         pz,
-										Rotation:  float64(rotY),
-										Animation: currentAnim,
-									}
-									moveData, _ := msgpack.Marshal(kcpMoveMsg)
-									_, _ = kcpSess.Write(moveData)
-								} else {
-									moveData, _ := json.Marshal(moveMsg)
-									_ = conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
-									_ = conn.WriteMessage(websocket.TextMessage, moveData)
+								isCrit := rand.Float64() < 0.15
+								dmg := float32(100 + rand.Intn(100))
+								if isCrit {
+									dmg *= 1.5
 								}
-
 								attackMsg := WSIncomingMessage{
 									Action:     "attack",
 									TargetType: "monster",

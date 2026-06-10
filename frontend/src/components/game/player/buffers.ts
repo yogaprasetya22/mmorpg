@@ -28,6 +28,10 @@ export const _chaseDir = new THREE.Vector3();
 export const _camProjDir = new THREE.Vector3();
 export const _camRightDir = new THREE.Vector3();
 
+// Idle rotation recovery
+export const _idleTargetQuat = new THREE.Quaternion();
+export const _idleLookMatrix = new THREE.Matrix4();
+
 // ─── ECS BUFFERS (TypedArrays — same-frame, no GC) ───────────────────────────
 // Camera state
 export const camYaw = new Float32Array(1);   // radians
@@ -68,15 +72,24 @@ export const AUTO_AIM_RSQ = AUTO_AIM_RADIUS * AUTO_AIM_RADIUS;
 
 export const animationSet = {
   idle: 'Idle',
-  walk: 'Walk',
-  run: 'Run',
-  jump: 'Jump',
-  shoot: 'Shoot_OneHanded',
+  walk: 'Walking',
+  jog: 'Jogging',
+  run: 'Slow Run',
+  fastRun: 'Fast Run',
+  runWithSword: 'Run With Sword',
+  jump: 'Jump With Sword',
+  attack: 'Stable Sword Outward Slash',
+  skill: 'Magic Heal',
+  hit: 'Light Hit To Head',
+  stunned: 'Stunned',
+  dizzy: 'Dizzy',
+  death: 'Standing React Death Right',
+  deathHeavy: 'Sword And Shield Death',
 };
 
 export const ecctrlAnimationSet: Record<string, string> = {
   IDLE: animationSet.idle,
-  WALK: animationSet.run, // Auto-run behavior
+  WALK: animationSet.walk,
   RUN: animationSet.run,
   JUMP_START: animationSet.jump,
   JUMP_IDLE: animationSet.jump,
