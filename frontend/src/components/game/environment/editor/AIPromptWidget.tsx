@@ -128,9 +128,13 @@ export const AIPromptWidget = () => {
       });
 
       // 3. Request generation from DeepSeek gateway
+      const token = typeof window !== 'undefined' ? localStorage.getItem("game_auth_token") : "";
       const res = await fetch(`${API_BASE_URL}/api/world-editor/ai-generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ""
+        },
         body: JSON.stringify({
           prompt: prompt,
           currentItems: currentItems,

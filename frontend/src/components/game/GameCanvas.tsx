@@ -13,12 +13,12 @@ import dynamic from 'next/dynamic';
 const Perf = dynamic(() => import("r3f-perf").then((mod) => mod.Perf), { ssr: false });
 
 import { EnvironmentMultiGlobal } from "./environment/EnvironmentMultiGlobal";
-import { EffectComposer, Bloom, ToneMapping } from "@react-three/postprocessing";
+import { SafePostProcessing } from "./systems/SafePostProcessing";
 import { MapObstacle } from "@/src/core/domain/unit.types";
 import { useStore } from "@/src/state/useStore";
 import { useEditorStore } from "@/src/state/useEditorStore";
 import { API_BASE_URL } from "@/src/core/config";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { Activity, RefreshCw } from "lucide-react";
 import * as THREE from 'three';
 import { WorldEditor } from "./environment/WorldEditor";
@@ -162,9 +162,13 @@ export const GameCanvas = React.memo(({
         ...settingsRef.current,
         ...updates
       };
+      const token = typeof window !== 'undefined' ? localStorage.getItem("game_auth_token") : "";
       await fetch(`${API_BASE_URL}/api/config/settings`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": token ? `Bearer ${token}` : ""
+        },
         body: JSON.stringify(fullSettings)
       });
     } catch (e) {
@@ -212,25 +216,29 @@ export const GameCanvas = React.memo(({
   }), { collapsed: true, render: () => debug });
 
   // Fix: Move useFrame inside a child component that sits inside <Canvas>
-  const DiagnosticsBridge = () => {
-    const lastUpdate = useRef(0);
-    useFrame((state) => {
-      if (!debug) return; // Skip updating Leva diagnostics if debug panel is closed to prevent culling warnings
-      
-      const now = state.clock.elapsedTime * 1000;
-      if (now - lastUpdate.current > 1000) {
-        lastUpdate.current = now;
-        if (settingsRef.current.telemetry) {
-          const { engineMs, bottleneck } = settingsRef.current.telemetry;
-          setDiag({ 
-            engineTime: typeof engineMs === 'number' ? engineMs : 0, 
-            suspect: bottleneck || "OPTIMAL" 
-          });
+  // Memoize to preserve component identity across re-renders (prevents unmount/remount)
+  const DiagnosticsBridge = useMemo(() => {
+    const Bridge = () => {
+      const lastUpdate = useRef(0);
+      useFrame((state) => {
+        if (!debug) return; // Skip updating Leva diagnostics if debug panel is closed to prevent culling warnings
+        
+        const now = state.clock.elapsedTime * 1000;
+        if (now - lastUpdate.current > 1000) {
+          lastUpdate.current = now;
+          if (settingsRef.current.telemetry) {
+            const { engineMs, bottleneck } = settingsRef.current.telemetry;
+            setDiag({ 
+              engineTime: typeof engineMs === 'number' ? engineMs : 0, 
+              suspect: bottleneck || "OPTIMAL" 
+            });
+          }
         }
-      }
-    });
-    return null;
-  };
+      });
+      return null;
+    };
+    return Bridge;
+  }, [debug, setDiag, settingsRef]);
 
   const VisualTuningBridge = ({ fov, fogDensity, exposure }: { fov: number, fogDensity: number, exposure: number }) => {
     const { camera, scene, gl } = useThree();
@@ -382,10 +390,12 @@ export const GameCanvas = React.memo(({
           <VisualTuningBridge fov={fov} fogDensity={fogDensity} exposure={exposure} />
 
           {!settingsRef.current.potatoMode && !adaptivePotatoMode && (
-            <EffectComposer enableNormalPass={false} multisampling={0}>
-              <Bloom luminanceThreshold={1.0} mipmapBlur intensity={0.5} radius={0.4} />
-              <ToneMapping adaptive={false} />
-            </EffectComposer>
+            <SafePostProcessing
+              bloomThreshold={1.0}
+              bloomStrength={0.5}
+              bloomRadius={0.4}
+              exposure={exposure}
+            />
           )}
         </Canvas>
       </div>

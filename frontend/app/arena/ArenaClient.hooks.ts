@@ -632,7 +632,11 @@ export function useArenaGameState() {
     try {
       setErrorMsg("");
       const res = await fetch(`${API_BASE_URL}/api/config/monsters`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", 
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": token ? `Bearer ${token}` : ""
+        },
         body: JSON.stringify(config)
       });
       if (res.ok) {
@@ -652,7 +656,12 @@ export function useArenaGameState() {
   const handleDeleteMonsterConfig = async (type: string) => {
     try {
       setErrorMsg("");
-      const res = await fetch(`${API_BASE_URL}/api/config/monsters/${type}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE_URL}/api/config/monsters/${type}`, { 
+        method: "DELETE",
+        headers: {
+          "Authorization": token ? `Bearer ${token}` : ""
+        }
+      });
       if (res.ok) {
         setSuccessMsg("Konfigurasi monster berhasil dihapus dari database!");
         fetchMonsterConfigs();

@@ -390,24 +390,51 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         
         // Path Sanitization (Fix legacy paths from local storage)
         const sanitized = parsed.map(item => {
-          if (item.path.includes('/models/environment/')) {
-            const fileName = item.path.split('/').pop()?.replace(/_/g, '-') || '';
-            
-            // Check if it belongs in kingdom or assets-env
+          let path = item.path;
+
+          // Fix legacy broken path prefixes
+          // e.g. "assets-model/asset-enverement/BirchTree_1.glb" → correct environment path
+          if (path.includes('asset-enverement/') || path.includes('assets-model/asset-')) {
+            const fileName = path.split('/').pop() || '';
+            const nameLower = fileName.toLowerCase();
+            if (nameLower.includes('tree') || nameLower.includes('birch') || nameLower.includes('pine') || nameLower.includes('oak')) {
+              return { ...item, path: `/assets/environment/nature/trees/${fileName}` };
+            }
+            return { ...item, path: `/assets/environment/nature/vegetation/${fileName}` };
+          }
+
+          // Fix "assets-model/assets-env/" prefix → proper environment path
+          if (path.includes('assets-model/assets-env')) {
+            const fileName = path.split('/').pop() || '';
+            return { ...item, path: `/assets/environment/props/decor/${fileName}` };
+          }
+
+          // Strip any accidental "assets-model/" prefix for non-NPC assets
+          if (path.startsWith('assets-model/') || path.startsWith('/assets-model/')) {
+            const rest = path.replace(/^\/?assets-model\//, '');
+            // If remaining path looks like an environment asset, reroute
+            if (rest.startsWith('assets-env') || rest.startsWith('asset-')) {
+              const fileName = rest.split('/').pop() || '';
+              return { ...item, path: `/assets/environment/props/decor/${fileName}` };
+            }
+          }
+
+          // Fix legacy /models/environment/ paths
+          if (path.includes('/models/environment/')) {
+            const fileName = path.split('/').pop()?.replace(/_/g, '-') || '';
             const kingdomAssets = [
-              'bridge-straight', 'tower-square', 'wall', 'wall-corner', 
-              'wall-pillar', 'tree-large', 'gate', 'stairs-stone', 
+              'bridge-straight', 'tower-square', 'wall', 'wall-corner',
+              'wall-pillar', 'tree-large', 'gate', 'stairs-stone',
               'rocks-large', 'tower-top'
             ];
-            
             if (kingdomAssets.some(a => fileName.startsWith(a))) {
-              // Special case for wall_buttress -> wall
               const finalName = fileName === 'wall-buttress.glb' ? 'wall.glb' : fileName;
               return { ...item, path: `/assets/environment/structures/kingdom/${finalName}` };
             } else {
               return { ...item, path: `/assets/environment/props/decor/${fileName}` };
             }
           }
+
           return item;
         });
 
@@ -451,9 +478,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         ...dataSettings,
         activeMapId: mapId
       };
+      const token = typeof window !== 'undefined' ? localStorage.getItem("game_auth_token") : "";
       await fetch(`${API_BASE_URL}/api/config/settings`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": token ? `Bearer ${token}` : ""
+        },
         body: JSON.stringify(updated)
       });
       console.log(`Global activeMapId synced to: ${mapId}`);
@@ -496,9 +527,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         ...dataSettings,
         activeMapId: mapId
       };
+      const token = typeof window !== 'undefined' ? localStorage.getItem("game_auth_token") : "";
       await fetch(`${API_BASE_URL}/api/config/settings`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": token ? `Bearer ${token}` : ""
+        },
         body: JSON.stringify(updated)
       });
       console.log(`Global activeMapId synced to: ${mapId}`);
@@ -512,8 +547,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
 
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem("game_auth_token") : "";
       const res = await fetch(`${API_BASE_URL}/api/world-editor/delete?map_id=${encodeURIComponent(mapId)}`, {
-        method: "DELETE"
+        method: "DELETE",
+        headers: {
+          "Authorization": token ? `Bearer ${token}` : ""
+        }
       });
 
       if (res.ok) {
@@ -632,9 +671,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     };
 
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem("game_auth_token") : "";
       const res = await fetch(`${API_BASE_URL}/api/world-editor/save?map_id=${encodeURIComponent(selectedMapId)}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ""
+        },
         body: JSON.stringify(payload)
       });
       if (res.ok) {
@@ -660,6 +703,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         
         const sanitizedItems = (data.items || []).map((item: any) => {
           let path = item.path;
+
+          // Fix legacy broken path prefixes from database-saved maps
+          if (path.includes('asset-enverement/') || path.includes('assets-model/asset-')) {
+            const fileName = path.split('/').pop() || '';
+            const nameLower = fileName.toLowerCase();
+            if (nameLower.includes('tree') || nameLower.includes('birch') || nameLower.includes('pine') || nameLower.includes('oak')) {
+              path = `/assets/environment/nature/trees/${fileName}`;
+            } else {
+              path = `/assets/environment/nature/vegetation/${fileName}`;
+            }
+          } else if (path.includes('assets-model/assets-env')) {
+            const fileName = path.split('/').pop() || '';
+            path = `/assets/environment/props/decor/${fileName}`;
+          }
+
+          // Prepend API base URL for valid server-relative paths
           if (path.startsWith('/assets/') || path.startsWith('/assets-model/') || path.startsWith('/assets/environment/structures/kingdom/') || path.startsWith('/assets-tree/')) {
             path = `${API_BASE_URL}${path}`;
           }
