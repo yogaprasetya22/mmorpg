@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useRef, useState } from 'react';
+import { useMemo, useEffect, useRef, useState, Component, ReactNode } from 'react';
 import React from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -35,8 +35,37 @@ interface WhimsicalDioramaProps {
     onReady?: () => void;
 }
 
+interface ErrorBoundaryProps {
+    children: ReactNode;
+    onCatch: (error: Error) => void;
+}
+
+interface ErrorBoundaryState {
+    hasError: boolean;
+}
+
+class EnvironmentErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+    public state: ErrorBoundaryState = {
+        hasError: false
+    };
+
+    public static getDerivedStateFromError(_: Error): ErrorBoundaryState {
+        return { hasError: true };
+    }
+
+    public componentDidCatch(error: Error) {
+        this.props.onCatch(error);
+    }
+
+    render() {
+        if (this.state.hasError) return null;
+        return this.props.children;
+    }
+}
+
 export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false, onReady }: WhimsicalDioramaProps) => {
     const weather = useStore(s => s.weather);
+    const [skyLoadFailed, setSkyLoadFailed] = useState(false);
     const { scene } = useThree();
     const meshRef = useRef<THREE.Mesh>(null!);
     const lightRef = useRef<THREE.DirectionalLight>(null);
@@ -185,8 +214,8 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
     const sky = useEditorStore(s => s.sky) || 'sunset';
 
     const skyFile = useMemo(() => {
-        if (sky === 'night') return `${API_BASE_URL}/assets/textures/skyboxes/qwantani_night_1k.exr`;
-        if (sky === 'sunset') return `${API_BASE_URL}/assets/textures/skyboxes/qwantani_sunset_1k.exr`;
+        if (sky === 'night') return `${API_BASE_URL}/assets/textures/skyboxes/qwantani_night_1k.hdr`;
+        if (sky === 'sunset') return `${API_BASE_URL}/assets/textures/skyboxes/qwantani_sunset_1k.hdr`;
         return null;
     }, [sky]);
 
@@ -198,12 +227,14 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
     return (
         <group>
             {/* 1. SKYBOX & SUNLIGHT (High Noon / 12 PM) */}
-            {skyFile ? (
-                <Environment 
-                    files={skyFile} 
-                    background 
-                    blur={0}
-                />
+            {skyFile && !skyLoadFailed ? (
+                <EnvironmentErrorBoundary onCatch={() => setSkyLoadFailed(true)}>
+                    <Environment 
+                        files={skyFile} 
+                        background 
+                        blur={0}
+                    />
+                </EnvironmentErrorBoundary>
             ) : (
                 <>
                     <color attach="background" args={["#a0c4ff"]} />

@@ -2,7 +2,7 @@
  * StormEnvironment — Open World Edition (Physics Stabilized)
  */
 
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { Component, ReactNode, useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Environment, useTexture, Sky } from "@react-three/drei";
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from "three-mesh-bvh";
@@ -709,12 +709,41 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
 
 
 
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  onCatch: (error: Error) => void;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class EnvironmentErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = {
+    hasError: false
+  };
+
+  public static getDerivedStateFromError(_: Error): ErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  public componentDidCatch(error: Error) {
+    this.props.onCatch(error);
+  }
+
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
+
 export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug = false, onReady }: {
   baseDistance?: number;
   potatoMode?: boolean;
   debug?: boolean;
   onReady?: () => void;
 }) => {
+  const [skyLoadFailed, setSkyLoadFailed] = useState(false);
   const weather    = useStore(s => s.weather);
   const gameState  = useStore(s => s.gameState);
   const isSetup    = gameState === "SETUP";
@@ -757,7 +786,7 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
       lightRef.current.position.set(centerX + ox, centerY + 45, centerZ + oz);
       lightRef.current.target.position.set(centerX, centerY, centerZ);
       lightRef.current.target.updateMatrixWorld();
-      lightRef.current.shadow.camera.updateProjectionMatrix();
+      // REMOVED: updateProjectionMatrix() — shadow projection is static (bounds set in JSX), only position changes matter
     }
 
     if (isSetup || potatoMode) return;
@@ -806,8 +835,8 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
   const sky = useEditorStore(s => s.sky) || 'sunset';
 
   const skyFile = useMemo(() => {
-    if (sky === 'night') return `${API_BASE_URL}/assets/textures/skyboxes/qwantani_night_1k.exr`;
-    if (sky === 'sunset') return `${API_BASE_URL}/assets/textures/skyboxes/qwantani_sunset_1k.exr`;
+    if (sky === 'night') return `${API_BASE_URL}/assets/textures/skyboxes/qwantani_night_1k.hdr`;
+    if (sky === 'sunset') return `${API_BASE_URL}/assets/textures/skyboxes/qwantani_sunset_1k.hdr`;
     return null;
   }, [sky]);
 
@@ -821,12 +850,14 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
 
   return (
     <group>
-      {skyFile ? (
-        <Environment 
-          files={skyFile}
-          background
-          blur={0}
-        />
+      {skyFile && !skyLoadFailed ? (
+        <EnvironmentErrorBoundary onCatch={() => setSkyLoadFailed(true)}>
+          <Environment 
+            files={skyFile}
+            background
+            blur={0}
+          />
+        </EnvironmentErrorBoundary>
       ) : (
         <>
           <color attach="background" args={["#a0c4ff"]} />
