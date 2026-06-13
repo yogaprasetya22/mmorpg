@@ -24,6 +24,8 @@ func (u *gameUsecase) GetStatePayload() domain.GameStatePayload {
 			playerStates[i].XP = pData.XP
 			playerStates[i].HP = pData.HP
 			playerStates[i].MaxHP = pData.MaxHP
+			playerStates[i].MP = pData.MP
+			playerStates[i].MaxMP = pData.MaxMP
 
 			// Talent Stats
 			playerStates[i].BasePOW = pData.BasePOW
@@ -78,6 +80,7 @@ func (u *gameUsecase) GetStatePayload() domain.GameStatePayload {
 			ID:             m.ID,
 			Name:           m.Name,
 			Type:           m.Type,
+			Level:          m.Level,
 			X:              m.Position.X,
 			Y:              m.Position.Y,
 			Z:              m.Position.Z,
@@ -87,6 +90,7 @@ func (u *gameUsecase) GetStatePayload() domain.GameStatePayload {
 			TargetPlayerID: m.TargetPlayerID,
 			Animation:      m.Animation,
 			AIState:        m.AIState,
+			CurrentSkill:   m.CurrentSkill,
 		})
 	}
 	u.monstersMu.RUnlock()

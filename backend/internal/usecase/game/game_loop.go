@@ -29,9 +29,14 @@ func (u *gameUsecase) StartGameLoop(ctx context.Context) {
 			// 1. Simulate Monster AI and movement for this tick
 			u.SimulateMonstersTick(fixedDt)
 
+			// Regenerate player HP/MP once per second (20 ticks @ 20Hz)
+			if autosaveCounter%20 == 0 {
+				u.regeneratePlayers()
+			}
+
 			// 2. Fetch all real-time players and monsters states
 			payload := u.GetStatePayload()
-
+			
 			// 3. Broadcast game state asynchronously agar game loop tidak block
 			if u.broadcastCallback != nil {
 				go u.broadcastCallback(payload)
@@ -43,6 +48,46 @@ func (u *gameUsecase) StartGameLoop(ctx context.Context) {
 				autosaveCounter = 0
 				u.autosaveActivePlayers()
 			}
+		}
+	}
+}
+
+// Thread-safe HP/MP regeneration for all active players
+func (u *gameUsecase) regeneratePlayers() {
+	u.activePlayersMu.Lock()
+	defer u.activePlayersMu.Unlock()
+
+	u.playersMu.Lock()
+	defer u.playersMu.Unlock()
+
+	for _, pData := range u.activePlayers {
+		if pData.HP <= 0 {
+			continue
+		}
+
+		// HP recovery based on VIT
+		hpRegen := float32(2 + pData.VIT/10)
+		pData.HP += hpRegen
+		if pData.HP > pData.MaxHP {
+			pData.HP = pData.MaxHP
+		}
+
+		// MP recovery based on INT
+		mpRegen := float32(1 + pData.INT/10)
+		pData.MP += mpRegen
+		if pData.MP > pData.MaxMP {
+			pData.MP = pData.MaxMP
+		}
+
+		// Sync updated HP to the network states and ECS
+		if pState, exists := u.players[pData.ID]; exists {
+			pState.HP = pData.HP
+			pState.MP = pData.MP
+		}
+
+		if healthComp, found := u.registry.GetComponent(domain.EntityID(pData.ID), "Health"); found {
+			h := healthComp.(*domain.HealthComponent)
+			h.HP = pData.HP
 		}
 	}
 }

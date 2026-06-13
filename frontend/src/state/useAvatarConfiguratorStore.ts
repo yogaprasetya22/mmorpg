@@ -94,6 +94,15 @@ export interface AvatarConfiguratorStore {
   changeAsset: (category: string, asset: AvatarAsset | null) => void;
   randomize: () => void;
   applyLockedAssets: () => void;
+  selectedWeaponId: string | null;
+  setSelectedWeaponId: (id: string | null) => void;
+  weaponGizmoMode: "translate" | "rotate" | "scale" | "none";
+  setWeaponGizmoMode: (mode: "translate" | "rotate" | "scale" | "none") => void;
+  weaponOffsetTrigger: number;
+  triggerWeaponUpdate: () => void;
+  weaponRefs: Record<string, any>;
+  registerWeaponRef: (id: string, ref: any) => void;
+  unregisterWeaponRef: (id: string) => void;
 }
 
 export const useAvatarConfiguratorStore = create<AvatarConfiguratorStore>((set, get) => ({
@@ -117,6 +126,21 @@ export const useAvatarConfiguratorStore = create<AvatarConfiguratorStore>((set, 
   setDownload: (download) => set({ download }),
   screenshot: () => {},
   setScreenshot: (screenshot) => set({ screenshot }),
+  selectedWeaponId: null,
+  setSelectedWeaponId: (id) => set({ selectedWeaponId: id }),
+  weaponGizmoMode: "translate",
+  setWeaponGizmoMode: (mode) => set({ weaponGizmoMode: mode }),
+  weaponOffsetTrigger: 0,
+  triggerWeaponUpdate: () => set((state) => ({ weaponOffsetTrigger: state.weaponOffsetTrigger + 1 })),
+  weaponRefs: {},
+  registerWeaponRef: (id, ref) => set((state) => ({
+    weaponRefs: { ...state.weaponRefs, [id]: ref }
+  })),
+  unregisterWeaponRef: (id) => set((state) => {
+    const next = { ...state.weaponRefs };
+    delete next[id];
+    return { weaponRefs: next };
+  }),
   updateColor: (color) => {
     const currentCategory = get().currentCategory;
     if (!currentCategory) return;
@@ -162,12 +186,14 @@ export const useAvatarConfiguratorStore = create<AvatarConfiguratorStore>((set, 
         }
       });
 
+      const weaponAsset = customization["Weapon"]?.asset;
       set({
         categories,
         currentCategory: categories[0] || null,
         assets,
         customization,
         loading: false,
+        selectedWeaponId: weaponAsset?.id || null,
       });
       get().applyLockedAssets();
     } catch (error) {
@@ -185,13 +211,15 @@ export const useAvatarConfiguratorStore = create<AvatarConfiguratorStore>((set, 
           asset,
         },
       },
+      ...(category === "Weapon" ? { selectedWeaponId: asset?.id || null } : {}),
     }));
     get().applyLockedAssets();
   },
   randomize: () => {
-    const customization: Record<string, CustomizationItem> = {};
+    const customization: Record<string, CustomizationItem> = { ...get().customization };
     const categories = get().categories;
     categories.forEach((category) => {
+      if (category.name === "Weapon") return;
       let randomAsset: AvatarAsset | null = null;
       if (category.assets.length > 0) {
         randomAsset = category.assets[randInt(0, category.assets.length - 1)];

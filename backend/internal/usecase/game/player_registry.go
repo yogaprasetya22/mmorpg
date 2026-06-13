@@ -46,37 +46,26 @@ func (u *gameUsecase) RegisterPlayer(playerID string, username string) {
 			LastY:      0,
 			LastZ:      0,
 			Inventory: []domain.PlayerItem{
+				buildClassStarterWeapon(playerID, "Beginner"),
 				{
-					ID:         playerID + "-item-1",
-					PlayerID:   playerID,
-					ItemID:     "sword_starter",
-					Name:       "Wooden Sword",
-					Type:       "equipment",
-					SlotType:   "weapon",
-					Quantity:   1,
-					IsEquipped: true,
-					SlotIndex:  0,
-					AddAttack:  15,
+					ID:        playerID + "-item-2",
+					PlayerID:  playerID,
+					ItemID:    "potion_red",
+					Name:      "Red Potion",
+					Type:      "consumable",
+					SlotIndex: 1,
+					Quantity:  5,
+					AddHP:     150,
 				},
 				{
-					ID:         playerID + "-item-2",
-					PlayerID:   playerID,
-					ItemID:     "potion_red",
-					Name:       "Red Potion",
-					Type:       "consumable",
-					SlotIndex:  1,
-					Quantity:   5,
-					AddHP:      150,
-				},
-				{
-					ID:         playerID + "-item-3",
-					PlayerID:   playerID,
-					ItemID:     "potion_blue",
-					Name:       "Blue Potion",
-					Type:       "consumable",
-					SlotIndex:  2,
-					Quantity:   5,
-					AddMP:      50,
+					ID:        playerID + "-item-3",
+					PlayerID:  playerID,
+					ItemID:    "potion_blue",
+					Name:      "Blue Potion",
+					Type:      "consumable",
+					SlotIndex: 2,
+					Quantity:  5,
+					AddMP:     50,
 				},
 			},
 			Skills: []domain.PlayerSkill{
@@ -119,7 +108,7 @@ func (u *gameUsecase) RegisterPlayer(playerID string, username string) {
 				},
 			},
 		}
-		
+
 		// Recalculate stats for correct attributes mapping
 		pData.RecalculateStats()
 		pData.HP = pData.MaxHP
@@ -153,24 +142,27 @@ func (u *gameUsecase) RegisterPlayer(playerID string, username string) {
 
 	// Initial starter state
 	state := &domain.PlayerNetworkState{
-		ID:        playerID,
-		X:         pData.LastX,
-		Y:         pData.LastY,
-		Z:         pData.LastZ,
-		Rotation:  0,
-		Animation: "idle",
-		Class:     pData.Class,
-		Gender:    pData.Gender,
-		Username:  pData.Username,
-		HP:        pData.HP,
-		MaxHP:     pData.MaxHP,
-		Gold:      pData.Gold,
-		Level:     pData.Level,
-		ASPD:      pData.ASPD,
-		XP:        pData.XP,
+		ID:              playerID,
+		X:               pData.LastX,
+		Y:               pData.LastY,
+		Z:               pData.LastZ,
+		Rotation:        0,
+		Animation:       "idle",
+		Class:           pData.Class,
+		Gender:          pData.Gender,
+		Username:        pData.Username,
+		HP:              pData.HP,
+		MaxHP:           pData.MaxHP,
+		MP:              pData.MP,
+		MaxMP:           pData.MaxMP,
+		Gold:            pData.Gold,
+		Level:           pData.Level,
+		ASPD:            pData.ASPD,
+		XP:              pData.XP,
 		CustomAvatarURL: pData.CustomAvatarURL,
-		HairStyle: pData.HairStyle,
-		HairColor: pData.HairColor,
+		HairStyle:       pData.HairStyle,
+		HairColor:       pData.HairColor,
+		EquippedWeaponCategory: getEquippedWeaponCategory(pData),
 
 		// Talent Stats
 		BasePOW:      pData.BasePOW,
@@ -260,6 +252,9 @@ func (u *gameUsecase) UnregisterPlayer(playerID string) {
 	delete(u.players, playerID)
 	u.registry.DestroyEntity(domain.EntityID(playerID))
 
+	// Remove player from party on disconnect
+	u.LeaveParty(playerID)
+
 	// Clean up Redis position
 	go func() {
 		_ = u.stateRepo.DeletePlayerState(context.Background(), playerID)
@@ -281,4 +276,82 @@ func (u *gameUsecase) UnregisterPlayer(playerID string) {
 	u.activePlayersMu.Unlock()
 
 	fmt.Printf("👤 Player %s left the game world. Final state flushed to DB.\n", playerID)
+}
+
+// buildClassStarterWeapon returns the appropriate starter weapon for a given class
+func buildClassStarterWeapon(playerID string, class string) domain.PlayerItem {
+	switch class {
+	case "Mage":
+		return domain.PlayerItem{
+			ID: playerID + "-item-1", PlayerID: playerID,
+			ItemID: "staff_starter", Name: "Wooden Staff",
+			Type: "equipment", SlotType: "weapon", WeaponCategory: "staff",
+			Quantity: 1, IsEquipped: true, SlotIndex: 0, AddAttack: 12,
+		}
+	case "Beginner": // Archer
+		return domain.PlayerItem{
+			ID: playerID + "-item-1", PlayerID: playerID,
+			ItemID: "bow_starter", Name: "Wooden Bow",
+			Type: "equipment", SlotType: "weapon", WeaponCategory: "bow",
+			Quantity: 1, IsEquipped: true, SlotIndex: 0, AddAttack: 14,
+		}
+	case "Priest": // Tank
+		return domain.PlayerItem{
+			ID: playerID + "-item-1", PlayerID: playerID,
+			ItemID: "mace_starter", Name: "Wooden Mace",
+			Type: "equipment", SlotType: "weapon", WeaponCategory: "mace",
+			Quantity: 1, IsEquipped: true, SlotIndex: 0, AddAttack: 13,
+		}
+	case "Thief": // Assassin
+		return domain.PlayerItem{
+			ID: playerID + "-item-1", PlayerID: playerID,
+			ItemID: "dagger_starter", Name: "Wooden Dagger",
+			Type: "equipment", SlotType: "weapon", WeaponCategory: "dagger",
+			Quantity: 1, IsEquipped: true, SlotIndex: 0, AddAttack: 12,
+		}
+	default: // Warrior / Fighter
+		return domain.PlayerItem{
+			ID: playerID + "-item-1", PlayerID: playerID,
+			ItemID: "sword_starter", Name: "Wooden Sword",
+			Type: "equipment", SlotType: "weapon", WeaponCategory: "sword",
+			Quantity: 1, IsEquipped: true, SlotIndex: 0, AddAttack: 15,
+		}
+	}
+}
+
+// getEquippedWeaponCategory extracts the WeaponCategory from the player's currently equipped weapon
+func getEquippedWeaponCategory(p *domain.Player) string {
+	for _, item := range p.Inventory {
+		if item.IsEquipped && item.SlotType == "weapon" {
+			if item.WeaponCategory != "" {
+				return item.WeaponCategory
+			}
+			// Fallback: infer from class for legacy items that don't have WeaponCategory set
+			switch p.Class {
+			case "Beginner":
+				return "bow"
+			case "Mage":
+				return "staff"
+			case "Priest":
+				return "mace"
+			case "Thief":
+				return "dagger"
+			default:
+				return "sword"
+			}
+		}
+	}
+	// No weapon equipped — infer from class
+	switch p.Class {
+	case "Beginner":
+		return "bow"
+	case "Mage":
+		return "staff"
+	case "Priest":
+		return "mace"
+	case "Thief":
+		return "dagger"
+	default:
+		return "sword"
+	}
 }

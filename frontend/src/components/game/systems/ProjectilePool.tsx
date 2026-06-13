@@ -7,6 +7,126 @@ const MAX_BULLETS = 100;
 const BULLET_SPEED = 2.2; // Increased speed for better feel
 const BULLET_LIFETIME = 2.5;
 
+function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const merged = new THREE.BufferGeometry();
+  
+  let totalVertices = 0;
+  let totalIndices = 0;
+  for (const g of geometries) {
+    totalVertices += g.attributes.position.count;
+    if (g.index) totalIndices += g.index.count;
+  }
+  
+  const positions = new Float32Array(totalVertices * 3);
+  const normals = new Float32Array(totalVertices * 3);
+  const uvs = new Float32Array(totalVertices * 2);
+  const partIds = new Float32Array(totalVertices);
+  const indices: number[] = [];
+  
+  let vertexOffset = 0;
+  for (const g of geometries) {
+    const posAttr = g.attributes.position;
+    const normAttr = g.attributes.normal;
+    const uvAttr = g.attributes.uv;
+    const partAttr = g.attributes.partId;
+    
+    positions.set(posAttr.array, vertexOffset * 3);
+    if (normAttr) normals.set(normAttr.array, vertexOffset * 3);
+    if (uvAttr) uvs.set(uvAttr.array, vertexOffset * 2);
+    if (partAttr) partIds.set(partAttr.array, vertexOffset);
+    
+    if (g.index) {
+      const indexArray = g.index.array;
+      for (let i = 0; i < indexArray.length; i++) {
+        indices.push(indexArray[i] + vertexOffset);
+      }
+    } else {
+      for (let i = 0; i < posAttr.count; i++) {
+        indices.push(i + vertexOffset);
+      }
+    }
+    
+    vertexOffset += posAttr.count;
+  }
+  
+  merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  merged.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  merged.setAttribute('partId', new THREE.BufferAttribute(partIds, 1));
+  merged.setIndex(indices);
+  
+  return merged;
+}
+
+function createArrowGeometry(): THREE.BufferGeometry {
+  const shaftGeo = new THREE.CylinderGeometry(0.015, 0.015, 1.4, 4);
+  shaftGeo.rotateX(Math.PI / 2);
+  shaftGeo.translate(0, 0, -0.05);
+  const shaftPart = new Float32Array(shaftGeo.attributes.position.count).fill(0.0);
+  shaftGeo.setAttribute('partId', new THREE.BufferAttribute(shaftPart, 1));
+
+  const tipGeo = new THREE.ConeGeometry(0.045, 0.25, 4);
+  tipGeo.rotateX(Math.PI / 2);
+  tipGeo.translate(0, 0, 0.775);
+  const tipPart = new Float32Array(tipGeo.attributes.position.count).fill(1.0);
+  tipGeo.setAttribute('partId', new THREE.BufferAttribute(tipPart, 1));
+
+  const feather1 = new THREE.BoxGeometry(0.004, 0.08, 0.25);
+  feather1.translate(0, 0, -0.625);
+  const f1Part = new Float32Array(feather1.attributes.position.count).fill(2.0);
+  feather1.setAttribute('partId', new THREE.BufferAttribute(f1Part, 1));
+
+  const feather2 = new THREE.BoxGeometry(0.08, 0.004, 0.25);
+  feather2.translate(0, 0, -0.625);
+  const f2Part = new Float32Array(feather2.attributes.position.count).fill(2.0);
+  feather2.setAttribute('partId', new THREE.BufferAttribute(f2Part, 1));
+
+  return mergeGeometries([shaftGeo, tipGeo, feather1, feather2]);
+}
+
+const ArrowShaderMat = () => new THREE.ShaderMaterial({
+  vertexShader: `
+    attribute float partId;
+    varying float vPartId;
+    varying vec2 vUv;
+    varying vec3 vColor;
+    #ifndef USE_INSTANCING_COLOR
+      attribute vec3 instanceColor;
+    #endif
+    void main() {
+      vPartId = partId;
+      vUv = uv;
+      vColor = instanceColor;
+      gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    varying float vPartId;
+    varying vec2 vUv;
+    varying vec3 vColor;
+    void main() {
+      vec3 finalColor;
+      float alpha = 1.0;
+      if (vPartId < 0.5) {
+        // Shaft: wood brown
+        vec3 woodColor = vec3(0.40, 0.25, 0.12);
+        finalColor = mix(woodColor, vColor, 0.25);
+      } else if (vPartId < 1.5) {
+        // Tip: steel metal
+        vec3 metalColor = vec3(0.75, 0.78, 0.82);
+        finalColor = mix(metalColor, vColor * 2.0, 0.65);
+      } else {
+        // Feathers: off-white fletching
+        vec3 featherColor = vec3(0.92, 0.92, 0.95);
+        finalColor = mix(featherColor, vColor, 0.45);
+      }
+      gl_FragColor = vec4(finalColor, alpha);
+    }
+  `,
+  transparent: true,
+  side: THREE.DoubleSide,
+});
+
 export interface ProjectilePoolHandle {
   fire: (origin: THREE.Vector3, direction: THREE.Vector3) => void;
 }
@@ -14,6 +134,7 @@ export interface ProjectilePoolHandle {
 interface ProjectilePoolProps {
   damageQueue?: React.RefObject<any[]>;
   dealPlayerDamage?: (targetId: string, damage: number, isCrit?: boolean) => void;
+  playerClass?: string;
 }
 
 const ProjectilePool = forwardRef<ProjectilePoolHandle, ProjectilePoolProps>((props, ref) => {
@@ -125,15 +246,25 @@ const ProjectilePool = forwardRef<ProjectilePoolHandle, ProjectilePoolProps>((pr
     meshRef.current.instanceMatrix.needsUpdate = true;
   });
 
+  // Dynamically memoize geometry and material based on playerClass
+  const [geom, mat] = useMemo(() => {
+    if (props.playerClass === 'Beginner') {
+      return [createArrowGeometry(), ArrowShaderMat()];
+    }
+    const g = new THREE.BoxGeometry(0.02, 0.02, 0.8);
+    const m = new THREE.MeshStandardMaterial({
+      color: "#00f3ff",
+      emissive: "#00f3ff",
+      emissiveIntensity: 1.2,
+      toneMapped: true,
+    });
+    return [g, m];
+  }, [props.playerClass]);
+
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, MAX_BULLETS]} frustumCulled={false}>
-      <boxGeometry args={[0.08, 0.08, 0.6]} />
-      <meshStandardMaterial 
-        color="#00f3ff" 
-        emissive="#00f3ff" 
-        emissiveIntensity={15} 
-        toneMapped={false} 
-      />
+    <instancedMesh ref={meshRef} args={[null as any, null as any, MAX_BULLETS]} frustumCulled={false}>
+      <primitive object={geom} attach="geometry" />
+      <primitive object={mat} attach="material" />
     </instancedMesh>
   );
 });

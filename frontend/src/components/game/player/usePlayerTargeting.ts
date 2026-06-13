@@ -109,14 +109,15 @@ export function updatePlayerTargeting(
   lastNearestTargetId.current = nearestTarget ? nearestTarget.id : '';
 
   const executeAttack = (target: UnitRuntimeData | null) => {
-    _originVec.set(_charPos.x, _charPos.y + 1.35, _charPos.z);
+    const launchY = playerClass === "Beginner" ? 0.55 : 1.35;
+    _originVec.set(_charPos.x, _charPos.y + launchY, _charPos.z);
     camera.getWorldDirection(_camDir);
 
     if (target) {
       _camDir
         .set(
           aimTargetX[0] - _charPos.x,
-          aimTargetY[0] - (_charPos.y + 1.35),
+          aimTargetY[0] - (_charPos.y + launchY),
           aimTargetZ[0] - _charPos.z
         )
         .normalize();
@@ -245,10 +246,22 @@ export function updatePlayerTargeting(
       characterRef.current!.rotation.y += diff * 15 * delta;
     }
 
-    // Check if animation lock is over
+    // Check if animation lock is over — CHAIN next attack immediately
     if (now - attackTimer[0] > attackDuration) {
       if (isMovingInput || keys.jump || !isAttackInput) {
         charState[0] = 0; // Return to normal
+      } else if (hasTarget[0] && now - autoFireTimer[0] > attackDuration) {
+        // Chain next attack immediately without going through top-level input check
+        const dx = aimTargetX[0] - _charPos.x;
+        const dz = aimTargetZ[0] - _charPos.z;
+        const distSq = dx * dx + dz * dz;
+        if (distSq <= activeRangeSq) {
+          attackTimer[0] = now;
+          autoFireTimer[0] = now;
+          executeAttack(nearestTarget);
+        } else {
+          charState[0] = 2; // Out of range, start chasing
+        }
       }
     }
   } else if (charState[0] === 2) {
@@ -279,15 +292,19 @@ export function updatePlayerTargeting(
         while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
         characterRef.current!.rotation.y += angleDiff;
 
-        charState[0] = 1;
-        attackTimer[0] = now;
-        autoFireTimer[0] = now;
-        ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+        if (now - autoFireTimer[0] > attackDuration) {
+          charState[0] = 1;
+          attackTimer[0] = now;
+          autoFireTimer[0] = now;
+          ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
 
-        const toastOk2 = document.getElementById('facing-alignment-alert');
-        if (toastOk2) toastOk2.style.opacity = '0';
+          const toastOk2 = document.getElementById('facing-alignment-alert');
+          if (toastOk2) toastOk2.style.opacity = '0';
 
-        executeAttack(nearestTarget);
+          executeAttack(nearestTarget);
+        } else {
+          ecctrlRef.current?.setMovement({ joystick: { x: 0, y: 0 } });
+        }
       } else {
         // Keep Chasing (Spoof Joystick Input to run to target)
         _chaseDir.set(dx, 0, dz).normalize();

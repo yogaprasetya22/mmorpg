@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gorm.io/gorm"
 	"mmorpg-backend/internal/domain"
+
+	"gorm.io/gorm"
 )
 
 // SeedConfigurations populates the database with initial configurations from the constants file if empty
@@ -229,35 +230,35 @@ func SeedConfigurations(db *gorm.DB) error {
 	if settingsCount == 0 {
 		fmt.Println("🌱 Seeding default global simulation settings into database...")
 		defaultSettings := domain.SimulationSetting{
-			ID:                     "default",
-			GlobalHpMultiplier:     1.0,
+			ID:                      "default",
+			GlobalHpMultiplier:      1.0,
 			GlobalSpeedMultiplier:   2.0,  // FIX: Synced with frontend constants
 			GlobalDamageMultiplier:  1.8,  // FIX: Reduced from 2.4 to prevent 1-hit kills
-			GlobalAttackCooldown:   1200, // FIX: Snappier combat
-			CritChance:             0.55,
-			PerceptionRadiusSq:     3600,
-			SeparationRadius:       0.95,
-			SeparationStrength:     0.08,
-			EncirclementRadius:     0.75,
-			EncirclementJitter:     0.15,
-			RotationSmoothing:      0.12,
-			LaneSwaggerAmp:         0.25,
-			VictoryPauseMs:         650,
-			LanePenalty:            800,
-			BaseProximityBonus:     8000,
-			BaseDefenseThreshold:   8,
+			GlobalAttackCooldown:    1200, // FIX: Snappier combat
+			CritChance:              0.55,
+			PerceptionRadiusSq:      3600,
+			SeparationRadius:        0.95,
+			SeparationStrength:      0.08,
+			EncirclementRadius:      0.75,
+			EncirclementJitter:      0.15,
+			RotationSmoothing:       0.12,
+			LaneSwaggerAmp:          0.25,
+			VictoryPauseMs:          650,
+			LanePenalty:             800,
+			BaseProximityBonus:      8000,
+			BaseDefenseThreshold:    8,
 			BaseAttackResponseBonus: 30000,
-			BossPriorityBonus:      15000,
-			LowHpBonus:             4000,
-			LaneSpringFar:          0.7,
-			LaneSpringNear:         0.4,
-			LaneDriftThreshold:     2.0,
-			TimeScale:              1.0,
-			UnitScale:              0.5,
-			VfxIntensity:           1.0,
-			MaxUnits:               20,
-			PotatoMode:             false,
-			ActiveMapID:            "Starter Zone",
+			BossPriorityBonus:       15000,
+			LowHpBonus:              4000,
+			LaneSpringFar:           0.7,
+			LaneSpringNear:          0.4,
+			LaneDriftThreshold:      2.0,
+			TimeScale:               1.0,
+			UnitScale:               0.5,
+			VfxIntensity:            1.0,
+			MaxUnits:                20,
+			PotatoMode:              false,
+			ActiveMapID:             "Starter Zone",
 		}
 
 		if err := db.Create(&defaultSettings).Error; err != nil {
@@ -276,134 +277,9 @@ func SeedConfigurations(db *gorm.DB) error {
 		fmt.Println("🌱 Seeding default monster configs into database...")
 		defaultMonsters := []domain.MonsterConfig{
 			{
-				Type:       "slime",
-				Name:       "Jelly Slime",
-				Level:      1,
-				HP:         120,
-				MaxHP:      120,
-				Attack:     10,
-				Defense:    3,
-				Speed:      1.8,
-				AggroRange: 10,
-				GoldDrop:   6,
-				XPDrop:     10,
-			},
-			{
-				Type:       "default",
-				Name:       "Wild Boar",
-				Level:      2,
-				HP:         220,
-				MaxHP:      220,
-				Attack:     18,
-				Defense:    6,
-				Speed:      3.0,
-				AggroRange: 12,
-				GoldDrop:   12,
-				XPDrop:     18,
-			},
-			{
-				Type:       "goblin",
-				Name:       "Scavenger Goblin",
-				Level:      3,
-				HP:         280,
-				MaxHP:      280,
-				Attack:     25,
-				Defense:    8,
-				Speed:      3.4,
-				AggroRange: 13,
-				GoldDrop:   18,
-				XPDrop:     25,
-			},
-			{
-				Type:       "goblin_archer",
-				Name:       "Goblin Scout Archer",
-				Level:      5,
-				HP:         450,
-				MaxHP:      450,
-				Attack:     38,
-				Defense:    14,
-				Speed:      2.8,
-				AggroRange: 15,
-				GoldDrop:   30,
-				XPDrop:     40,
-			},
-			{
-				Type:       "orc",
-				Name:       "Orc Vanguard",
-				Level:      7,
-				HP:         700,
-				MaxHP:      700,
-				Attack:     55,
-				Defense:    22,
-				Speed:      2.8,
-				AggroRange: 14,
-				GoldDrop:   45,
-				XPDrop:     60,
-			},
-			{
-				Type:       "goblin_chief",
-				Name:       "Elite Goblin Commander",
-				Level:      10,
-				HP:         1200,
-				MaxHP:      1200,
-				Attack:     85,
-				Defense:    32,
-				Speed:      2.6,
-				AggroRange: 16,
-				GoldDrop:   95,
-				XPDrop:     120,
-			},
-			{
-				Type:       "orc_berserker",
-				Name:       "Raging Orc Berserker",
-				Level:      12,
-				HP:         1900,
-				MaxHP:      1900,
-				Attack:     145,
-				Defense:    55,
-				Speed:      2.5,
-				AggroRange: 15,
-				GoldDrop:   120,
-				XPDrop:     180,
-			},
-			{
-				Type:       "orc_shaman",
-				Name:       "Mystic Orc Shaman",
-				Level:      15,
-				HP:         1600,
-				MaxHP:      1600,
-				Attack:     195,
-				Defense:    45,
-				Speed:      2.1,
-				AggroRange: 18,
-				GoldDrop:   180,
-				XPDrop:     260,
-			},
-			{
-				Type:       "skeleton",
-				Name:       "Dark Skeleton Soldier",
-				Level:      20,
-				HP:         3000,
-				MaxHP:      3000,
-				Attack:     280,
-				Defense:    110,
-				Speed:      2.3,
-				AggroRange: 16,
-				GoldDrop:   350,
-				XPDrop:     480,
-			},
-			{
-				Type:       "boss",
-				Name:       "Wicked Zombie Queen",
-				Level:      50,
-				HP:         25000,
-				MaxHP:      25000,
-				Attack:     1250,
-				Defense:    420,
-				Speed:      2.4,
-				AggroRange: 25,
-				GoldDrop:   2500,
-				XPDrop:     5000,
+				Type: "dummy", Name: "Training Dummy", Level: 1, HP: 10000000, MaxHP: 10000000, Attack: 0, Defense: 0, Speed: 0.0, AggroRange: 0, GoldDrop: 100, XPDrop: 500,
+				DropTable: `[]`,
+				Skills:    `[]`,
 			},
 		}
 
@@ -508,13 +384,13 @@ func SeedAssets(db *gorm.DB) error {
 				return err
 			}
 			if !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".glb") {
-					// Get relative path from assets root
-					rel, err := filepath.Rel(assetsModelPath, path)
-					if err != nil {
-						return err
-					}
-					rel = filepath.ToSlash(rel)
-					webPath := "/assets/" + rel
+				// Get relative path from assets root
+				rel, err := filepath.Rel(assetsModelPath, path)
+				if err != nil {
+					return err
+				}
+				rel = filepath.ToSlash(rel)
+				webPath := "/assets/" + rel
 
 				// Format the name: remove extension and replace dashes/underscores with spaces
 				nameWithoutExt := strings.TrimSuffix(info.Name(), filepath.Ext(info.Name()))

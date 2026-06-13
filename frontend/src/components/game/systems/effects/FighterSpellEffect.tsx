@@ -37,7 +37,7 @@ const KineticFractureMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
             float dist = length(cUv);
             
             float pulse = sin(dist * 18.0 - uTime * 35.0) * 0.5 + 0.5;
-            vec3 glow = vColor * pulse * 12.0;
+            vec3 glow = vColor * pulse * 1.5;
             gl_FragColor = vec4(glow * tex.rgb, tex.a * smoothstep(0.5, 0.3, dist));
             if (gl_FragColor.a < 0.05) discard;
         }
@@ -72,7 +72,7 @@ const WindSlashMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
         varying vec3 vColor;
         void main() {
             vec4 tex = texture2D(tDiffuse, vUv);
-            vec3 windColor = vColor * 8.0;
+            vec3 windColor = vColor * 1.2;
             float rot = uTime * 15.0;
             float c = cos(rot); float s = sin(rot);
             vec2 rUv = mat2(c, -s, s, c) * (vUv - 0.5) + 0.5;
@@ -206,7 +206,7 @@ export function FighterSpellEffect({ fighterSpellsRef, simTimeRef }: { fighterSp
                     _obj.scale.setScalar(sc);
                     _obj.updateMatrix();
                     impactRef.current.setMatrixAt(in_count, _obj.matrix);
-                    _col.set(v.color).multiplyScalar(15.0 * ease);
+                    _col.set(v.color).multiplyScalar(2.2 * ease);
                     impactRef.current.setColorAt(in_count, _col);
                     in_count++;
                 }
@@ -219,7 +219,7 @@ export function FighterSpellEffect({ fighterSpellsRef, simTimeRef }: { fighterSp
                     _obj.scale.setScalar(sc);
                     _obj.updateMatrix();
                     burstRef.current.setMatrixAt(bu_count, _obj.matrix);
-                    _col.set(v.color).multiplyScalar(25.0 * (1.0 - bt));
+                    _col.set(v.color).multiplyScalar(3.0 * (1.0 - bt));
                     burstRef.current.setColorAt(bu_count, _col);
                     bu_count++;
                 }
@@ -234,7 +234,7 @@ export function FighterSpellEffect({ fighterSpellsRef, simTimeRef }: { fighterSp
                     _obj.scale.setScalar(sc); 
                     _obj.updateMatrix();
                     slashRef.current.setMatrixAt(sl_count, _obj.matrix);
-                    _col.set(v.color).multiplyScalar(rGlow * ease);
+                    _col.set(v.color).multiplyScalar(rGlow * 0.15 * ease);
                     slashRef.current.setColorAt(sl_count, _col);
                     sl_count++;
                 }
@@ -249,7 +249,7 @@ export function FighterSpellEffect({ fighterSpellsRef, simTimeRef }: { fighterSp
                     _obj.scale.setScalar(sc); 
                     _obj.updateMatrix();
                     slashRef.current.setMatrixAt(sl_count, _obj.matrix);
-                    _col.set(v.color).multiplyScalar(rGlow * ease);
+                    _col.set(v.color).multiplyScalar(rGlow * 0.15 * ease);
                     slashRef.current.setColorAt(sl_count, _col);
                     sl_count++;
                 }

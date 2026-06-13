@@ -4,6 +4,7 @@ import { useRef } from 'react';
 import * as THREE from 'three';
 import { characterStatus } from 'bvhecctrl';
 import { UnitRuntimeData } from '@/src/core/domain/unit.types';
+import { getProjectileSpawnConfig } from '../avatar/weaponConfigs';
 import {
   executeClassAttack,
   executeClassSkill,
@@ -70,13 +71,15 @@ export function usePlayerCombat({
   const assassinSpellPtr = useRef(0);
 
   const executeAttack = (target: UnitRuntimeData | null) => {
-    _originVec.set(_charPos.x, _charPos.y + 1.35, _charPos.z);
+    const spawnConfig = getProjectileSpawnConfig(playerClass);
+    const launchY = spawnConfig.launchY;
+    _originVec.set(_charPos.x, _charPos.y + launchY, _charPos.z);
     camera.getWorldDirection(_camDir);
     
     if (target) {
       _camDir.set(
         aimTargetX[0] - _charPos.x,
-        aimTargetY[0] - (_charPos.y + 1.35),
+        aimTargetY[0] - (_charPos.y + launchY),
         aimTargetZ[0] - _charPos.z,
       ).normalize();
     } else {
@@ -84,7 +87,7 @@ export function usePlayerCombat({
       _camDir.normalize();
     }
 
-    _fwdVec.copy(_camDir).multiplyScalar(0.7);
+    _fwdVec.copy(_camDir).multiplyScalar(spawnConfig.forwardOffset);
     _originVec.add(_fwdVec);
 
     if (typeof (window as any).comboIndex === 'undefined') {
@@ -186,14 +189,16 @@ export function usePlayerCombat({
       if (Math.abs(angleDiff) < 0.6) {
         (window as any).lastSkillTime = now;
 
-        _originVec.set(_charPos.x, _charPos.y + 1.35, _charPos.z);
+        const spawnConfig = getProjectileSpawnConfig(playerClass);
+        const launchY = spawnConfig.launchY;
+        _originVec.set(_charPos.x, _charPos.y + launchY, _charPos.z);
         camera.getWorldDirection(_camDir);
         _camDir.set(
           aimTargetX[0] - _charPos.x,
-          aimTargetY[0] - (_charPos.y + 1.35),
+          aimTargetY[0] - (_charPos.y + launchY),
           aimTargetZ[0] - _charPos.z,
         ).normalize();
-        _fwdVec.copy(_camDir).multiplyScalar(0.7);
+        _fwdVec.copy(_camDir).multiplyScalar(spawnConfig.forwardOffset);
         _originVec.add(_fwdVec);
 
         const ctx: CombatExecutionContext = {
@@ -468,14 +473,16 @@ export function usePlayerCombat({
             (window as any).pendingSkillExecution = false;
             (window as any).lastSkillTime = performance.now();
             
-            _originVec.set(_charPos.x, _charPos.y + 1.35, _charPos.z);
+            const spawnConfig = getProjectileSpawnConfig(playerClass);
+            const launchY = spawnConfig.launchY;
+            _originVec.set(_charPos.x, _charPos.y + launchY, _charPos.z);
             camera.getWorldDirection(_camDir);
             _camDir.set(
               aimTargetX[0] - _charPos.x,
-              aimTargetY[0] - (_charPos.y + 1.35),
+              aimTargetY[0] - (_charPos.y + launchY),
               aimTargetZ[0] - _charPos.z,
             ).normalize();
-            _fwdVec.copy(_camDir).multiplyScalar(0.7);
+            _fwdVec.copy(_camDir).multiplyScalar(spawnConfig.forwardOffset);
             _originVec.add(_fwdVec);
             
             const ctx: CombatExecutionContext = {

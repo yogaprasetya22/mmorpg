@@ -2,10 +2,11 @@
 
 import { useAvatarConfiguratorStore, PHOTO_POSES, UI_MODES, PhotoPose, AvatarAsset } from "@/src/state/useAvatarConfiguratorStore";
 import { API_BASE_URL } from "@/src/core/config";
-import { useState, useEffect } from "react";
-import { Gamepad2, Shuffle, Camera, Download, X, Save, ArrowLeft, Loader2 } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Gamepad2, Shuffle, Camera, Download, X, Save, ArrowLeft, Loader2, Move, RotateCw, Maximize, RefreshCw, Clipboard } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { getWeaponConfig } from "./weaponConfigs";
 
 interface AssetThumbnailProps {
   asset: AvatarAsset;
@@ -135,6 +136,7 @@ export const AvatarConfiguratorUI = ({ onClose }: AvatarConfiguratorUIProps) => 
     screenshot,
     download,
     fetchCategories,
+    assets,
   } = useAvatarConfiguratorStore();
 
   const categoryName = currentCategory?.name || "";
@@ -145,6 +147,177 @@ export const AvatarConfiguratorUI = ({ onClose }: AvatarConfiguratorUIProps) => 
   const [charGender, setCharGender] = useState("Male");
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+
+  // --- Weapon Tuning & Blender Keymap Logic ---
+  const selectedWeaponId = useAvatarConfiguratorStore((state) => state.selectedWeaponId);
+  const setSelectedWeaponId = useAvatarConfiguratorStore((state) => state.setSelectedWeaponId);
+  const weaponGizmoMode = useAvatarConfiguratorStore((state) => state.weaponGizmoMode);
+  const setWeaponGizmoMode = useAvatarConfiguratorStore((state) => state.setWeaponGizmoMode);
+  const weaponOffsetTrigger = useAvatarConfiguratorStore((state) => state.weaponOffsetTrigger);
+  const triggerWeaponUpdate = useAvatarConfiguratorStore((state) => state.triggerWeaponUpdate);
+
+  const equippedWeaponAsset = customization["Weapon"]?.asset;
+
+  // Resolve available target assets for edit
+  const availableEditAssets = useMemo(() => {
+    if (!equippedWeaponAsset) return [];
+    return [equippedWeaponAsset];
+  }, [equippedWeaponAsset]);
+
+  // Keep selectedWeaponId in sync on mount or asset changes
+  useEffect(() => {
+    if (equippedWeaponAsset) {
+      const isValid = availableEditAssets.some((a) => a.id === selectedWeaponId);
+      if (!isValid) {
+        setSelectedWeaponId(equippedWeaponAsset.id);
+      }
+    } else {
+      setSelectedWeaponId(null);
+    }
+  }, [equippedWeaponAsset, availableEditAssets, selectedWeaponId, setSelectedWeaponId]);
+
+  // Blender-style keydown listeners
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || activeEl.tagName === "SELECT")) {
+        return; // Skip when typing in inputs
+      }
+
+      switch (e.key.toLowerCase()) {
+        case "g":
+          setWeaponGizmoMode("translate");
+          break;
+        case "r":
+          setWeaponGizmoMode("rotate");
+          break;
+        case "s":
+          setWeaponGizmoMode("scale");
+          break;
+        case "q":
+        case "escape":
+          setWeaponGizmoMode("none");
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [setWeaponGizmoMode]);
+
+  // Local state for tracking real-time drag coordinates
+  const [coordinates, setCoordinates] = useState<Record<string, { position: number[], rotation: number[], scale: number[] }>>({});
+
+  useEffect(() => {
+    const handleOffsetChange = (e: any) => {
+      const { assetId, position, rotation, scale } = e.detail;
+      setCoordinates((prev) => ({
+        ...prev,
+        [assetId]: { position, rotation, scale }
+      }));
+    };
+    window.addEventListener("weapon-offset-change", handleOffsetChange);
+    return () => window.removeEventListener("weapon-offset-change", handleOffsetChange);
+  }, []);
+
+  // Get active offset configuration
+  const activeConfig = useMemo(() => {
+    if (!selectedWeaponId) return null;
+    return getWeaponConfig(selectedWeaponId);
+  }, [selectedWeaponId, weaponOffsetTrigger]);
+
+  const toggleHand = () => {
+    if (!selectedWeaponId || !activeConfig) return;
+    const newHand = activeConfig.hand === "left" ? "right" : "left";
+    try {
+      localStorage.setItem(
+        `weapon_offset_${selectedWeaponId}`,
+        JSON.stringify({
+          position: activeConfig.position,
+          rotation: activeConfig.rotation,
+          scale: activeConfig.scale,
+          hand: newHand,
+        })
+      );
+      triggerWeaponUpdate();
+    } catch (e) {
+      console.warn("Failed to toggle hand:", e);
+    }
+  };
+
+  const resetToDefault = () => {
+    if (!selectedWeaponId) return;
+    try {
+      localStorage.removeItem(`weapon_offset_${selectedWeaponId}`);
+      triggerWeaponUpdate();
+      console.log(`♻️ Reset "${selectedWeaponId}" to defaults.`);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const [copied, setCopied] = useState(false);
+  const printConfig = () => {
+    if (!selectedWeaponId || !activeConfig) return;
+    const currentCoords = coordinates[selectedWeaponId] || activeConfig;
+    
+    const codeBlock = `  "${selectedWeaponId}": {
+    position: [${currentCoords.position[0].toFixed(2)}, ${currentCoords.position[1].toFixed(2)}, ${currentCoords.position[2].toFixed(2)}],
+    rotation: [${currentCoords.rotation[0].toFixed(2)}, ${currentCoords.rotation[1].toFixed(2)}, ${currentCoords.rotation[2].toFixed(2)}],
+    scale: [${currentCoords.scale[0].toFixed(2)}, ${currentCoords.scale[1].toFixed(2)}, ${currentCoords.scale[2].toFixed(2)}],
+    hand: "${activeConfig.hand}",
+  },`;
+
+    console.log(`%c[Copy Config Block] %c\n${codeBlock}`, "color: #06b6d4; font-weight: bold", "color: #38bdf8");
+
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(codeBlock)
+        .then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        })
+        .catch(err => console.warn("Could not copy to clipboard:", err));
+    }
+  };
+
+  const handleClassChange = (selectedClass: string) => {
+    setCharClass(selectedClass);
+    let targetWeaponId = "";
+    if (selectedClass === "Warrior") {
+      targetWeaponId = "asset_weapon_sword";
+    } else if (selectedClass === "Beginner") {
+      targetWeaponId = "asset_weapon_bow";
+    }
+    
+    if (targetWeaponId) {
+      const weaponAsset = assets.find(a => a.id === targetWeaponId);
+      if (weaponAsset) {
+        changeAsset("Weapon", weaponAsset);
+      }
+    } else {
+      changeAsset("Weapon", null);
+    }
+  };
+
+  useEffect(() => {
+    if (assets.length > 0 && categories.length > 0) {
+      let targetWeaponId = "";
+      if (charClass === "Warrior") {
+        targetWeaponId = "asset_weapon_sword";
+      } else if (charClass === "Beginner") {
+        targetWeaponId = "asset_weapon_bow";
+      }
+      
+      if (targetWeaponId) {
+        const weaponAsset = assets.find(a => a.id === targetWeaponId);
+        if (weaponAsset) {
+          changeAsset("Weapon", weaponAsset);
+        }
+      } else {
+        changeAsset("Weapon", null);
+      }
+    }
+  }, [assets, categories, charClass, changeAsset]);
 
   useEffect(() => {
     if (categories.length === 0) {
@@ -318,7 +491,7 @@ export const AvatarConfiguratorUI = ({ onClose }: AvatarConfiguratorUIProps) => 
               <label className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Class</label>
               <select 
                 value={charClass} 
-                onChange={(e) => setCharClass(e.target.value)}
+                onChange={(e) => handleClassChange(e.target.value)}
                 className="w-full bg-zinc-900/60 border border-white/10 px-3 py-2 rounded-xl text-xs font-bold text-zinc-300 focus:outline-none focus:border-cyan-500/50"
               >
                 {["Warrior", "Mage", "Priest", "Thief", "Beginner"].map((c) => (
@@ -330,7 +503,7 @@ export const AvatarConfiguratorUI = ({ onClose }: AvatarConfiguratorUIProps) => 
 
           <div className="flex flex-col gap-1.5 flex-1">
             <span className="text-[10px] font-black tracking-widest text-cyan-400 uppercase leading-none mb-1">CATEGORIES</span>
-            {categories.map((category) => {
+            {categories.filter((cat) => cat.name !== "Weapon").map((category) => {
               const isActive = currentCategory?.id === category.id;
               return (
                 <button
@@ -511,7 +684,7 @@ export const AvatarConfiguratorUI = ({ onClose }: AvatarConfiguratorUIProps) => 
               <div className="flex items-center gap-2">
                 <select 
                   value={charClass} 
-                  onChange={(e) => setCharClass(e.target.value)}
+                  onChange={(e) => handleClassChange(e.target.value)}
                   className="flex-1 bg-zinc-900 border border-white/10 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-zinc-300"
                 >
                   {["Warrior", "Mage", "Priest", "Thief", "Beginner"].map((c) => (
@@ -564,7 +737,7 @@ export const AvatarConfiguratorUI = ({ onClose }: AvatarConfiguratorUIProps) => 
             <>
               {/* Category selector row */}
               <div className="flex flex-row flex-nowrap gap-1.5 overflow-x-auto noscrollbar py-0.5">
-                {categories.map((category) => {
+                {categories.filter((cat) => cat.name !== "Weapon").map((category) => {
                   const isActive = currentCategory?.id === category.id;
                   return (
                     <button
@@ -667,6 +840,138 @@ export const AvatarConfiguratorUI = ({ onClose }: AvatarConfiguratorUIProps) => 
         </div>
 
       </div>
+
+      {/* Render the Custom Weapon Tuning HUD Panel (outside 3D Canvas, perfectly positioned) */}
+      {equippedWeaponAsset && selectedWeaponId && activeConfig && (
+        <div 
+          className="absolute bottom-6 left-6 lg:left-[312px] z-20 flex flex-col gap-4 p-5 w-80 bg-zinc-950/85 backdrop-blur-md border border-white/10 rounded-2xl text-white font-sans shadow-2xl transition-all duration-300 pointer-events-auto"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
+            <span className="text-xs font-black tracking-widest text-cyan-400 uppercase leading-none font-sans">Weapon Tuning HUD</span>
+            <span className="text-[7.5px] bg-cyan-500/25 text-cyan-300 px-2 py-0.5 rounded-full font-mono uppercase font-black tracking-wider">
+              Blender Keymap
+            </span>
+          </div>
+
+          {/* Target tabs (if multiple weapons like Bow + Arrow) */}
+          {availableEditAssets.length > 1 && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest pl-0.5">Editing Target</span>
+              <div className="grid grid-cols-2 gap-1.5 bg-white/5 p-1 rounded-xl">
+                {availableEditAssets.map((asset) => {
+                  const isEditing = selectedWeaponId === asset.id;
+                  return (
+                    <button
+                      key={asset.id}
+                      onClick={() => setSelectedWeaponId(asset.id)}
+                      className={`py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all duration-300 ${
+                        isEditing
+                          ? "bg-cyan-600 text-white shadow"
+                          : "text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      {asset.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Gizmo Tools Selector */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest pl-0.5">Transform Tool</span>
+            <div className="grid grid-cols-4 gap-1 bg-white/5 p-1 rounded-xl">
+              {[
+                { mode: "translate", label: "Move", key: "G", icon: <Move className="w-3.5 h-3.5" /> },
+                { mode: "rotate", label: "Rot", key: "R", icon: <RotateCw className="w-3.5 h-3.5" /> },
+                { mode: "scale", label: "Scale", key: "S", icon: <Maximize className="w-3.5 h-3.5" /> },
+                { mode: "none", label: "Hide", key: "Q", icon: <X className="w-3.5 h-3.5" /> },
+              ].map((tool) => {
+                const isActive = weaponGizmoMode === tool.mode;
+                return (
+                  <button
+                    key={tool.mode}
+                    onClick={() => setWeaponGizmoMode(tool.mode as any)}
+                    className={`flex flex-col items-center gap-1 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all duration-300 border border-transparent ${
+                      isActive
+                        ? "bg-cyan-600/25 border-cyan-500/40 text-cyan-300 shadow"
+                        : "text-zinc-400 hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    {tool.icon}
+                    <span>{tool.label} <span className="opacity-60">[{tool.key}]</span></span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Hand Toggle */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest pl-0.5">Attachment Hand</span>
+            <button
+              onClick={toggleHand}
+              className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 rounded-xl text-[10px] font-bold uppercase tracking-wider text-zinc-200 transition-all flex items-center justify-center gap-1.5"
+            >
+              <span>Hand: </span>
+              <span className="text-cyan-400 font-extrabold uppercase">{activeConfig.hand}</span>
+              <span>✋</span>
+            </button>
+          </div>
+
+          {/* Realtime Coordinates Readout */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest pl-0.5">Coordinates Vector</span>
+            <div className="bg-black/35 border border-white/5 rounded-xl p-3 font-mono text-[9px] flex flex-col gap-1.5 text-zinc-400 leading-tight">
+              <div className="flex justify-between">
+                <span className="text-rose-450 font-bold uppercase tracking-wider">Position:</span>
+                <span>[{ (coordinates[selectedWeaponId]?.position || activeConfig.position).map(n => n.toFixed(2)).join(", ") }]</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-emerald-450 font-bold uppercase tracking-wider">Rotation:</span>
+                <span>[{ (coordinates[selectedWeaponId]?.rotation || activeConfig.rotation).map(n => n.toFixed(2)).join(", ") }]</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sky-450 font-bold uppercase tracking-wider">Scale:</span>
+                <span>[{ (coordinates[selectedWeaponId]?.scale || activeConfig.scale).map(n => n.toFixed(2)).join(", ") }]</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Actions Panel */}
+          <div className="grid grid-cols-2 gap-2 border-t border-white/5 pt-3">
+            <button
+              onClick={resetToDefault}
+              className="py-2 bg-rose-950/20 hover:bg-rose-900/40 border border-rose-900/30 hover:border-rose-950/40 text-rose-450 rounded-xl text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 select-none active:scale-[0.98]"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-rose-500" /> Reset Default
+            </button>
+            <button
+              onClick={printConfig}
+              className={`py-2 rounded-xl text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 select-none active:scale-[0.98] ${
+                copied
+                  ? "bg-emerald-600 text-white shadow shadow-emerald-600/30 font-extrabold"
+                  : "bg-cyan-600 hover:bg-cyan-500 text-white shadow shadow-cyan-600/25"
+              }`}
+            >
+              {copied ? (
+                <>✓ Copied!</>
+              ) : (
+                <>
+                  <Clipboard className="w-3.5 h-3.5" /> Copy Config
+                </>
+              )}
+            </button>
+          </div>
+          
+          {/* Hotkeys Prompt */}
+          <div className="text-[7.5px] text-zinc-500 text-center uppercase tracking-wide leading-relaxed font-semibold">
+            Hotkeys: [G] Move • [R] Rot • [S] Scale • [Q] Hide
+          </div>
+        </div>
+      )}
 
     </main>
   );

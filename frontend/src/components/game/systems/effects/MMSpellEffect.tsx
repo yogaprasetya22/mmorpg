@@ -35,8 +35,8 @@ const SuperBulletMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
         void main() {
             vec4 tex = texture2D(tDiffuse, vUv);
             float pulse = 0.8 + 0.2 * sin(uTime * 30.0 + vUv.x * 5.0);
-            vec3 core = mix(vColor * 15.0, vec3(20.0), (1.0 - vUv.x) * pulse);
-            gl_FragColor = vec4(core * tex.rgb * 5.0, tex.a);
+            vec3 core = mix(vColor * 1.5, vec3(2.0), (1.0 - vUv.x) * pulse);
+            gl_FragColor = vec4(core * tex.rgb * 1.5, tex.a);
             if (gl_FragColor.a < 0.05) discard;
         }
     `,
@@ -70,7 +70,7 @@ const SniperCoreMat = () => new THREE.ShaderMaterial({
             float pulse  = 0.92 + 0.08 * sin(uTime * 40.0);
 
             // Warna: tim color di badan, putih-panas di ujung
-            vec3 col = mix(vColor * 4.0, vec3(10.0, 10.0, 8.0), nose);
+            vec3 col = mix(vColor * 1.2, vec3(2.0, 2.0, 1.6), nose);
             float alpha = body * pulse;
 
             gl_FragColor = vec4(col, alpha);
@@ -105,7 +105,7 @@ const SniperTrailMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
             float fade = vUv.x * vUv.x;
             // Shimmer bergerak ke arah ekor
             float shimmer = 0.7 + 0.3 * sin(vUv.x * 12.0 - uTime * 60.0);
-            vec3 col = vColor * (2.5 + fade * 2.0) * shimmer;
+            vec3 col = vColor * (1.2 + fade * 0.8) * shimmer;
             gl_FragColor = vec4(col * tex.rgb, tex.a * fade * 0.9);
             if (gl_FragColor.a < 0.01) discard;
         }
@@ -134,8 +134,8 @@ const EagleEyeMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
         void main() {
             vec4 tex = texture2D(tDiffuse, vUv);
             float pulse = 0.5 + 0.5 * sin(uTime * 10.0);
-            vec3 glow = vColor * (1.0 + pulse * 2.0);
-            gl_FragColor = vec4(glow * tex.rgb * 5.0, tex.a * (0.8 + 0.2 * pulse));
+            vec3 glow = vColor * (1.0 + pulse * 0.5);
+            gl_FragColor = vec4(glow * tex.rgb * 1.2, tex.a * (0.8 + 0.2 * pulse));
             if (gl_FragColor.a < 0.05) discard;
         }
     `,
@@ -165,12 +165,132 @@ const ImpactMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
         varying vec2 vUv; varying vec3 vColor;
         void main() {
             vec4 tex = texture2D(tDiffuse, vUv);
-            gl_FragColor = vec4(vColor * tex.rgb * 8.0, tex.a);
+            gl_FragColor = vec4(vColor * tex.rgb * 1.5, tex.a);
             if (gl_FragColor.a < 0.05) discard;
         }
     `,
     transparent: true, depthWrite: false,
     blending: THREE.AdditiveBlending,
+});
+
+function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
+    const merged = new THREE.BufferGeometry();
+    
+    let totalVertices = 0;
+    let totalIndices = 0;
+    for (const g of geometries) {
+        totalVertices += g.attributes.position.count;
+        if (g.index) totalIndices += g.index.count;
+    }
+    
+    const positions = new Float32Array(totalVertices * 3);
+    const normals = new Float32Array(totalVertices * 3);
+    const uvs = new Float32Array(totalVertices * 2);
+    const partIds = new Float32Array(totalVertices);
+    const indices: number[] = [];
+    
+    let vertexOffset = 0;
+    for (const g of geometries) {
+        const posAttr = g.attributes.position;
+        const normAttr = g.attributes.normal;
+        const uvAttr = g.attributes.uv;
+        const partAttr = g.attributes.partId;
+        
+        positions.set(posAttr.array, vertexOffset * 3);
+        if (normAttr) normals.set(normAttr.array, vertexOffset * 3);
+        if (uvAttr) uvs.set(uvAttr.array, vertexOffset * 2);
+        if (partAttr) partIds.set(partAttr.array, vertexOffset);
+        
+        if (g.index) {
+            const indexArray = g.index.array;
+            for (let i = 0; i < indexArray.length; i++) {
+                indices.push(indexArray[i] + vertexOffset);
+            }
+        } else {
+            for (let i = 0; i < posAttr.count; i++) {
+                indices.push(i + vertexOffset);
+            }
+        }
+        
+        vertexOffset += posAttr.count;
+    }
+    
+    merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    merged.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    merged.setAttribute('partId', new THREE.BufferAttribute(partIds, 1));
+    merged.setIndex(indices);
+    
+    return merged;
+}
+
+function createArrowGeometry(): THREE.BufferGeometry {
+    const shaftGeo = new THREE.CylinderGeometry(0.015, 0.015, 1.4, 4);
+    shaftGeo.rotateX(Math.PI / 2);
+    shaftGeo.translate(0, 0, -0.05);
+    const shaftPart = new Float32Array(shaftGeo.attributes.position.count).fill(0.0);
+    shaftGeo.setAttribute('partId', new THREE.BufferAttribute(shaftPart, 1));
+
+    const tipGeo = new THREE.ConeGeometry(0.045, 0.25, 4);
+    tipGeo.rotateX(Math.PI / 2);
+    tipGeo.translate(0, 0, 0.775);
+    const tipPart = new Float32Array(tipGeo.attributes.position.count).fill(1.0);
+    tipGeo.setAttribute('partId', new THREE.BufferAttribute(tipPart, 1));
+
+    const feather1 = new THREE.BoxGeometry(0.004, 0.08, 0.25);
+    feather1.translate(0, 0, -0.625);
+    const f1Part = new Float32Array(feather1.attributes.position.count).fill(2.0);
+    feather1.setAttribute('partId', new THREE.BufferAttribute(f1Part, 1));
+
+    const feather2 = new THREE.BoxGeometry(0.08, 0.004, 0.25);
+    feather2.translate(0, 0, -0.625);
+    const f2Part = new Float32Array(feather2.attributes.position.count).fill(2.0);
+    feather2.setAttribute('partId', new THREE.BufferAttribute(f2Part, 1));
+
+    return mergeGeometries([shaftGeo, tipGeo, feather1, feather2]);
+}
+
+const ArrowShaderMat = () => new THREE.ShaderMaterial({
+    vertexShader: `
+        attribute float partId;
+        varying float vPartId;
+        varying vec2 vUv;
+        varying vec3 vColor;
+        #ifndef USE_INSTANCING_COLOR
+            attribute vec3 instanceColor;
+        #endif
+        void main() {
+            vPartId = partId;
+            vUv = uv;
+            vColor = instanceColor;
+            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        varying float vPartId;
+        varying vec2 vUv;
+        varying vec3 vColor;
+        void main() {
+            vec3 finalColor;
+            float alpha = 1.0;
+            if (vPartId < 0.5) {
+                // Shaft: wood brown
+                vec3 woodColor = vec3(0.40, 0.25, 0.12);
+                finalColor = mix(woodColor, vColor, 0.25);
+            } else if (vPartId < 1.5) {
+                // Tip: steel metal
+                vec3 metalColor = vec3(0.75, 0.78, 0.82);
+                finalColor = mix(metalColor, vColor * 2.0, 0.65);
+            } else {
+                // Feathers: off-white fletching
+                vec3 featherColor = vec3(0.92, 0.92, 0.95);
+                finalColor = mix(featherColor, vColor, 0.45);
+            }
+            gl_FragColor = vec4(finalColor, alpha);
+        }
+    `,
+    transparent: true,
+    side: THREE.DoubleSide,
 });
 
 // ─── Shared temp objects (zero allocation per frame) ─────────────────────────
@@ -186,8 +306,11 @@ interface VFXEntry {
     x: number; y: number; z: number;
     startTime: number; color: string;
     active: boolean; scale: number;
-    type: 'flash' | 'hit' | 'dust';
+    type: 'flash' | 'hit' | 'dust' | 'simpleHit' | 'debris';
     rot: number;
+    vx?: number;
+    vy?: number;
+    vz?: number;
 }
 
 export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
@@ -195,14 +318,17 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
     const meshRef = useRef<THREE.InstancedMesh>(null!); // basic bullets
     const SniperCoreRef = useRef<THREE.InstancedMesh>(null!); // sniper bullet core
     const SniperTrailRef = useRef<THREE.InstancedMesh>(null!); // sniper trail streak
+    const ArrowMeshRef = useRef<THREE.InstancedMesh>(null!); // archer physical arrows
     const FlashRef = useRef<THREE.InstancedMesh>(null!);
     const HitRef = useRef<THREE.InstancedMesh>(null!);
     const DustRef = useRef<THREE.InstancedMesh>(null!);
     const AuraRef = useRef<THREE.InstancedMesh>(null!);
+    const SimpleHitRef = useRef<THREE.InstancedMesh>(null!);
+    const DebrisRef = useRef<THREE.InstancedMesh>(null!);
 
     const ringIdx = useRef(0);
     const vfxPool = useRef<VFXEntry[]>(
-        Array.from({ length: 400 }, () => ({ x: 0, y: 0, z: 0, startTime: 0, color: '#fff', active: false, scale: 1, type: 'flash', rot: 0 }))
+        Array.from({ length: 600 }, () => ({ x: 0, y: 0, z: 0, startTime: 0, color: '#fff', active: false, scale: 1, type: 'flash', rot: 0 }))
     );
     const activeVfx = useRef<number[]>([]);
     const _col = useMemo(() => new THREE.Color(), []);
@@ -221,15 +347,26 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
     // Trail: plane yang akan di-scale panjang
     const trailGeo = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
     const quadGeo = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
+    const arrowGeo = useMemo(() => createArrowGeometry(), []);
 
     // ── Material ──────────────────────────────────────────────────────────────
     const bulletMat = useMemo(() => SuperBulletMat(VFX_TEXTURES.bullet), []);
     const coreMat = useMemo(() => SniperCoreMat(), []);
     const trailMat = useMemo(() => SniperTrailMat(VFX_TEXTURES.bullet), []);
+    const arrowMat = useMemo(() => ArrowShaderMat(), []);
     const flashMat = useMemo(() => ImpactMat(VFX_TEXTURES.muzzles[0]), []);
     const hitMat = useMemo(() => ImpactMat(VFX_TEXTURES.sparks[0]), []);
     const dustMat = useMemo(() => ImpactMat(VFX_TEXTURES.smoke), []);
     const auraMat = useMemo(() => EagleEyeMat(VFX_TEXTURES.star), []);
+    const simpleHitMat = useMemo(() => ImpactMat(VFX_TEXTURES.flare), []);
+    
+    // Low-poly debris: 4-sided cone is a pyramid, basic material with transparent to allow fade-out
+    const debrisGeo = useMemo(() => new THREE.ConeGeometry(0.06, 0.13, 4), []);
+    const debrisMat = useMemo(() => new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        toneMapped: false,
+    }), []);
 
     useFrame((state, delta) => {
         const mesh = meshRef.current;
@@ -240,7 +377,10 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
         const aMesh = AuraRef.current;
         const coreMesh = SniperCoreRef.current;
         const trailMesh = SniperTrailRef.current;
-        if (!mesh || !spells || !fMesh || !hMesh || !dMesh || !aMesh || !coreMesh || !trailMesh || !unitRegistry.current) return;
+        const arrowMesh = ArrowMeshRef.current;
+        const shMesh = SimpleHitRef.current;
+        const debMesh = DebrisRef.current;
+        if (!mesh || !spells || !fMesh || !hMesh || !dMesh || !aMesh || !coreMesh || !trailMesh || !arrowMesh || !shMesh || !debMesh || !unitRegistry.current) return;
 
         const simNow = simTimeRef.current || 0;
         const time = state.clock.elapsedTime;
@@ -265,7 +405,7 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
                     _obj.scale.setScalar(1.5);
                     _obj.updateMatrix();
                     aMesh.setMatrixAt(an, _obj.matrix);
-                    _col.set('#ffd700').multiplyScalar(5.0);
+                    _col.set('#ffd700').multiplyScalar(1.2);
                     aMesh.setColorAt(an, _col);
                     an++;
                 }
@@ -292,7 +432,7 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
             _obj.scale.setScalar(1.5);
             _obj.updateMatrix();
             aMesh.setMatrixAt(an, _obj.matrix);
-            _col.set('#ffd700').multiplyScalar(5.0);
+            _col.set('#ffd700').multiplyScalar(1.2);
             aMesh.setColorAt(an, _col);
             an++;
         }
@@ -309,6 +449,7 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
         let n = 0; // basic bullet count
         let sn = 0; // sniper core count
         let tn = 0; // sniper trail count
+        let arn = 0; // archer arrow count
 
         for (let i = 0; i < spells.length; i++) {
             const s = spells[i];
@@ -357,78 +498,112 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
             _obj.lookAt(s.toX, s.toY, s.toZ);
 
             const isFinisher = (s as any).isFinisher;
+            const pClass = (s as any).playerClass || 'Marksman';
 
             if (isSniper) {
-                // ── Inti peluru sniper: silinder tipis memanjang ──────────────
-                // Regular: (0.18, 0.18, 2.5)  |  Finisher: (0.28, 0.28, 4.0)
-                const bW = isFinisher ? 0.28 * rScale : 0.18 * rScale;
-                const bL = isFinisher ? 4.5 * rScale : 2.8 * rScale;
-                _obj.scale.set(bW, bW, bL);
-                _obj.updateMatrix();
-                coreMesh.setMatrixAt(sn, _obj.matrix);
-                _col.set(s.color || '#ffffff').multiplyScalar(isFinisher ? 12.0 : 8.0);
-                coreMesh.setColorAt(sn, _col);
-                sn++;
-
-                // ── Jejak/lesatan di belakang peluru ──────────────────────────
-                if (tn < 200) {
-                    // Panjang trail tumbuh seiring progress
-                    // Trail growth factor
-                    const growth = Math.min(1, (simNow - s.startTime) / 200);
-                    const trailLen = (isFinisher ? 14.0 : 7.0) * rScale * (0.3 + growth * 0.7);
-                    const trailW = isFinisher ? 0.18 * rScale : 0.1 * rScale;
-
-                    // Arah terbang: dari _from ke _to
-                    _dir.subVectors(_to, _from).normalize();
-                    // Posisi trail: tengah antara ujung ekor dan posisi peluru
-                    _trPos.copy(_obj.position).addScaledVector(_dir, -trailLen * 0.5);
-
-                    _trObj.position.copy(_trPos);
-                    _trObj.lookAt(_to); // sama arahnya
-                    _trObj.scale.set(trailW, trailW, trailLen);
-                    _trObj.updateMatrix();
-                    trailMesh.setMatrixAt(tn, _trObj.matrix);
-                    _col.set(s.color || '#88ccff').multiplyScalar(isFinisher ? 6.0 : 3.5);
-                    trailMesh.setColorAt(tn, _col);
-                    tn++;
+                if (pClass === 'Beginner') {
+                    // RO Double Strafe: golden thin arrow!
+                    _obj.scale.set(rScale, rScale, rScale);
+                    _obj.updateMatrix();
+                    arrowMesh.setMatrixAt(arn, _obj.matrix);
+                    _col.set(s.color || '#ffd700').multiplyScalar(2.0);
+                    arrowMesh.setColorAt(arn, _col);
+                    arn++;
+                } else {
+                    // ── Inti peluru sniper: silinder tipis memanjang ──────────────
+                    // Regular: (0.03, 0.03, 2.0)  |  Finisher: (0.05, 0.05, 3.0)
+                    const bW = isFinisher ? 0.05 * rScale : 0.03 * rScale;
+                    const bL = isFinisher ? 3.0 * rScale : 2.0 * rScale;
+                    _obj.scale.set(bW, bW, bL);
+                    _obj.updateMatrix();
+                    coreMesh.setMatrixAt(sn, _obj.matrix);
+                    _col.set(s.color || '#ffffff').multiplyScalar(isFinisher ? 2.5 : 1.5);
+                    coreMesh.setColorAt(sn, _col);
+                    sn++;
                 }
             } else {
                 // Peluru basic attack biasa - custom per class!
-                const pClass = (s as any).playerClass || 'Marksman';
                 if (pClass === 'Mage') {
                     // Frost/Fire Orb: diamond magic shard spinning rapidly
                     _obj.scale.set(1.1 * rScale, 1.1 * rScale, 2.0 * rScale);
                     _obj.rotateZ(time * 9.0);
+                    _obj.updateMatrix();
+                    mesh.setMatrixAt(n, _obj.matrix);
+                    const glowMultiplier = rGlow * 1.6;
+                    _col.set(s.color || '#fff').multiplyScalar(glowMultiplier * 0.15);
+                    mesh.setColorAt(n, _col);
+                    n++;
                 } else if (pClass === 'Warrior') {
                     // Sword slash: wide flat crescent sword-wave slicing horizontal
                     _obj.scale.set(3.4 * rScale, 0.08 * rScale, 0.6 * rScale);
                     _obj.rotateY(Math.PI / 2); // perpendicular to motion
+                    _obj.updateMatrix();
+                    mesh.setMatrixAt(n, _obj.matrix);
+                    _col.set(s.color || '#fff').multiplyScalar(rGlow * 0.15);
+                    mesh.setColorAt(n, _col);
+                    n++;
                 } else if (pClass === 'Priest') {
                     // Holy orb: spinning golden cross prism
                     _obj.scale.set(1.4 * rScale, 1.4 * rScale, 1.4 * rScale);
                     _obj.rotateY(time * 3.0);
                     _obj.rotateZ(time * 2.0);
+                    _obj.updateMatrix();
+                    mesh.setMatrixAt(n, _obj.matrix);
+                    const glowMultiplier = rGlow * 1.6;
+                    _col.set(s.color || '#fff').multiplyScalar(glowMultiplier * 0.15);
+                    mesh.setColorAt(n, _col);
+                    n++;
                 } else if (pClass === 'Thief') {
                     // Shadow dagger/shuriken: thin blade spinning extremely fast
                     _obj.scale.set(0.18 * rScale, 0.8 * rScale, 1.8 * rScale);
                     _obj.rotateZ(time * 26.0);
+                    _obj.updateMatrix();
+                    mesh.setMatrixAt(n, _obj.matrix);
+                    _col.set(s.color || '#fff').multiplyScalar(rGlow * 0.15);
+                    mesh.setColorAt(n, _col);
+                    n++;
                 } else if (pClass === 'Beginner') {
-                    // Simple green rookie magic bullet
-                    _obj.scale.set(0.8 * rScale, 0.8 * rScale, 3.2 * rScale);
-                    _obj.rotateZ(time * 3.0);
+                    // Physical arrow for Rookie Archer basic attacks
+                    _obj.scale.set(rScale, rScale, rScale);
+                    _obj.updateMatrix();
+                    arrowMesh.setMatrixAt(arn, _obj.matrix);
+                    _col.set(s.color || '#10b981');
+                    arrowMesh.setColorAt(arn, _col);
+                    arn++;
                 } else {
                     // Default Marksman bullet
-                    _obj.scale.set(0.6 * rScale, 0.6 * rScale, 7.0 * rScale);
+                    _obj.scale.set(0.02 * rScale, 0.02 * rScale, 1.2 * rScale);
+                    _obj.updateMatrix();
+                    mesh.setMatrixAt(n, _obj.matrix);
+                    _col.set(s.color || '#fff').multiplyScalar(rGlow * 0.15);
+                    mesh.setColorAt(n, _col);
+                    n++;
                 }
+            }
 
-                _obj.updateMatrix();
-                mesh.setMatrixAt(n, _obj.matrix);
+            // ── Jejak/lesatan di belakang peluru (Wind Trail) ──────────────────
+            const needsTrail = isSniper || (pClass === 'Beginner');
+            if (needsTrail && tn < 200) {
+                // Panjang trail tumbuh seiring progress
+                const growth = Math.min(1, (simNow - s.startTime) / 200);
+                const trailLen = (isFinisher ? 6.0 : 3.5) * rScale * (0.3 + growth * 0.7);
+                const trailW = (isSniper ? (isFinisher ? 0.03 : 0.015) : 0.012) * rScale;
 
-                // Apply higher brightness glow for class magic
-                const glowMultiplier = (pClass === 'Mage' || pClass === 'Priest') ? rGlow * 1.6 : rGlow;
-                _col.set(s.color || '#fff').multiplyScalar(glowMultiplier);
-                mesh.setColorAt(n, _col);
-                n++;
+                // Arah terbang: dari _from ke _to
+                _dir.subVectors(_to, _from).normalize();
+                // Posisi trail: tengah antara ujung ekor dan posisi peluru
+                _trPos.copy(_obj.position).addScaledVector(_dir, -trailLen * 0.5);
+
+                _trObj.position.copy(_trPos);
+                _trObj.lookAt(_to); // sama arahnya
+                _trObj.scale.set(trailW, trailW, trailLen);
+                _trObj.updateMatrix();
+                trailMesh.setMatrixAt(tn, _trObj.matrix);
+                
+                const trailColor = isSniper ? (s.color || '#ffd700') : '#ffffff';
+                _col.set(trailColor).multiplyScalar(isFinisher ? 1.5 : 1.1);
+                trailMesh.setColorAt(tn, _col);
+                tn++;
             }
 
             // ── Impact explosion saat sampai di target ────────────────────────
@@ -438,7 +613,8 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
                 // Only spawn MM blast sparks if the character class is Marksman/Beginner or default!
                 // Premium classes (Warrior, Mage, Priest, Thief) have their own highly optimized spell effects rendering their impact!
                 if (pClass === 'Marksman' || pClass === 'Beginner') {
-                    const burstCount = isFinisher ? 5 : 2;
+                    const isBeginner = pClass === 'Beginner';
+                    const burstCount = isBeginner ? 1 : (isFinisher ? 5 : 2);
                     for (let k = 0; k < burstCount; k++) {
                         const vIdx = ringIdx.current;
                         const v = vfxPool.current[vIdx];
@@ -446,17 +622,46 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
                         ringIdx.current = (ringIdx.current + 1) % vfxPool.current.length;
 
                         // Add slight offset for dynamic burst scattering
-                        v.x = s.toX + (Math.random() - 0.5) * 0.4;
-                        v.y = s.toY + (Math.random() - 0.5) * 0.4;
-                        v.z = s.toZ + (Math.random() - 0.5) * 0.4;
+                        v.x = s.toX + (Math.random() - 0.5) * 0.3;
+                        v.y = s.toY + (Math.random() - 0.5) * 0.3;
+                        v.z = s.toZ + (Math.random() - 0.5) * 0.3;
                         v.startTime = performance.now();
-                        v.color = s.color || '#fff';
+                        v.color = isBeginner ? '#ffbb33' : (s.color || '#fff');
                         v.active = true;
-                        v.scale = (isFinisher ? 6.5 : 3.2) * (0.8 + Math.random() * 0.4);
-                        v.type = 'hit';
+                        v.scale = isBeginner ? 0.5 : ((isFinisher ? 6.5 : 3.2) * (0.8 + Math.random() * 0.4));
+                        v.type = isBeginner ? 'simpleHit' : 'hit';
                         v.rot = Math.random() * Math.PI * 2;
-                        (v as any).rScale = rScale * (isFinisher ? 1.8 : 0.9);
-                        (v as any).rGlow = rGlow * (isFinisher ? 2.2 : 1.1);
+                        (v as any).rScale = rScale * (isBeginner ? 0.7 : (isFinisher ? 1.8 : 0.9));
+                        (v as any).rGlow = rGlow * (isBeginner ? 1.2 : (isFinisher ? 2.2 : 1.1));
+                    }
+
+                    if (isBeginner) {
+                        const debrisCount = 4 + Math.floor(Math.random() * 3);
+                        for (let k = 0; k < debrisCount; k++) {
+                            const vIdx = ringIdx.current;
+                            const v = vfxPool.current[vIdx];
+                            if (!v.active) activeVfx.current.push(vIdx);
+                            ringIdx.current = (ringIdx.current + 1) % vfxPool.current.length;
+
+                            v.x = s.toX;
+                            v.y = s.toY;
+                            v.z = s.toZ;
+                            v.startTime = performance.now();
+                            v.color = Math.random() > 0.45 ? '#ffffff' : '#ffd744';
+                            v.active = true;
+                            v.scale = 0.5 + Math.random() * 0.8;
+                            v.type = 'debris';
+                            v.rot = Math.random() * Math.PI * 2;
+
+                            const theta = Math.random() * Math.PI * 2;
+                            const phi = Math.acos((Math.random() * 2) - 1);
+                            const speed = 2.5 + Math.random() * 4.0;
+                            v.vx = Math.sin(phi) * Math.cos(theta) * speed;
+                            v.vy = Math.cos(phi) * speed + 1.5;
+                            v.vz = Math.sin(phi) * Math.sin(theta) * speed;
+                            (v as any).rScale = rScale;
+                            (v as any).rGlow = rGlow;
+                        }
                     }
                 }
 
@@ -482,6 +687,10 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
         trailMesh.instanceMatrix.needsUpdate = true;
         if (trailMesh.instanceColor) trailMesh.instanceColor.needsUpdate = true;
 
+        arrowMesh.count = arn;
+        arrowMesh.instanceMatrix.needsUpdate = true;
+        if (arrowMesh.instanceColor) arrowMesh.instanceColor.needsUpdate = true;
+
         // Update time uniforms
         (mesh.material as THREE.ShaderMaterial).uniforms.uTime.value = time;
         coreMat.uniforms.uTime.value = time;
@@ -489,7 +698,7 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
         auraMat.uniforms.uTime.value = time;
 
         // ── VFX pool: flash, dust, hit ────────────────────────────────────────
-        let fn = 0; let hn = 0; let dn = 0;
+        let fn = 0; let hn = 0; let dn = 0; let shn = 0; let dn2 = 0;
         const currentVfx = activeVfx.current;
         let writeVfx = 0; // FIX: swap-remove instead of splice O(n²)
         for (let j = 0; j < currentVfx.length; j++) {
@@ -509,7 +718,7 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
                     _obj.scale.setScalar(v.scale * (1.1 - ft) * 2.5 * vrScale);
                     _obj.updateMatrix();
                     fMesh.setMatrixAt(fn, _obj.matrix);
-                    _col.set(v.color).multiplyScalar(vrGlow * (1.0 - ft));
+                    _col.set(v.color).multiplyScalar(vrGlow * 0.15 * (1.0 - ft));
                     fMesh.setColorAt(fn, _col);
                     fn++;
                 }
@@ -522,9 +731,42 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
                     _obj.scale.setScalar(v.scale * (0.5 + dt * 2.0) * (1.0 - dt));
                     _obj.updateMatrix();
                     dMesh.setMatrixAt(dn, _obj.matrix);
-                    _col.set('#fff').multiplyScalar(2.0 * (1.0 - dt));
+                    _col.set('#fff').multiplyScalar(1.0 * (1.0 - dt));
                     dMesh.setColorAt(dn, _col);
                     dn++;
+                }
+            } else if (v.type === 'simpleHit') {
+                const ht = age / 200; // 200ms duration
+                if (ht >= 1) { v.active = false; continue; }
+                if (shn < 200) {
+                    _obj.position.set(v.x, v.y, v.z);
+                    _obj.rotation.set(0, 0, v.rot);
+                    const sc = v.scale * (1.0 + ht * 1.5) * (1.0 - ht) * vrScale;
+                    _obj.scale.setScalar(sc);
+                    _obj.updateMatrix();
+                    shMesh.setMatrixAt(shn, _obj.matrix);
+                    _col.set('#fff').lerp(_lerp.set(v.color), ht).multiplyScalar(vrGlow * 1.6 * (1.0 - ht));
+                    shMesh.setColorAt(shn, _col);
+                    shn++;
+                }
+            } else if (v.type === 'debris') {
+                const dt = age / 450;
+                if (dt >= 1) { v.active = false; continue; }
+                if (dn2 < 300) {
+                    const sec = age / 1000;
+                    const px = v.x + (v.vx || 0) * sec;
+                    const py = v.y + (v.vy || 0) * sec - 9.8 * sec * sec;
+                    const pz = v.z + (v.vz || 0) * sec;
+
+                    _obj.position.set(px, Math.max(0.1, py), pz);
+                    _obj.rotation.set(v.rot + age * 0.01, v.rot + age * 0.007, 0);
+                    const sc = v.scale * (1.0 - dt) * 0.8 * vrScale;
+                    _obj.scale.setScalar(sc);
+                    _obj.updateMatrix();
+                    debMesh.setMatrixAt(dn2, _obj.matrix);
+                    _col.set(v.color).multiplyScalar(vrGlow * 2.2 * (1.0 - dt));
+                    debMesh.setColorAt(dn2, _col);
+                    dn2++;
                 }
             } else { // 'hit'
                 const ht = age / 280;
@@ -536,7 +778,7 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
                     _obj.scale.setScalar(sc);
                     _obj.updateMatrix();
                     hMesh.setMatrixAt(hn, _obj.matrix);
-                    _col.set('#fff').lerp(_lerp.set(v.color), ht).multiplyScalar(vrGlow * 1.5 * (1.0 - ht));
+                    _col.set('#fff').lerp(_lerp.set(v.color), ht).multiplyScalar(vrGlow * 0.15 * (1.0 - ht));
                     hMesh.setColorAt(hn, _col);
                     hn++;
                 }
@@ -547,6 +789,8 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
         fMesh.count = fn; fMesh.instanceMatrix.needsUpdate = true; if (fMesh.instanceColor) fMesh.instanceColor.needsUpdate = true;
         hMesh.count = hn; hMesh.instanceMatrix.needsUpdate = true; if (hMesh.instanceColor) hMesh.instanceColor.needsUpdate = true;
         dMesh.count = dn; dMesh.instanceMatrix.needsUpdate = true; if (dMesh.instanceColor) dMesh.instanceColor.needsUpdate = true;
+        shMesh.count = shn; shMesh.instanceMatrix.needsUpdate = true; if (shMesh.instanceColor) shMesh.instanceColor.needsUpdate = true;
+        debMesh.count = dn2; debMesh.instanceMatrix.needsUpdate = true; if (debMesh.instanceColor) debMesh.instanceColor.needsUpdate = true;
     });
 
     return (
@@ -557,9 +801,13 @@ export function MMSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Props) {
             <instancedMesh ref={SniperCoreRef} args={[coreGeo, coreMat, 200]} frustumCulled={false} />
             {/* Sniper bullet trail — lesatan energi */}
             <instancedMesh ref={SniperTrailRef} args={[trailGeo, trailMat, 200]} frustumCulled={false} />
+            {/* Physical Archer arrows */}
+            <instancedMesh ref={ArrowMeshRef} args={[arrowGeo, arrowMat, MAX_BULLETS]} frustumCulled={false} />
             {/* VFX */}
             <instancedMesh ref={FlashRef} args={[quadGeo, flashMat, 100]} frustumCulled={false} visible={false} />
             <instancedMesh ref={HitRef} args={[quadGeo, hitMat, 200]} frustumCulled={false} />
+            <instancedMesh ref={SimpleHitRef} args={[quadGeo, simpleHitMat, 200]} frustumCulled={false} />
+            <instancedMesh ref={DebrisRef} args={[debrisGeo, debrisMat, 300]} frustumCulled={false} />
             <instancedMesh ref={DustRef} args={[quadGeo, dustMat, 100]} frustumCulled={false} />
             <instancedMesh ref={AuraRef} args={[quadGeo, auraMat, 50]} frustumCulled={false} />
         </group>

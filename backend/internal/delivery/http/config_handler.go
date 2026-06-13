@@ -280,6 +280,10 @@ type MapSettingsInput struct {
 	AmbientIntensity  *float64 `json:"ambientIntensity"`
 	SunAngle          float64  `json:"sunAngle"`
 	FogDensity        float64  `json:"fogDensity"`
+	SkyboxIntensity   *float64 `json:"skyboxIntensity"`
+	BloomThreshold    *float64 `json:"bloomThreshold"`
+	BloomStrength     *float64 `json:"bloomStrength"`
+	BloomRadius       *float64 `json:"bloomRadius"`
 }
 
 type MapItemInput struct {
@@ -346,6 +350,10 @@ func (h *ConfigHandler) SaveMap(c *gin.Context) {
 			AmbientIntensity:  input.Settings.AmbientIntensity,
 			SunAngle:          input.Settings.SunAngle,
 			FogDensity:        input.Settings.FogDensity,
+			SkyboxIntensity:   input.Settings.SkyboxIntensity,
+			BloomThreshold:    input.Settings.BloomThreshold,
+			BloomStrength:     input.Settings.BloomStrength,
+			BloomRadius:       input.Settings.BloomRadius,
 			PaintData:         input.PaintData,
 			SculptData:        input.SculptData,
 		}
@@ -465,6 +473,10 @@ func (h *ConfigHandler) LoadMap(c *gin.Context) {
 				"ambientIntensity":  mapConfig.AmbientIntensity,
 				"sunAngle":          mapConfig.SunAngle,
 				"fogDensity":        mapConfig.FogDensity,
+				"skyboxIntensity":   mapConfig.SkyboxIntensity,
+				"bloomThreshold":    mapConfig.BloomThreshold,
+				"bloomStrength":     mapConfig.BloomStrength,
+				"bloomRadius":       mapConfig.BloomRadius,
 			},
 			"paintData":  mapConfig.PaintData,
 			"sculptData": mapConfig.SculptData,

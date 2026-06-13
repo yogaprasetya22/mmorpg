@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useRef } from 'react';
+import { useMemo, useEffect, useRef, Suspense, Component, ReactNode } from 'react';
 import { useGLTF } from '@react-three/drei';
 import { useEditorStore } from '@/src/state/useEditorStore';
 import { InstancedStaticCollider } from 'bvhecctrl';
@@ -13,6 +13,14 @@ import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-
 (THREE.BufferGeometry.prototype as any).computeBoundsTree = computeBoundsTree;
 (THREE.BufferGeometry.prototype as any).disposeBoundsTree = disposeBoundsTree;
 (THREE.Mesh.prototype as any).raycast = acceleratedRaycast;
+
+// Simple error boundary to silently swallow GLB loading failures
+class MapItemErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(err: Error) { console.warn('[ModularMap] GLB load error:', err.message); }
+  render() { return this.state.hasError ? null : this.props.children; }
+}
 
 export const ModularMap = ({ debug }: { debug?: boolean }) => {
   const { items, selectedMapId, loadFromDatabase, isEditorOpen } = useEditorStore();
@@ -40,12 +48,16 @@ export const ModularMap = ({ debug }: { debug?: boolean }) => {
   return (
     <>
       {Object.entries(groupedItems).map(([path, instances]) => (
-        <InstancedModelGroup 
-          key={`group-${path}-${instances.length}`} 
-          path={path} 
-          instances={instances} 
-          debug={debug} 
-        />
+        <MapItemErrorBoundary key={`err-${path}`}>
+          <Suspense fallback={null}>
+            <InstancedModelGroup 
+              key={`group-${path}-${instances.length}`} 
+              path={path} 
+              instances={instances} 
+              debug={debug} 
+            />
+          </Suspense>
+        </MapItemErrorBoundary>
       ))}
     </>
   );

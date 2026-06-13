@@ -46,6 +46,7 @@ export function useArenaGameState() {
   const [charHairColor, setCharHairColor] = useState("#5A3E2D");
 
   const [showStatsModal, setShowStatsModal] = useState(false);
+  const [showInventoryModal, setShowInventoryModal] = useState(false);
   const [showEnemyEditorModal, setShowEnemyEditorModal] = useState(false);
   const [monsterConfigs, setMonsterConfigs] = useState<any[]>([]);
   const [editingMonster, setEditingMonster] = useState<any>(null);
@@ -60,7 +61,7 @@ export function useArenaGameState() {
   const questPanelRef = useRef<QuestPanelRef>(null);
 
   const lastPlayerHp = useRef(0);
-  const playerStatsRef = useRef({ hp: -1, maxHp: -1, gold: -1, level: -1, aspd: 150, xp: -1 });
+  const playerStatsRef = useRef({ hp: -1, maxHp: -1, mp: -1, maxMp: -1, gold: -1, level: -1, aspd: 150, xp: -1 });
 
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -243,7 +244,18 @@ export function useArenaGameState() {
   }, [token]);
 
   // ── WEBSOCKET: Connect to Go server ──
-  const { sendPlayerState, sendPlayerAttack, sendDistributeStat, sendChatMessage } = useWebSocketGame(
+  const { 
+    sendPlayerState, 
+    sendPlayerAttack, 
+    sendPlayerSkill, 
+    sendDistributeStat, 
+    sendChatMessage,
+    sendEquipItem,
+    sendUseItem,
+    sendBuyItem,
+    sendSellItem,
+    sendRefineItem
+  } = useWebSocketGame(
     WS_BASE_URL,
     token,
     selectedCharacter?.id || "",
@@ -268,16 +280,25 @@ export function useArenaGameState() {
         const rawASPD = (me as any).aspd ?? 150;
         
         playerStatsRef.current.aspd = rawASPD;
+        const rawMP = (me as any).mp ?? 50;
+        const rawMaxMP = (me as any).maxMp ?? 50;
 
-        if (playerStatsRef.current.hp !== rawHP || playerStatsRef.current.maxHp !== rawMaxHP) {
+        if (playerStatsRef.current.hp !== rawHP || 
+            playerStatsRef.current.maxHp !== rawMaxHP ||
+            playerStatsRef.current.mp !== rawMP ||
+            playerStatsRef.current.maxMp !== rawMaxMP) {
+          
           if (lastPlayerHp.current > 0 && rawHP < lastPlayerHp.current) {
             (window as any).triggerCameraShake?.(0.35);
           }
           lastPlayerHp.current = rawHP;
           playerStatsRef.current.hp = rawHP;
           playerStatsRef.current.maxHp = rawMaxHP;
+          playerStatsRef.current.mp = rawMP;
+          playerStatsRef.current.maxMp = rawMaxMP;
           (playerStatsRef.current as any).max_hp = rawMaxHP;
-          statsHudRef.current?.updateHpMp(rawHP, rawMaxHP);
+          
+          statsHudRef.current?.updateHpMp(rawHP, rawMaxHP, rawMP, rawMaxMP);
           deathOverlayRef.current?.setDead(rawHP <= 0);
         }
 
@@ -596,7 +617,7 @@ export function useArenaGameState() {
     localStorage.removeItem("game_active_char_id");
     setSelectedCharacter(null);
     statsHudRef.current?.updateStats({ hp: 100, max_hp: 100, mp: 50, max_mp: 50, level: 1, gold: 0, username: "Hero" });
-    playerStatsRef.current = { hp: -1, maxHp: -1, gold: -1, level: -1, aspd: 150, xp: -1 };
+    playerStatsRef.current = { hp: -1, maxHp: -1, mp: -1, maxMp: -1, gold: -1, level: -1, aspd: 150, xp: -1 };
     questPanelRef.current?.updateQuests([]);
     setIsCreatingChar(false);
     setSuccessMsg("");
@@ -681,7 +702,7 @@ export function useArenaGameState() {
     setToken("");
     setSelectedCharacter(null);
     statsHudRef.current?.updateStats({ hp: 100, max_hp: 100, mp: 50, max_mp: 50, level: 1, gold: 0, username: "Hero" });
-    playerStatsRef.current = { hp: -1, maxHp: -1, gold: -1, level: -1, aspd: 150, xp: -1 };
+    playerStatsRef.current = { hp: -1, maxHp: -1, mp: -1, maxMp: -1, gold: -1, level: -1, aspd: 150, xp: -1 };
     questPanelRef.current?.updateQuests([]);
     setCharacters([]);
     setIsCreatingChar(false);
@@ -717,6 +738,7 @@ export function useArenaGameState() {
     charGender, setCharGender, charHairStyle, setCharHairStyle,
     charHairColor, setCharHairColor,
     showStatsModal, setShowStatsModal,
+    showInventoryModal, setShowInventoryModal,
     showEnemyEditorModal, setShowEnemyEditorModal,
     monsterConfigs, editingMonster, setEditingMonster,
     isAutoMode, setIsAutoMode, showMiniActions, setShowMiniActions,
@@ -735,6 +757,7 @@ export function useArenaGameState() {
     localPlayerModelPath,
 
     // WebSocket
-    sendPlayerState, sendPlayerAttack, sendDistributeStat, sendChatMessage,
+    sendPlayerState, sendPlayerAttack, sendPlayerSkill, sendDistributeStat, sendChatMessage,
+    sendEquipItem, sendUseItem, sendBuyItem, sendSellItem, sendRefineItem,
   };
 }

@@ -18,10 +18,13 @@ interface CacheEntry {
   t: number;                 // performance.now() timestamp
 }
 
-const cache = new Map<string, CacheEntry>();
+const cache = new Map<number, CacheEntry>();
 
-// Pre-allocated key buffer — avoids string concat allocation per call
-let _keyBuf = '';
+// Spatial hash function — zero string allocation, O(1) with minimal collisions
+// Uses large prime multiplication + XOR to spread coordinates across int32 space
+function hashKey(gx: number, gz: number): number {
+  return (gx * 73856093) ^ (gz * 19349663);
+}
 
 export function getCachedTerrainHeight(
   x: number,
@@ -30,10 +33,10 @@ export function getCachedTerrainHeight(
 ): number {
   const gx = Math.round(x / GRID);
   const gz = Math.round(z / GRID);
-  _keyBuf = `${gx},${gz}`;
+  const key = hashKey(gx, gz);
 
   const now = performance.now();
-  const entry = cache.get(_keyBuf);
+  const entry = cache.get(key);
   if (entry && now - entry.t < TTL_MS) {
     return entry.h;
   }
@@ -50,7 +53,7 @@ export function getCachedTerrainHeight(
     }
   }
 
-  cache.set(_keyBuf, { h, t: now });
+  cache.set(key, { h, t: now });
   return h;
 }
 

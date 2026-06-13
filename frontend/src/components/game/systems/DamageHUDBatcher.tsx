@@ -42,11 +42,9 @@ const MAX_INST   = MAX_EVENTS * STRIDE;
 const ATLAS_COLS = 6;
 const ATLAS_ROWS = 4; // Expanded to support alphabetic characters cleanly
 
-// Perspective stack tuning
-const DEPTH_SCALE    = 0.82;  // each depth level shrinks to this fraction
-const DEPTH_Y        = 0.55;  // world units upward per depth level
+// Perspective stack tuning — optimized for max ASPD (9 hits/sec)
 const CLUSTER_RADIUS = 1.8;   // world units: hits within this radius join one cluster
-const LIFE_DURATION  = 1.6;   // seconds
+const LIFE_DURATION  = 0.9;   // fast turnover — numbers disappear quickly making room for new hits
 
 // ─── ZERO-ALLOC HELPERS ──────────────────────────────────────────────────────
 const _dummy = new THREE.Object3D();
@@ -227,6 +225,9 @@ interface Evt {
     digitColor: THREE.Color;
     clusterX:   number; clusterY: number; clusterZ: number;
     depthIdx:   number;
+    vx:         number;
+    vy:         number;
+    grav:       number;
 }
 
 function makeEvt(): Evt {
@@ -238,6 +239,9 @@ function makeEvt(): Evt {
         digitColor: new THREE.Color('#ffffff'),
         clusterX:0, clusterY:0, clusterZ:0,
         depthIdx:0,
+        vx: 0,
+        vy: 0,
+        grav: 15.0,
     };
 }
 
@@ -475,7 +479,6 @@ export function DamageHUDBatcher({
 
                 e.alive      = true;
                 e.startTime  = now;
-                e.duration   = LIFE_DURATION;
                 e.spawnX     = px; e.spawnY = py + yOff; e.spawnZ = pz;
                 e.clusterX   = clusterX; e.clusterY = clusterY; e.clusterZ = clusterZ;
                 e.depthIdx   = 0;
@@ -484,6 +487,39 @@ export function DamageHUDBatcher({
                 e.isHeal     = isHeal;
                 e.isDebuff   = isDebuff;
                 e.numChars   = totalChars;
+
+                // Alternate spray direction based on current event index
+                const direction = (evtPtr.current % 2 === 0) ? 1 : -1;
+
+                if (isCrit) {
+                    // Critical hit: snappy vertical jump, small horizontal spray, stays longer, screen shake
+                    e.vx = direction * (0.8 + Math.random() * 0.8) + (Math.random() - 0.5) * 0.3;
+                    e.vy = 8.0 + Math.random() * 2.0;
+                    e.grav = 18.0;
+                    e.duration = 0.65;
+
+                    if (typeof (window as any).cameraShake === 'function') {
+                        (window as any).cameraShake(0.18);
+                    }
+                } else if (isMiss) {
+                    // Miss: slides slowly to the side
+                    e.vx = direction * (1.2 + Math.random() * 0.8);
+                    e.vy = 4.0 + Math.random() * 1.0;
+                    e.grav = 14.0;
+                    e.duration = 0.6;
+                } else if (isHeal) {
+                    // Heal: floats straight up, gentle drift
+                    e.vx = (Math.random() - 0.5) * 1.5;
+                    e.vy = 5.0 + Math.random() * 1.5;
+                    e.grav = 10.0;
+                    e.duration = 0.7;
+                } else {
+                    // Normal hit / Magic: spray wide in a fountain
+                    e.vx = direction * (2.2 + Math.random() * 1.5) + (Math.random() - 0.5) * 0.5;
+                    e.vy = 6.0 + Math.random() * 2.5;
+                    e.grav = 22.0;
+                    e.duration = 0.5;
+                }
 
                 (e as any)._totalW = totalW;
                 (e as any)._GAP    = GAP;
@@ -532,70 +568,75 @@ export function DamageHUDBatcher({
             anyActive = true;
 
             const di   = e.depthIdx;
-            const dsc  = Math.pow(DEPTH_SCALE, di); 
-            const dyUp = di * DEPTH_Y;               
 
-            // Front pop-in animation (only depthIdx=0, only first ~0.12s)
-            let popExtra = 0.0;
-            if (di === 0 && t < 0.12) {
-                popExtra = t < 0.06
-                    ? (1.0 - t / 0.06) * (e.isCrit ? 0.4 : 0.2)
-                    : 0.0;
+                        // Snappy pop-in and slow-shrink scale curve animation
+            let scaleMultiplier = 1.0;
+            if (e.isCrit) {
+                if (tn < 0.15) {
+                    const ratio = tn / 0.15;
+                    const ease = 1.0 - Math.pow(1.0 - ratio, 3); // cubic ease out
+                    scaleMultiplier = THREE.MathUtils.lerp(1.45, 1.0, ease);
+                } else {
+                    scaleMultiplier = THREE.MathUtils.lerp(1.0, 0.6, (tn - 0.15) / 0.85);
+                }
+            } else {
+                if (tn < 0.12) {
+                    const ratio = tn / 0.12;
+                    const ease = 1.0 - Math.pow(1.0 - ratio, 3); // cubic ease out
+                    scaleMultiplier = THREE.MathUtils.lerp(1.25, 1.0, ease);
+                } else {
+                    scaleMultiplier = THREE.MathUtils.lerp(1.0, 0.7, (tn - 0.12) / 0.88);
+                }
             }
 
-            // Ideal retro size: 2.4 for Crit (scales dynamically up to 4.5 based on player's C.RATE), 1.25 for Normal (punchy crits!)
+            // Size: balanced for Crit, 1.0 for Normal (punchy, readable!)
             const stats = playerStatsRef?.current || {};
             const cRate = stats.c_rate || 0;
             const baseScale = e.isCrit 
-                ? Math.min(4.5, 2.4 + (cRate / 100.0) * 1.2) 
-                : 1.25;
-            const totalScale = (baseScale + popExtra) * dsc;
+                ? Math.min(2.8, 1.7 + (cRate / 100.0) * 0.7) 
+                : 1.00;
+            const totalScale = baseScale * scaleMultiplier;
 
-            const yFloat = di === 0 ? t * 0.4 : 0.0;
+            // Physical trajectory offsets
+            const offsetX = e.vx * t;
+            const offsetY = e.vy * t - 0.5 * e.grav * t * t;
 
-            // World position
+            // World position (slight depth offset to avoid overlapping Z-fighting)
             const wx = e.spawnX;
-            const wy = e.spawnY + dyUp + yFloat;
-            const wz = e.spawnZ;
+            const wy = e.spawnY;
+            const wz = e.spawnZ - di * 0.05;
 
-            const depthFade  = Math.pow(0.80, di);
-            const lifeFade   = tn < 0.06 && di === 0 ? tn / 0.06
-                             : tn > 0.65 ? 1.0 - (tn - 0.65) / 0.35
-                             : 1.0;
-            const opacity    = lifeFade * depthFade;
+            // Opacity: stays full opacity until 60% life, then fades out in the last 40%
+            const opacity = tn > 0.6 ? (1.0 - tn) / 0.4 : 1.0;
 
             if (opacity < 0.02) continue;
 
-            // Crit jitter on newest digit only (first ~0.15s)
+            // Crit jitter on newest digit only (first ~0.10s) — punchier shake
             let jx = 0.0, jy = 0.0;
-            if (e.isCrit && di === 0 && t < 0.15) {
-                const j = (1.0 - t / 0.15) * 0.12;
+            if (e.isCrit && di === 0 && t < 0.10) {
+                const j = (1.0 - t / 0.10) * 0.25;
                 jx = (Math.random() - 0.5) * j;
                 jy = (Math.random() - 0.5) * j;
             }
 
             // ── Animate Star Background (1-to-1 matching this event) ──────────
             if (e.isCrit && sm) {
-                let starSc;
-                if      (t < 0.04) starSc = t/0.04 * 3.2;
-                else if (t < 0.10) starSc = 3.2 - (t-0.04)/0.06 * 0.8;
-                else if (t < 0.22) starSc = 2.4 + (t-0.10)/0.12 * 0.3;
-                else               starSc = 2.7 - (tn-0.22/0.75)/(0.78) * 0.6;
-                starSc = Math.max(starSc, 1.4);
+                let starMult = 1.6;
+                if (tn < 0.1) {
+                    starMult = THREE.MathUtils.lerp(2.2, 1.6, tn / 0.1);
+                }
+                const sc = totalScale * starMult;
 
                 _v3.set(wx, wy, wz)
-                   .addScaledVector(_right, jx)
-                   .addScaledVector(_up,    jy);
-
-                const sc = totalScale * starSc;
-                const starOp = opacity * (tn > 0.65 ? (1.0 - (tn - 0.65) / 0.35) : 1.0);
+                   .addScaledVector(_right, offsetX + jx)
+                   .addScaledVector(_up,    offsetY + jy);
 
                 _dummy.position.copy(_v3);
                 _dummy.quaternion.copy(camQ); // Keep static rotation (comic/RO style, no saw-blade spinning)
                 _dummy.scale.setScalar(sc);
                 _dummy.updateMatrix();
                 sm.setMatrixAt(ei, _dummy.matrix);
-                sOpacity[ei] = starOp;
+                sOpacity[ei] = opacity;
             } else if (sm) {
                 sm.setMatrixAt(ei, _hide);
                 sOpacity[ei] = 0;
@@ -619,8 +660,8 @@ export function DamageHUDBatcher({
                 const lx   = (c * GAP) - totalW * 0.5 + GAP * 0.5;
 
                 _v3.set(wx, wy, wz)
-                   .addScaledVector(_right, lx * totalScale + jx)
-                   .addScaledVector(_up,    jy);
+                   .addScaledVector(_right, lx * totalScale + offsetX + jx)
+                   .addScaledVector(_up,    offsetY + jy);
 
                 _dummy.position.copy(_v3);
                 _dummy.quaternion.copy(camQ);

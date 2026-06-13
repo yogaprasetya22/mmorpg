@@ -157,6 +157,17 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
             }
             setSculptTrigger(prev => prev + 1);
         };
+        img.onerror = (e) => {
+            console.warn("[WhimsicalDiorama] Failed to load sculptData image, falling back to flat terrain:", e);
+            ctx.fillStyle = '#808080';
+            ctx.fillRect(0, 0, 256, 256);
+            if (typeof window !== 'undefined') {
+                const heights = new Float32Array(256 * 256);
+                heights.fill(0);
+                (window as any).sculptHeights = heights;
+            }
+            setSculptTrigger(prev => prev + 1);
+        };
         img.src = sculptData;
     }, [sculptCanvas, sculptData]);
 
@@ -203,6 +214,13 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
             scene.environment = null;
         }
 
+        // Tone down skybox background intensity to prevent blinding glare
+        const currentSky = useEditorStore.getState().sky || 'sunset';
+        const skyboxIntensity = useEditorStore.getState().skyboxIntensity;
+        const resolvedSkyboxIntensity = skyboxIntensity !== null ? skyboxIntensity : (currentSky === 'night' ? 0.02 : 0.15);
+        scene.backgroundIntensity = resolvedSkyboxIntensity;
+        scene.environmentIntensity = resolvedSkyboxIntensity;
+
         const time = state.clock.elapsedTime;
         PainterlyWaterMaterial.uniforms.time.value = time;
         PainterlyTerrainMaterial.uniforms.time.value = time;
@@ -210,7 +228,7 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
         PainterlyGrassMaterial.uniforms.time.value = time;
     });
 
-    const { lightIntensity, ambientIntensity, sunAngle, fogDensity } = useEditorStore();
+    const { lightIntensity, ambientIntensity, sunAngle, fogDensity, skyboxIntensity } = useEditorStore();
     const sky = useEditorStore(s => s.sky) || 'sunset';
 
     const skyFile = useMemo(() => {
@@ -232,6 +250,7 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
                     <Environment 
                         files={skyFile} 
                         background 
+                        backgroundIntensity={skyboxIntensity !== null ? skyboxIntensity : (sky === 'night' ? 0.02 : 0.15)}
                         blur={0}
                     />
                 </EnvironmentErrorBoundary>
@@ -242,9 +261,9 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
                 </>
             )}
 
-            <ambientLight intensity={(ambientIntensity ?? (sky === 'night' ? 0.8 : 3.5)) + 1.0} color={sky === 'night' ? "#a5b4fc" : "#ffffff"} />
+            <ambientLight intensity={ambientIntensity ?? (sky === 'night' ? 0.15 : 0.55)} color={sky === 'night' ? "#a5b4fc" : "#ffffff"} />
             <hemisphereLight
-                intensity={sky === 'night' ? 0.4 : 1.5}
+                intensity={sky === 'night' ? 0.1 : 0.4}
                 color={sky === 'night' ? "#a5b4fc" : "#ffffff"}
                 groundColor="#556677"
             />
@@ -252,7 +271,7 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
              <directionalLight
                 ref={lightRef}
                 position={sunPosition}
-                intensity={lightIntensity ?? (sky === 'night' ? 2.0 : 10.0)}
+                intensity={lightIntensity ?? (sky === 'night' ? 0.15 : 0.8)}
 
                 color={sky === 'night' ? "#a5b4fc" : "#ffffff"}
                 castShadow
@@ -271,7 +290,7 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
             {sky === 'night' && (
                 <pointLight 
                     position={[0, 1.5, 0]} 
-                    intensity={(ambientIntensity !== null ? 0.8 * (ambientIntensity / 3.5) : 0.8)} 
+                    intensity={(ambientIntensity !== null ? 0.8 * (ambientIntensity / 1.0) : 0.8)} 
                     color="#ff5500" 
                     distance={40} 
                 />

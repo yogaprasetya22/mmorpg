@@ -56,10 +56,21 @@ export const BaseAttackCalculator = (
 
   // PROC RATE: 12% chance to trigger an automated Double Attack / Lightning Proc!
   const isProc = Math.random() < 0.12;
-  if (isProc && ctx.dealPlayerDamage) {
+  if (isProc) {
     const procDamage = finalDamage * 0.85;
     // Spawn double attack proc immediately too!
     ctx.spawnVFX([target.position[0], target.position[1] + 1.2, target.position[2]], "shockwave", "#00e5ff");
-    ctx.dealPlayerDamage?.(target.id, procDamage, false, true, "#00e5ff");
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent("combat_damage_event", {
+        detail: {
+          targetId: target.id,
+          targetType: target.type || "monster",
+          damage: procDamage,
+          isCrit: false,
+          isMiss: false,
+          isMagic: false
+        }
+      }));
+    }
   }
 };

@@ -11,6 +11,7 @@ import { getCachedTerrainHeight } from "@/src/core/utils/terrainCache";
 import { useStore } from "@/src/state/useStore";
 import { useEditorStore } from "@/src/state/useEditorStore";
 import { AvatarModel, AvatarHandle } from "./avatar/AvatarModel";
+import { classToWeaponCategory, classWeaponMap } from "./avatar/weaponConfigs";
 import { HpBarPlanes } from "./shared/HpBarPlanes";
 
 const getDefaultCustomization = (_gender: string, playerClass: string, hairStyle = 1, hairColor = "#5A3E2D") => {
@@ -65,17 +66,42 @@ const getDefaultCustomization = (_gender: string, playerClass: string, hairStyle
 };
 
 const parseCustomization = (customizationStr?: string, defaultGender = "Male", defaultClass = "Warrior", hairStyle = 1, hairColor = "#5A3E2D") => {
+  let parsed: any = null;
   if (customizationStr) {
     try {
-      const parsed = JSON.parse(customizationStr);
-      if (parsed && typeof parsed === 'object') {
-        return parsed;
+      const obj = JSON.parse(customizationStr);
+      if (obj && typeof obj === 'object') {
+        parsed = obj;
       }
     } catch (e) {
       console.warn("Failed to parse customization JSON:", e);
     }
   }
-  return getDefaultCustomization(defaultGender, defaultClass, hairStyle, hairColor);
+  if (!parsed) {
+    parsed = getDefaultCustomization(defaultGender, defaultClass, hairStyle, hairColor);
+  }
+
+  // Fallback weapon based on class if no weapon asset is equipped
+  if (!parsed["Weapon"] || !parsed["Weapon"].asset || !parsed["Weapon"].asset.url) {
+    const weaponCat = classToWeaponCategory[defaultClass] || "sword";
+    if (defaultClass === "Mage") {
+      parsed["Weapon"] = { color: "", asset: null };
+    } else {
+      const weaponInfo = classWeaponMap[weaponCat] || classWeaponMap["sword"];
+      parsed["Weapon"] = {
+        color: "",
+        asset: {
+          id: weaponInfo.assetId,
+          name: defaultClass,
+          group: "cat_weapon",
+          url: `/assets/items/weapons/${weaponInfo.filename}`,
+          thumbnail: ""
+        }
+      };
+    }
+  }
+
+  return parsed;
 };
 
 const mapGameAnimationToAvatarPose = (anim: string, hasWeapon: boolean, playerClass: string) => {
@@ -84,6 +110,9 @@ const mapGameAnimationToAvatarPose = (anim: string, hasWeapon: boolean, playerCl
   if (lower.includes("death")) {
     if (playerClass === "Priest" || playerClass === "Tank") {
       return "Sword And Shield Death";
+    }
+    if (playerClass === "Beginner") {
+      return "Standing Death Forward Archer";
     }
     return "Standing React Death Right";
   }
@@ -97,6 +126,9 @@ const mapGameAnimationToAvatarPose = (anim: string, hasWeapon: boolean, playerCl
     if (playerClass === "Mage" || playerClass === "Priest") {
       return "Magic Heal";
     }
+    if (playerClass === "Beginner") {
+      return "Standing Draw Arrow";
+    }
     return "Stable Sword Outward Slash";
   }
   if (lower.includes("skill") || lower.includes("spell") || lower.includes("heal")) return "Magic Heal";
@@ -105,6 +137,9 @@ const mapGameAnimationToAvatarPose = (anim: string, hasWeapon: boolean, playerCl
   if (lower.includes("walk")) return "Walking";
   if (lower.includes("jog")) return "Jogging";
   if (lower.includes("run")) {
+    if (playerClass === "Beginner") {
+      return "Slow Run";
+    }
     return hasWeapon ? "Run With Sword" : "Slow Run";
   }
   return "Idle";

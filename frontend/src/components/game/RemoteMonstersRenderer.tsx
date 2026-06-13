@@ -136,6 +136,14 @@ export const RemoteMonsterInstance = ({
 
   // ─── Clip name cache (built once, not every frame) ─────────────────────────
   const clipCache = useRef<ReturnType<typeof buildClipNameCache> | null>(null);
+  // Cache: whether actions object has any keys (avoids Object.keys() alloc per frame)
+  const hasActionsRef = useRef(false);
+  useEffect(() => {
+    if (actions) {
+      for (const _k in actions) { hasActionsRef.current = true; return; }
+    }
+    hasActionsRef.current = false;
+  }, [actions]);
 
   const prevVisualPos = useRef<Float32Array>(new Float32Array(2));
   const hasInitializedPrevVisual = useRef(false);
@@ -406,7 +414,7 @@ export const RemoteMonsterInstance = ({
     }
 
     // ─── Animation State Machine (JIT clip name cache initialization) ──────────
-    if (actions && Object.keys(actions).length > 0) {
+    if (hasActionsRef.current) {
       if (!clipCache.current) {
         clipCache.current = buildClipNameCache(actions);
       }
@@ -469,12 +477,14 @@ export const RemoteMonsterInstance = ({
         }
 
         if (textRef.current) {
-          const lvl = isBoss ? 50 : 15;
+          const lvl = data.level ?? (isBoss ? 50 : 15);
           const hpInt = Math.round(data.hp);
-          const textKey = `${lvl}_${data.name}_${hpInt}`;
+          const skillName = (data as any).current_skill || '';
+          const textKey = `${lvl}_${data.name}_${hpInt}_${skillName}`;
           // Only rebuild SDF geometry when text content actually changes
           if (lastTextKey.current !== textKey) {
-            textRef.current.text = `[Lv.${lvl}] ${data.name}\n[ HP: ${hpInt} ]`;
+            const skillLine = skillName ? `\n[ ${skillName}! ]` : '';
+            textRef.current.text = `[Lv.${lvl}] ${data.name}\n[ HP: ${hpInt} ]${skillLine}`;
             lastTextKey.current = textKey;
           }
         }

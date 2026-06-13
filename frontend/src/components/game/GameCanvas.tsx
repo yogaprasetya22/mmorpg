@@ -142,6 +142,9 @@ export const GameCanvas = React.memo(({
   const [adaptivePotatoMode, setAdaptivePotatoMode] = useState(false);
   const isSettingsOpen = useStore(s => s.isSettingsOpen);
   const selectedMapId = useEditorStore(s => s.selectedMapId);
+  const bloomThreshold = useEditorStore(s => s.bloomThreshold);
+  const bloomStrength = useEditorStore(s => s.bloomStrength);
+  const bloomRadius = useEditorStore(s => s.bloomRadius);
 
   // Reset env gate whenever map workspace changes so character re-waits for new BVH
   useEffect(() => {
@@ -188,7 +191,7 @@ export const GameCanvas = React.memo(({
     fogDensity: { value: 0.002, min: 0, max: 0.05, step: 0.0001, label: "Fog Density" },
     fogNear: { value: 60, min: 10, max: 300, step: 5, label: "Fog Near" },
     fogFar: { value: 450, min: 100, max: 1000, step: 10, label: "Fog Far" },
-    exposure: { value: 2.0, min: 0.1, max: 4.0, step: 0.1, label: "Sky Exposure" },
+    exposure: { value: 1.0, min: 0.1, max: 4.0, step: 0.1, label: "Sky Exposure" },
 
     sensitivity: { 
       value: settingsRef.current.mouseSensitivity || 0.002, min: 0.0005, max: 0.01, step: 0.0001, label: "Mouse Sensitivity",
@@ -320,6 +323,7 @@ export const GameCanvas = React.memo(({
         <Canvas
           shadows={true}
           dpr={dpr}
+          camera={{ position: [0, 60, 120], fov: 50 }}
           gl={{
             antialias: true,
             powerPreference: "high-performance",
@@ -391,9 +395,9 @@ export const GameCanvas = React.memo(({
 
           {!settingsRef.current.potatoMode && !adaptivePotatoMode && (
             <SafePostProcessing
-              bloomThreshold={1.0}
-              bloomStrength={0.5}
-              bloomRadius={0.4}
+              bloomThreshold={bloomThreshold !== null && bloomThreshold !== undefined ? bloomThreshold : 1.75}
+              bloomStrength={bloomStrength !== null && bloomStrength !== undefined ? bloomStrength : 0.15}
+              bloomRadius={bloomRadius !== null && bloomRadius !== undefined ? bloomRadius : 0.25}
               exposure={exposure}
             />
           )}

@@ -37,6 +37,12 @@ func (u *gameUsecase) CastPlayerSkill(playerID string, skillID string, targetID 
 	if playerData.HP <= 0 {
 		return
 	}
+
+	// Debuff enforcement: stun/freeze blocks all skills, silence blocks casting
+	if (playerData.Debuff == "stun" || playerData.Debuff == "freeze" || playerData.Debuff == "silence") && time.Now().Before(playerData.DebuffUntil) {
+		fmt.Printf("🚫 Player %s tidak dapat cast skill karena sedang %s!\n", playerData.Username, playerData.Debuff)
+		return
+	}
 	if playerData.MP < float32(targetSkill.ManaCost) {
 		fmt.Printf("⚠️ Player %s tidak memiliki cukup MP untuk %s (%d MP)\n", playerData.Username, targetSkill.Name, targetSkill.ManaCost)
 		return
@@ -71,6 +77,44 @@ func (u *gameUsecase) CastPlayerSkill(playerID string, skillID string, targetID 
 		return
 	}
 
+	// 1b. Buff skills: war_cry (+20% ATK), blessing (+15% HIT)
+	if skillID == "war_cry" || skillID == "blessing" {
+		buffType := skillID
+		buffValue := float32(0.20) // 20% ATK boost
+		if skillID == "blessing" {
+			buffValue = 0.15 // 15% HIT boost
+		}
+		u.activePlayersMu.Lock()
+		playerData.Buffs = append(playerData.Buffs, domain.ActiveBuff{
+			Type:      buffType,
+			Value:     buffValue,
+			ExpiresAt: time.Now().Add(30 * time.Second),
+		})
+		u.activePlayersMu.Unlock()
+		fmt.Printf("💪 Player %s activated %s! Buff active for 30s.\n", playerData.Username, targetSkill.Name)
+		u.eventCallback("buff_event", map[string]interface{}{
+			"playerId": playerID,
+			"buff":     buffType,
+			"value":    buffValue,
+			"duration": 30,
+		})
+		return
+	}
+
+	// 1c. Stealth: invulnerable for 3 seconds
+	if skillID == "stealth" {
+		u.activePlayersMu.Lock()
+		playerData.IsStealthed = true
+		playerData.StealthUntil = time.Now().Add(3 * time.Second)
+		u.activePlayersMu.Unlock()
+		fmt.Printf("👤 Player %s entered stealth for 3s!\n", playerData.Username)
+		u.eventCallback("stealth_event", map[string]interface{}{
+			"playerId": playerID,
+			"duration": 3,
+		})
+		return
+	}
+
 	// 2. Damage Active spell attack logic
 	u.monstersMu.Lock()
 	monster, mExists := u.monsters[targetID]
@@ -92,7 +136,7 @@ func (u *gameUsecase) CastPlayerSkill(playerID string, skillID string, targetID 
 	skillDamage := baseAttack * targetSkill.Damage
 	damageMultiplier := float32(100.0) / (100.0 + monster.Defense)
 	dmg := skillDamage * damageMultiplier
-	variation := float32((time.Now().UnixNano() % 20) - 10) / 100.0
+	variation := float32((time.Now().UnixNano()%20)-10) / 100.0
 	finalDamage := dmg * (1.0 + variation)
 
 	isCrit := false
@@ -166,7 +210,7 @@ func (u *gameUsecase) ChangeClass(playerID string, newClass string) {
 	fmt.Printf("⚔️ Player %s changed class to %s! Attributes recalculated.\n", playerData.Username, newClass)
 }
 
-// handleMonsterKillRewards is a shared helper for quest progress, XP, gold, and level-up on monster death.
+// handleMonsterKillRewards is a shared helper for quest progress, XP, gold, item drops, and level-up on monster death.
 // Used by both HandlePlayerAttack (combat.go) and CastPlayerSkill.
 func (u *gameUsecase) handleMonsterKillRewards(playerID string, playerData *domain.Player, monster *domain.Monster) {
 	u.activePlayersMu.Lock()
@@ -176,6 +220,86 @@ func (u *gameUsecase) handleMonsterKillRewards(playerID string, playerData *doma
 
 	fmt.Printf("💀 Monster %s killed by %s! Drop: Gold +%d, XP +%d (Scaled: %d)\n",
 		monster.Name, playerData.Username, monster.GoldDrop, monster.XPDrop, xpGained)
+
+	// ── Item Drop System: roll drop table from monster config ──
+	if cfg, err := u.configRepo.GetMonsterConfig(monster.Type); err == nil && cfg != nil {
+		drops := cfg.ParseDropTable()
+		for _, drop := range drops {
+			if rand.Float32() < drop.Chance {
+				qty := drop.Quantity
+				if qty <= 0 {
+					qty = 1
+				}
+				itemID := fmt.Sprintf("%s-drop-%d", playerID, time.Now().UnixNano()%1000000)
+				// ── Randomized Stat rolls for Equipment drops ──
+				var addHP, addMP, addAttack, addDefense float32
+				itemName := drop.Name
+				if drop.Type == "equipment" {
+					// Roll quality multiplier between 0.8 and 1.6
+					qualityMult := 0.8 + rand.Float32()*0.8
+					addHP = float32(int(drop.AddHP * qualityMult))
+					addMP = float32(int(drop.AddMP * qualityMult))
+					addAttack = float32(int(drop.AddAttack * qualityMult))
+					addDefense = float32(int(drop.AddDefense * qualityMult))
+
+					// If base attack is 0 but item is a weapon, add a tiny bonus
+					if addAttack == 0 && drop.SlotType == "weapon" {
+						addAttack = float32(rand.Intn(10) + 5)
+					}
+					// If defense is 0 but it's armor/boots/helm/shield, add a tiny bonus
+					if addDefense == 0 && (drop.SlotType == "armor" || drop.SlotType == "boots" || drop.SlotType == "helmet" || drop.SlotType == "shield") {
+						addDefense = float32(rand.Intn(6) + 2)
+					}
+
+					// Append quality suffix to name
+					if qualityMult >= 1.4 {
+						itemName = fmt.Sprintf("%s [Legendary]", drop.Name)
+					} else if qualityMult >= 1.2 {
+						itemName = fmt.Sprintf("%s [Rare]", drop.Name)
+					} else if qualityMult < 0.95 {
+						itemName = fmt.Sprintf("%s [Broken]", drop.Name)
+					}
+				} else {
+					addHP = drop.AddHP
+					addMP = drop.AddMP
+					addAttack = drop.AddAttack
+					addDefense = drop.AddDefense
+				}
+
+				newItem := domain.PlayerItem{
+					ID:         itemID,
+					PlayerID:   playerID,
+					ItemID:     drop.ItemID,
+					Name:       itemName,
+					Type:       drop.Type,
+					SlotType:   drop.SlotType,
+					Quantity:   qty,
+					IsEquipped: false,
+					AddHP:      addHP,
+					AddMP:      addMP,
+					AddAttack:  addAttack,
+					AddDefense: addDefense,
+				}
+				playerData.Inventory = append(playerData.Inventory, newItem)
+				fmt.Printf("🎁 ITEM DROP: %s looted [%s] from %s! Stats: ATK+%.0f DEF+%.0f HP+%.0f\n", 
+					playerData.Username, itemName, monster.Name, addAttack, addDefense, addHP)
+
+				// Broadcast drop event to frontend
+				u.eventCallback("item_drop_event", map[string]interface{}{
+					"playerId":   playerID,
+					"itemId":     itemID,
+					"itemName":   itemName,
+					"itemType":   drop.Type,
+					"quantity":   qty,
+					"monster":    monster.Name,
+					"addAttack":  addAttack,
+					"addDefense": addDefense,
+					"addHp":      addHP,
+					"addMp":      addMP,
+				})
+			}
+		}
+	}
 
 	// Check active Quest Targets progress
 	hasActiveAfter := false
@@ -191,6 +315,10 @@ func (u *gameUsecase) handleMonsterKillRewards(playerID string, playerData *doma
 				playerData.Gold += q.RewardGold
 				playerData.XP += q.RewardXP
 				fmt.Printf("🏆 QUEST COMPLETE: %s! Reward: +%d Gold, +%d XP\n", q.Title, q.RewardGold, q.RewardXP)
+				// Auto-assign next story quest if a story quest was just completed
+				if q.Type == "story" {
+					playerData.AssignStoryQuest()
+				}
 			} else {
 				hasActiveAfter = true
 			}
@@ -221,6 +349,9 @@ func (u *gameUsecase) handleMonsterKillRewards(playerID string, playerData *doma
 		}
 	}
 	u.activePlayersMu.Unlock()
+
+	// Distribute shared party XP to nearby party members
+	u.distributePartyXP(playerID, xpGained, monster.Position)
 
 	// Sync player HP to ECS registry
 	if pHcomp, found := u.registry.GetComponent(domain.EntityID(playerID), "Health"); found {

@@ -3,30 +3,28 @@
 import { NodeIO } from "@gltf-transform/core";
 import { dedup, draco, prune, quantize } from "@gltf-transform/functions";
 import { useAnimations, useGLTF } from "@react-three/drei";
-import { Suspense, useEffect, useRef, useMemo, useState, useImperativeHandle } from "react";
+import { Suspense, useEffect, useLayoutEffect, useRef, useMemo, useState, useImperativeHandle } from "react";
 import { GLTFExporter, FBXLoader, SkeletonUtils } from "three-stdlib";
 import { API_BASE_URL } from "@/src/core/config";
 import { useAvatarConfiguratorStore } from "@/src/state/useAvatarConfiguratorStore";
 import { AvatarAsset } from "./AvatarAsset";
 import * as THREE from "three";
 import { createPortal, useFrame } from "@react-three/fiber";
-import { weaponConfigs } from "./weaponConfigs";
+import { getWeaponConfig } from "./weaponConfigs";
 
 interface WeaponAssetProps {
   assetId: string;
   url: string;
+  isConfigurator?: boolean;
+  onHandChange?: (hand: "left" | "right") => void;
 }
 
-const WeaponAsset = ({ assetId, url }: WeaponAssetProps) => {
+const WeaponAssetStatic = ({ assetId, url }: { assetId: string; url: string }) => {
   const { scene } = useGLTF(url);
   const clonedScene = useMemo(() => scene.clone(), [scene]);
 
-  // Load default offset configurations from weaponConfigs.ts
-  const defaultOffset = weaponConfigs[assetId] || {
-    position: [0, 0, 0],
-    rotation: [0, 0, 0],
-    scale: [1, 1, 1],
-  };
+  // Load offset configuration (dynamic from localStorage if customized)
+  const defaultOffset = useMemo(() => getWeaponConfig(assetId), [assetId]);
 
   useEffect(() => {
     clonedScene.traverse((child: any) => {
@@ -48,6 +46,78 @@ const WeaponAsset = ({ assetId, url }: WeaponAssetProps) => {
   );
 };
 
+const useSafeLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+const WeaponAssetConfigurable = ({ assetId, url, onHandChange }: { assetId: string; url: string; onHandChange?: (hand: "left" | "right") => void }) => {
+  const { scene } = useGLTF(url);
+  const clonedScene = useMemo(() => scene.clone(), [scene]);
+  const weaponRef = useRef<THREE.Group>(null);
+
+  // Read active editor configurations from Zustand
+  const weaponOffsetTrigger = useAvatarConfiguratorStore((state) => state.weaponOffsetTrigger);
+  const registerWeaponRef = useAvatarConfiguratorStore((state) => state.registerWeaponRef);
+  const unregisterWeaponRef = useAvatarConfiguratorStore((state) => state.unregisterWeaponRef);
+
+  // Load offset configuration (dynamic from localStorage if customized, re-evaluated on trigger)
+  const defaultOffset = useMemo(() => getWeaponConfig(assetId), [assetId, weaponOffsetTrigger]);
+
+  // Register/unregister the 3D group ref with the store safely on mount/unmount/change
+  useSafeLayoutEffect(() => {
+    const currentRef = weaponRef.current;
+    if (currentRef) {
+      registerWeaponRef(assetId, currentRef);
+    }
+    return () => {
+      unregisterWeaponRef(assetId);
+    };
+  }, [assetId, registerWeaponRef, unregisterWeaponRef]);
+
+  // Synchronize initial offset configuration to the HUD coordinate readout
+  useEffect(() => {
+    const eventDetail = {
+      assetId,
+      position: defaultOffset.position,
+      rotation: defaultOffset.rotation,
+      scale: defaultOffset.scale,
+    };
+    window.dispatchEvent(new CustomEvent("weapon-offset-change", { detail: eventDetail }));
+  }, [assetId, defaultOffset]);
+
+  // Propagate hand changes up to parent so it mounts portal to the correct hand bone
+  useEffect(() => {
+    if (onHandChange) {
+      onHandChange(defaultOffset.hand);
+    }
+  }, [defaultOffset.hand, onHandChange]);
+
+  useEffect(() => {
+    clonedScene.traverse((child: any) => {
+      if (child.isMesh) {
+        child.castShadow = false;
+        child.receiveShadow = false;
+      }
+    });
+  }, [clonedScene]);
+
+  return (
+    <group 
+      ref={weaponRef}
+      position={defaultOffset.position as [number, number, number]} 
+      rotation={defaultOffset.rotation as [number, number, number]} 
+      scale={defaultOffset.scale as [number, number, number]}
+    >
+      <primitive object={clonedScene} />
+    </group>
+  );
+};
+
+const WeaponAsset = ({ assetId, url, isConfigurator = false, onHandChange }: WeaponAssetProps) => {
+  if (isConfigurator) {
+    return <WeaponAssetConfigurable assetId={assetId} url={url} onHandChange={onHandChange} />;
+  }
+  return <WeaponAssetStatic assetId={assetId} url={url} />;
+};
+
 // Global cache for loaded Mixamo FBX AnimationClips to prevent redundant HTTP loads
 let globalCachedClips: any[] | null = null;
 let animationLoadingPromise: Promise<any[]> | null = null;
@@ -64,13 +134,15 @@ const ANIMATION_FILES: Record<string, string> = {
   // ── Combat ──
   "Stable Sword Outward Slash": "/assets/animations/fbx/combat/stable_sword_outward_slash.fbx",
   "Magic Heal": "/assets/animations/fbx/combat/magic_heal.fbx",
+  "Standing Draw Arrow": "/assets/animations/fbx/combat/standing_draw_arrow.fbx",
   // ── Damage / Debuff ──
   "Light Hit To Head": "/assets/animations/fbx/damage/light_hit_to_head.fbx",
   "Stunned": "/assets/animations/fbx/locomotion/stunned.fbx",
   "Dizzy": "/assets/animations/fbx/locomotion/dizzy.fbx",
   // ── Death ──
   "Standing React Death Right": "/assets/animations/fbx/damage/standing_react_death_right.fbx",
-  "Sword And Shield Death": "/assets/animations/fbx/damage/sword_and_shield_death.fbx"
+  "Sword And Shield Death": "/assets/animations/fbx/damage/sword_and_shield_death.fbx",
+  "Standing Death Forward Archer": "/assets/animations/fbx/damage/standing_death_forward_archer.fbx"
 };
 
 // Locomotion clips: strip root Hips position & rotation tracks so BVHEcctrl
@@ -167,9 +239,17 @@ export const loadFBXAnimations = async (): Promise<any[]> => {
   return animationLoadingPromise;
 };
 
-const AvatarModelStatic = ({ customization, ...props }: any) => {
+const AvatarModelStatic = ({ customization, isConfigurator = false, ...props }: any) => {
   const gltf = useGLTF(`${API_BASE_URL}/assets/characters/base/Armature.glb`) as any;
   const equippedWeaponAsset = customization["Weapon"]?.asset;
+  const [currentHand, setCurrentHand] = useState<"left" | "right">("right");
+  const weaponOffsetTrigger = useAvatarConfiguratorStore((state) => state.weaponOffsetTrigger);
+
+  useEffect(() => {
+    if (equippedWeaponAsset?.id) {
+      setCurrentHand(getWeaponConfig(equippedWeaponAsset.id)?.hand || "right");
+    }
+  }, [equippedWeaponAsset?.id, weaponOffsetTrigger]);
 
   // Clone the cached GLTF scene to ensure each static player has unique bones/skeletons
   const clone = useMemo(() => SkeletonUtils.clone(gltf.scene), [gltf.scene]);
@@ -198,6 +278,11 @@ const AvatarModelStatic = ({ customization, ...props }: any) => {
         result[child.name] = child;
       }
     });
+    if (typeof window === "undefined") {
+      try {
+        require("fs").writeFileSync("/home/yoga/Dokumen/game mmorpg/scratch/nodes_keys.json", JSON.stringify(Object.keys(result), null, 2));
+      } catch (e) {}
+    }
     return result;
   }, [clone]);
 
@@ -230,18 +315,34 @@ const AvatarModelStatic = ({ customization, ...props }: any) => {
                 </Suspense>
               )
           )}
-          {/* Render equipped weapon dynamically attached to RightHand bone using createPortal */}
-          {(nodes["mixamorig:RightHand"] || nodes.mixamorigRightHand) && equippedWeaponAsset?.url && (
-            createPortal(
-              <Suspense fallback={null}>
-                <WeaponAsset
-                  assetId={equippedWeaponAsset.id}
-                  url={`${API_BASE_URL}${equippedWeaponAsset.url}`}
-                />
-              </Suspense>,
-              nodes["mixamorig:RightHand"] || nodes.mixamorigRightHand
-            )
-          )}
+          {/* Render equipped weapon dynamically using createPortal */}
+          {(() => {
+            if (!equippedWeaponAsset?.url) return null;
+            const elements: React.ReactNode[] = [];
+
+            // Primary weapon placement
+            const primaryHandNode = currentHand === "left"
+              ? (nodes["mixamorig:LeftHand"] || nodes.mixamorigLeftHand)
+              : (nodes["mixamorig:RightHand"] || nodes.mixamorigRightHand);
+
+            if (primaryHandNode) {
+              elements.push(
+                <Suspense key={`primary-weapon-${equippedWeaponAsset.id}-${currentHand}`} fallback={null}>
+                  {createPortal(
+                    <WeaponAsset
+                      assetId={equippedWeaponAsset.id}
+                      url={`${API_BASE_URL}${equippedWeaponAsset.url}`}
+                      isConfigurator={isConfigurator}
+                      onHandChange={isConfigurator ? setCurrentHand : undefined}
+                    />,
+                    primaryHandNode
+                  )}
+                </Suspense>
+              );
+            }
+
+            return elements;
+          })()}
         </group>
       </group>
     </group>
@@ -257,12 +358,22 @@ const AvatarModelAnimated = ({
   propCustomization,
   controlRef,
   skipAnimControl,
+  isConfigurator = false,
   ...props
 }: any) => {
   const group = useRef<THREE.Group>(null);
   const gltf = useGLTF(`${API_BASE_URL}/assets/characters/base/Armature.glb`) as any;
   const { actions } = useAnimations(animations, group);
   const setDownload = useAvatarConfiguratorStore((state) => state.setDownload);
+  const equippedWeaponAsset = customization["Weapon"]?.asset;
+  const [currentHand, setCurrentHand] = useState<"left" | "right">("right");
+  const weaponOffsetTrigger = useAvatarConfiguratorStore((state) => state.weaponOffsetTrigger);
+
+  useEffect(() => {
+    if (equippedWeaponAsset?.id) {
+      setCurrentHand(getWeaponConfig(equippedWeaponAsset.id)?.hand || "right");
+    }
+  }, [equippedWeaponAsset?.id, weaponOffsetTrigger]);
 
   // Clone the cached GLTF scene to ensure each player instance has unique bones/skeletons
   const clone = useMemo(() => SkeletonUtils.clone(gltf.scene), [gltf.scene]);
@@ -468,7 +579,7 @@ const AvatarModelAnimated = ({
     };
   }, [setDownload, animations, propCustomization]);
 
-  const equippedWeaponAsset = customization["Weapon"]?.asset;
+
 
   useEffect(() => {
     // Hide all internal hardcoded weapon meshes in Armature.glb
@@ -502,18 +613,34 @@ const AvatarModelAnimated = ({
                 </Suspense>
               )
           )}
-          {/* Render equipped weapon dynamically attached to RightHand bone using createPortal */}
-          {(nodes["mixamorig:RightHand"] || nodes.mixamorigRightHand) && equippedWeaponAsset?.url && (
-            createPortal(
-              <Suspense fallback={null}>
-                <WeaponAsset
-                  assetId={equippedWeaponAsset.id}
-                  url={`${API_BASE_URL}${equippedWeaponAsset.url}`}
-                />
-              </Suspense>,
-              nodes["mixamorig:RightHand"] || nodes.mixamorigRightHand
-            )
-          )}
+          {/* Render equipped weapon dynamically using createPortal */}
+          {(() => {
+            if (!equippedWeaponAsset?.url) return null;
+            const elements: React.ReactNode[] = [];
+
+            // Primary weapon placement
+            const primaryHandNode = currentHand === "left"
+              ? (nodes["mixamorig:LeftHand"] || nodes.mixamorigLeftHand)
+              : (nodes["mixamorig:RightHand"] || nodes.mixamorigRightHand);
+
+            if (primaryHandNode) {
+              elements.push(
+                <Suspense key={`primary-weapon-${equippedWeaponAsset.id}-${currentHand}`} fallback={null}>
+                  {createPortal(
+                    <WeaponAsset
+                      assetId={equippedWeaponAsset.id}
+                      url={`${API_BASE_URL}${equippedWeaponAsset.url}`}
+                      isConfigurator={isConfigurator}
+                      onHandChange={isConfigurator ? setCurrentHand : undefined}
+                    />,
+                    primaryHandNode
+                  )}
+                </Suspense>
+              );
+            }
+
+            return elements;
+          })()}
         </group>
       </group>
     </group>
@@ -529,7 +656,7 @@ export interface AvatarHandle {
   group: React.RefObject<THREE.Group>;
 }
 
-export const AvatarModel = ({ customization: propCustomization, pose: propPose, timeScale: propTimeScale, paused: propPaused, controlRef, skipAnimControl, ...props }: any) => {
+export const AvatarModel = ({ customization: propCustomization, pose: propPose, timeScale: propTimeScale, paused: propPaused, controlRef, skipAnimControl, isConfigurator = false, ...props }: any) => {
   const [animations, setAnimations] = useState<any[]>(() => globalCachedClips || []);
   
   useEffect(() => {
@@ -546,7 +673,7 @@ export const AvatarModel = ({ customization: propCustomization, pose: propPose, 
   const timeScale = typeof propTimeScale === 'number' ? propTimeScale : 1.0;
 
   if (animations.length === 0) {
-    return <AvatarModelStatic customization={customization} {...props} />;
+    return <AvatarModelStatic customization={customization} isConfigurator={isConfigurator} {...props} />;
   }
 
   return (
@@ -559,6 +686,7 @@ export const AvatarModel = ({ customization: propCustomization, pose: propPose, 
       propCustomization={propCustomization}
       controlRef={controlRef}
       skipAnimControl={skipAnimControl}
+      isConfigurator={isConfigurator}
       {...props}
     />
   );

@@ -32,6 +32,14 @@ export const _camRightDir = new THREE.Vector3();
 export const _idleTargetQuat = new THREE.Quaternion();
 export const _idleLookMatrix = new THREE.Matrix4();
 
+// AoE ground plane (zero-alloc scratch)
+export const _groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+export const _upVec = new THREE.Vector3(0, 1, 0);
+
+// Player position store (Float32Array — zero alloc, polled by consumers)
+export const playerPosBuf = new Float32Array(3);
+export const playerPosThrottle = new Float64Array(1); // last setPlayerPosition time
+
 // ─── ECS BUFFERS (TypedArrays — same-frame, no GC) ───────────────────────────
 // Camera state
 export const camYaw = new Float32Array(1);   // radians
@@ -85,6 +93,7 @@ export const animationSet = {
   dizzy: 'Dizzy',
   death: 'Standing React Death Right',
   deathHeavy: 'Sword And Shield Death',
+  archerDeath: 'Standing Death Forward Archer',
 };
 
 export const ecctrlAnimationSet: Record<string, string> = {

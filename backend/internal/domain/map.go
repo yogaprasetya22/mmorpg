@@ -19,6 +19,10 @@ type MapConfig struct {
 	AmbientIntensity  *float64  `json:"ambient_intensity" gorm:"type:numeric"`
 	SunAngle          float64   `json:"sun_angle" gorm:"default:215.0"`
 	FogDensity        float64   `json:"fog_density" gorm:"default:0.0025"`
+	SkyboxIntensity   *float64  `json:"skybox_intensity" gorm:"type:numeric"`
+	BloomThreshold    *float64  `json:"bloom_threshold" gorm:"type:numeric"`
+	BloomStrength     *float64  `json:"bloom_strength" gorm:"type:numeric"`
+	BloomRadius       *float64  `json:"bloom_radius" gorm:"type:numeric"`
 	PaintData         string    `json:"paint_data" gorm:"type:text"`
 	SculptData        string    `json:"sculpt_data" gorm:"type:text"`
 	Items             []MapItem `json:"items" gorm:"foreignKey:MapConfigID;constraint:OnDelete:CASCADE"`

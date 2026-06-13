@@ -5,6 +5,7 @@ import {
   Gltf,
   ContactShadows,
   useProgress,
+  TransformControls,
 } from "@react-three/drei";
 import { useThree, useFrame } from "@react-three/fiber";
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -13,18 +14,56 @@ import { AvatarModel } from "./AvatarModel";
 import { AvatarCameraManager } from "./AvatarCameraManager";
 import { API_BASE_URL } from "@/src/core/config";
 import { Group } from "three";
+import { getWeaponConfig } from "./weaponConfigs";
 
 export const AvatarExperience = () => {
   const setScreenshot = useAvatarConfiguratorStore((state) => state.setScreenshot);
   const { gl, scene } = useThree();
 
+  const selectedWeaponId = useAvatarConfiguratorStore((state) => state.selectedWeaponId);
+  const weaponGizmoMode = useAvatarConfiguratorStore((state) => state.weaponGizmoMode);
+  const weaponRefs = useAvatarConfiguratorStore((state) => state.weaponRefs);
+
+  const activeWeaponRef = selectedWeaponId ? weaponRefs[selectedWeaponId] : null;
+
+  const onObjectChange = () => {
+    if (!selectedWeaponId || !activeWeaponRef) return;
+    const pos = activeWeaponRef.position;
+    const rot = activeWeaponRef.rotation;
+    const scl = activeWeaponRef.scale;
+
+    const defaultOffset = getWeaponConfig(selectedWeaponId);
+
+    try {
+      localStorage.setItem(
+        `weapon_offset_${selectedWeaponId}`,
+        JSON.stringify({
+          position: [Number(pos.x.toFixed(2)), Number(pos.y.toFixed(2)), Number(pos.z.toFixed(2))],
+          rotation: [Number(rot.x.toFixed(2)), Number(rot.y.toFixed(2)), Number(rot.z.toFixed(2))],
+          scale: [Number(scl.x.toFixed(2)), Number(scl.y.toFixed(2)), Number(scl.z.toFixed(2))],
+          hand: defaultOffset.hand,
+        })
+      );
+    } catch (e) {
+      console.warn("Failed to auto-save weapon offset:", e);
+    }
+
+    const eventDetail = {
+      assetId: selectedWeaponId,
+      position: [Number(pos.x.toFixed(2)), Number(pos.y.toFixed(2)), Number(pos.z.toFixed(2))],
+      rotation: [Number(rot.x.toFixed(2)), Number(rot.y.toFixed(2)), Number(rot.z.toFixed(2))],
+      scale: [Number(scl.x.toFixed(2)), Number(scl.y.toFixed(2)), Number(scl.z.toFixed(2))],
+    };
+    window.dispatchEvent(new CustomEvent("weapon-offset-change", { detail: eventDetail }));
+  };
+
   useEffect(() => {
     (window as any).scene = scene;
+    (window as any).useAvatarConfiguratorStore = useAvatarConfiguratorStore;
   }, [scene]);
 
   useEffect(() => {
     const screenshot = () => {
-      // Create a link element to download the image
       const link = document.createElement("a");
       const date = new Date();
       link.setAttribute(
@@ -56,17 +95,15 @@ export const AvatarExperience = () => {
         timeout = setTimeout(() => {
           setLoading(true);
           setLoadingAt.current = Date.now();
-        }, 50); // show spinner only after 50ms
+        }, 50);
       } else {
         timeout = setTimeout(() => {
           setLoading(false);
-        }, Math.max(0, 2000 - (Date.now() - setLoadingAt.current))); // show spinner for at least 2s
+        }, Math.max(0, 2000 - (Date.now() - setLoadingAt.current)));
       }
     };
 
-    // Initialize with current state
     handleProgress(useProgress.getState());
-
     const unsub = useProgress.subscribe(handleProgress);
     return () => {
       clearTimeout(timeout);
@@ -83,12 +120,18 @@ export const AvatarExperience = () => {
   }, []);
 
   const groupRef = useRef<Group>(null);
+  const transformRef = useRef<any>(null);
 
-  // Smoothly interpolate position-x based on mobile view to center/offset the avatar
   useFrame((_, delta) => {
+    if (transformRef.current) {
+      const target = transformRef.current.object;
+      if (target && !target.parent) {
+        transformRef.current.detach();
+      }
+    }
+
     if (!groupRef.current) return;
     const targetX = isMobile ? 0 : -0.6;
-    // Frame-rate independent lerp for position-x
     groupRef.current.position.x += (targetX - groupRef.current.position.x) * (1 - Math.exp(-10 * delta));
   });
 
@@ -105,23 +148,13 @@ export const AvatarExperience = () => {
       </mesh>
 
       <ambientLight intensity={0.6} />
-
-      {/* Key Light */}
-      <directionalLight
-        position={[5, 5, 5]}
-        intensity={1.5}
-      />
-      {/* Back Lights */}
+      <directionalLight position={[5, 5, 5]} intensity={1.5} />
       <directionalLight position={[3, 3, -5]} intensity={2.5} color={"#ff3b3b"} />
-      <directionalLight
-        position={[-3, 3, -5]}
-        intensity={3}
-        color={"#3cb1ff"}
-      />
+      <directionalLight position={[-3, 3, -5]} intensity={3} color={"#3cb1ff"} />
 
       <group ref={groupRef}>
         <Suspense fallback={null}>
-          <AvatarModel />
+          <AvatarModel isConfigurator={true} />
         </Suspense>
         <Suspense fallback={null}>
           <Gltf
@@ -137,6 +170,41 @@ export const AvatarExperience = () => {
           far={1}
         />
       </group>
+
+      {activeWeaponRef && activeWeaponRef.parent && weaponGizmoMode !== "none" && (
+        <TransformControls
+          ref={(ref: any) => {
+            transformRef.current = ref;
+            if (ref && !ref.__updateMatrixWorldOverridden) {
+              ref.__updateMatrixWorldOverridden = true;
+              const originalUpdate = ref.updateMatrixWorld;
+              ref.updateMatrixWorld = function(force: boolean) {
+                if (this.object && !this.object.parent) {
+                  this.detach();
+                  return;
+                }
+                originalUpdate.call(this, force);
+              };
+            }
+          }}
+          object={activeWeaponRef as any}
+          mode={weaponGizmoMode as any}
+          size={0.7}
+          onObjectChange={onObjectChange}
+          onMouseDown={() => {
+            const controls = (window as any).controls;
+            if (controls) {
+              controls.enabled = false;
+            }
+          }}
+          onMouseUp={() => {
+            const controls = (window as any).controls;
+            if (controls) {
+              controls.enabled = true;
+            }
+          }}
+        />
+      )}
     </>
   );
 };

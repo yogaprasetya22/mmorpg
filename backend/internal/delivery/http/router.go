@@ -6,11 +6,12 @@ import (
 	"net/url"
 	"time"
 
+	"mmorpg-backend/internal/delivery/ws"
+	"mmorpg-backend/internal/repository/postgres"
+
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gorm.io/gorm"
-	"mmorpg-backend/internal/delivery/ws"
-	"mmorpg-backend/internal/repository/postgres"
 )
 
 func CORSMiddleware() gin.HandlerFunc {
@@ -29,9 +30,21 @@ func CORSMiddleware() gin.HandlerFunc {
 	}
 }
 
+// RequireAuth returns a Gin middleware that validates JWT tokens for admin/config endpoints
+func RequireAuth(authHandler *AuthHandler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		_, ok := authHandler.GetUserIDFromToken(c)
+		if !ok {
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
 func SetupRouter(authHandler *AuthHandler, wsHandler *ws.GameHandler, configHandler *ConfigHandler, db ...*gorm.DB) *gin.Engine {
 	r := gin.New()
-	
+
 	// Add middlewares
 	r.Use(gin.Recovery())
 	r.Use(gin.Logger())
@@ -70,22 +83,27 @@ func SetupRouter(authHandler *AuthHandler, wsHandler *ws.GameHandler, configHand
 
 		api.GET("/player/profile", wsHandler.ServeProfile)
 
-		// Dynamic Balance Configurations
+		// Dynamic Balance Configurations (READ: public, WRITE: authenticated)
 		api.GET("/config/classes", configHandler.GetClassConfigs)
-		api.POST("/config/classes", configHandler.SaveClassConfig)
 		api.GET("/config/settings", configHandler.GetSimulationSettings)
-		api.POST("/config/settings", configHandler.SaveSimulationSettings)
 		api.GET("/config/monsters", configHandler.GetMonsterConfigs)
-		api.POST("/config/monsters", configHandler.SaveMonsterConfig)
-		api.DELETE("/config/monsters/:type", configHandler.DeleteMonsterConfig)
-
-		// Dynamic Map & Assets configurations
 		api.GET("/config/assets", configHandler.GetAssetList)
+
+		// Authenticated admin routes for config mutations
+		admin := api.Group("/", RequireAuth(authHandler))
+		{
+			admin.POST("/config/classes", configHandler.SaveClassConfig)
+			admin.POST("/config/settings", configHandler.SaveSimulationSettings)
+			admin.POST("/config/monsters", configHandler.SaveMonsterConfig)
+			admin.DELETE("/config/monsters/:type", configHandler.DeleteMonsterConfig)
+
+			// World Editor mutations
+			admin.POST("/world-editor/save", configHandler.SaveMap)
+			admin.DELETE("/world-editor/delete", configHandler.DeleteMap)
+			admin.POST("/world-editor/ai-generate", configHandler.AIGenerateEnvironment)
+		}
 		api.GET("/world-editor/maps", configHandler.ListMaps)
 		api.GET("/world-editor/load", configHandler.LoadMap)
-		api.POST("/world-editor/save", configHandler.SaveMap)
-		api.DELETE("/world-editor/delete", configHandler.DeleteMap)
-		api.POST("/world-editor/ai-generate", configHandler.AIGenerateEnvironment)
 
 		// Authoritative Game Endpoints (Resolved by Backend)
 		api.POST("/game/spawn-resolve", configHandler.ResolveSpawn)
@@ -107,7 +125,7 @@ func SetupRouter(authHandler *AuthHandler, wsHandler *ws.GameHandler, configHand
 // SetupAPIRouter configures the HTTP routes exclusively for the API Microservice
 func SetupAPIRouter(authHandler *AuthHandler, configHandler *ConfigHandler, db ...*gorm.DB) *gin.Engine {
 	r := gin.New()
-	
+
 	r.Use(gin.Recovery())
 	r.Use(gin.Logger())
 	r.Use(CORSMiddleware())
@@ -171,7 +189,7 @@ func SetupAPIRouter(authHandler *AuthHandler, configHandler *ConfigHandler, db .
 // SetupGameRouter configures the WebSocket sync engine and transparently proxies other requests
 func SetupGameRouter(wsHandler *ws.GameHandler, apiServiceURL string) *gin.Engine {
 	r := gin.New()
-	
+
 	r.Use(gin.Recovery())
 	r.Use(gin.Logger())
 

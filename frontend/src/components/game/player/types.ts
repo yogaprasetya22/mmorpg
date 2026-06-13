@@ -15,6 +15,7 @@ export interface PlayerProps {
   assassinSpellsRef?: React.RefObject<any[]>;
   simTimeRef?: React.RefObject<number>;
   sendPlayerState?: (state: { x: number; y: number; z: number; rotation: number; animation: string; targetId?: string }) => void;
+  sendPlayerSkill?: (skillId: string, targetId: string) => void;
   playerStats?: any;
   playerStatsRef?: React.RefObject<any>;
   selectedCharacter?: any;

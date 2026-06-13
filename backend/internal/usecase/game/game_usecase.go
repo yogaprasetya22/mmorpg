@@ -39,9 +39,17 @@ type GameUsecase interface {
 	UseConsumable(playerID string, playerItemID string)
 	CastPlayerSkill(playerID string, skillID string, targetID string)
 	ChangeClass(playerID string, newClass string)
+	BuyItem(playerID string, catalogItemID string, quantity int) error
+	SellItem(playerID string, playerItemID string) error
+	RefineItem(playerID string, playerItemID string) error
 	SyncPlayerStatsFromDB(playerID string) error
 	GetActivePlayer(playerID string) *domain.Player
 	SetEventCallback(cb func(eventType string, data interface{}))
+
+	// Party Actions
+	CreateParty(playerID string) string
+	InviteToParty(leaderID string, targetID string) bool
+	LeaveParty(playerID string)
 }
 
 type gameUsecase struct {
@@ -58,6 +66,9 @@ type gameUsecase struct {
 
 	activePlayers   map[string]*domain.Player
 	activePlayersMu sync.RWMutex
+
+	parties   map[string]*Party
+	partiesMu sync.RWMutex
 
 	patrolTargets   map[string]domain.Vector3
 	patrolWaiting   map[string]time.Time
@@ -82,6 +93,7 @@ func NewGameUsecase(
 		players:           make(map[string]*domain.PlayerNetworkState),
 		monsters:          make(map[string]*domain.Monster),
 		activePlayers:     make(map[string]*domain.Player),
+		parties:           make(map[string]*Party),
 		patrolTargets:     make(map[string]domain.Vector3),
 		patrolWaiting:     make(map[string]time.Time),
 		broadcastCallback: broadcastCallback,

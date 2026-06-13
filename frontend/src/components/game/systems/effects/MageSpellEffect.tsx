@@ -111,7 +111,7 @@ const GroundMagicMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
             vec4 tex = texture2D(tDiffuse, vUv);
             float dist = length(vUv - 0.5);
             float pulse = 0.8 + 0.2 * sin(uTime * 5.0 + dist * 3.0);
-            vec3 glow = vColor * tex.rgb * 3.0 * pulse;
+            vec3 glow = vColor * tex.rgb * 1.2 * pulse;
             gl_FragColor = vec4(glow, tex.a);
             if (gl_FragColor.a < 0.01) discard;
         }
@@ -237,7 +237,7 @@ export function MageSpellEffect({ spellsRef, unitRegistry, simTimeRef }: { spell
         mesh.setMatrixAt(oi, _obj.matrix);
         
         _c.set(s.color || '#44aaff');
-        _c.multiplyScalar(rGlow * (s.isMeteor ? 3.0 : 1.5));
+        _c.multiplyScalar(rGlow * 0.15 * (s.isMeteor ? 1.5 : 1.0));
         mesh.setColorAt(oi, _c);
         oi++;
 
@@ -266,7 +266,7 @@ export function MageSpellEffect({ spellsRef, unitRegistry, simTimeRef }: { spell
         _obj.scale.setScalar(s.isMeteor ? (2.5 * rScale * t) : (1.5 * (1.1 - t) * rScale));
         _obj.updateMatrix();
         grd.setMatrixAt(gi, _obj.matrix);
-        _c.set(s.color || '#fff').multiplyScalar(1.5 * rScale);
+        _c.set(s.color || '#fff').multiplyScalar(0.25 * rScale);
         grd.setColorAt(gi, _c);
         gi++;
       }
@@ -338,7 +338,7 @@ export function MageSpellEffect({ spellsRef, unitRegistry, simTimeRef }: { spell
           _obj.scale.setScalar((0.5 + t * 2.5) * (1.0 - t) * erScale);
           _obj.updateMatrix();
           crg.setMatrixAt(ci, _obj.matrix);
-          _c.set(e.color).multiplyScalar(erGlow * (1.0 - t));
+          _c.set(e.color).multiplyScalar(erGlow * 0.15 * (1.0 - t));
           crg.setColorAt(ci, _c);
           ci++;
         }
@@ -356,7 +356,7 @@ export function MageSpellEffect({ spellsRef, unitRegistry, simTimeRef }: { spell
             _obj.scale.setScalar(erScale * (1.0 - t));
             _obj.updateMatrix();
             mesh.setMatrixAt(oi, _obj.matrix);
-            _c.set(e.color).multiplyScalar(erGlow * (1.0 - t));
+            _c.set(e.color).multiplyScalar(erGlow * 0.15 * (1.0 - t));
             mesh.setColorAt(oi, _c);
             oi++;
         }
@@ -370,7 +370,7 @@ export function MageSpellEffect({ spellsRef, unitRegistry, simTimeRef }: { spell
           _obj.scale.setScalar(erScale * fade);
           _obj.updateMatrix();
           imp.setMatrixAt(ii, _obj.matrix);
-          _c.set(e.color).multiplyScalar(erGlow * fade * 5.0);
+          _c.set(e.color).multiplyScalar(erGlow * fade * 0.5);
           imp.setColorAt(ii, _c);
           ii++;
         }
@@ -385,7 +385,7 @@ export function MageSpellEffect({ spellsRef, unitRegistry, simTimeRef }: { spell
           _obj.scale.setScalar((2.5 + easeOut * 10.0) * erScale);
           _obj.updateMatrix();
           imp.setMatrixAt(ii, _obj.matrix);
-          _c.set(e.color).multiplyScalar(erGlow * fade * 2.5);
+          _c.set(e.color).multiplyScalar(erGlow * fade * 0.25);
           imp.setColorAt(ii, _c);
           ii++;
         }

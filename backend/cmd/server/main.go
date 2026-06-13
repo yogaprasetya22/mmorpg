@@ -7,7 +7,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"mmorpg-backend/internal/delivery/http"
 	"mmorpg-backend/internal/delivery/kcp"
 	"mmorpg-backend/internal/delivery/ws"
@@ -17,6 +16,8 @@ import (
 	"mmorpg-backend/internal/usecase/auth"
 	"mmorpg-backend/internal/usecase/game"
 	"mmorpg-backend/pkg/config"
+
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -77,7 +78,7 @@ func main() {
 		configHandler := http.NewConfigHandler(configRepo, db)
 
 		router := http.SetupAPIRouter(authHandler, configHandler, db)
-		
+
 		// Run API microservice on Port 8081 (default) or custom port
 		port := os.Getenv("API_PORT")
 		if port == "" {
@@ -116,19 +117,30 @@ func main() {
 	hub = ws.NewHub(gameUsecase)
 	go hub.Run()
 
-	// Register event callback to broadcast raw combat events dynamically to the Hub
+	// Register event callback to broadcast raw combat events dynamically to both WS and KCP
 	gameUsecase.SetEventCallback(func(eventType string, data interface{}) {
+		payload := map[string]interface{}{
+			"type":      eventType,
+			"timestamp": time.Now().UnixNano() / int64(time.Millisecond),
+			"data":      data,
+		}
 		if hub != nil {
-			hub.BroadcastGenericJSON(map[string]interface{}{
-				"type":      eventType,
-				"timestamp": time.Now().UnixNano() / int64(time.Millisecond),
-				"data":      data,
-			})
+			hub.BroadcastGenericJSON(payload)
+		}
+		if kcpServer != nil {
+			kcpServer.BroadcastGenericJSON(payload)
 		}
 	})
 
 	// KCP Server for fast real-time UDP synchronization
 	kcpServer = kcp.NewKCPServer(gameUsecase, authUsecase)
+
+	// Bridge KCP chat to WS Hub so KCP players can chat with WS players seamlessly
+	kcpServer.SetChatCallback(func(sender string, msg string) {
+		if hub != nil {
+			hub.BroadcastChatMessage(sender, msg)
+		}
+	})
 	kcpPort := os.Getenv("KCP_PORT")
 	if kcpPort == "" {
 		kcpPort = "9999"
@@ -138,7 +150,7 @@ func main() {
 	// Start Authoritative Real-Time Tick Loop (30Hz)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	
+
 	go gameUsecase.StartGameLoop(ctx)
 	fmt.Println("🕹️  Authoritative Fixed Tick Loop (30Hz) started.")
 
@@ -161,7 +173,7 @@ func main() {
 
 	addr := ":" + cfg.Port
 	fmt.Printf("🌐 Gateway & Game Service is running and listening on port %s\n", addr)
-	
+
 	if err := router.Run(addr); err != nil {
 		log.Fatalf("❌ Gagal menjalankan HTTP server: %v", err)
 	}

@@ -4,16 +4,17 @@ import (
 	"errors"
 	"time"
 
+	"mmorpg-backend/internal/domain"
+
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
-	"mmorpg-backend/internal/domain"
 )
 
 type AuthUsecase interface {
 	Register(username, password string) (*domain.User, error)
 	Login(username, password string) (string, *domain.User, error)
 	ValidateToken(tokenStr string) (string, error)
-	
+
 	// Character selection and creation
 	GetCharacters(userID string) ([]*domain.Player, error)
 	CreateCharacter(userID string, name string, class string, gender string, hairStyle int, hairColor string, customAvatarURL string) (*domain.Player, error)
@@ -157,7 +158,7 @@ func (u *authUsecase) CreateCharacter(userID string, name string, class string, 
 	}
 
 	playerID := generateUUID()
-	
+
 	// Create RPG character object
 	player := &domain.Player{
 		ID:              playerID,
@@ -169,99 +170,54 @@ func (u *authUsecase) CreateCharacter(userID string, name string, class string, 
 		HairColor:       hairColor,
 		CustomAvatarURL: customAvatarURL,
 		Level:           1,
-		XP:         0,
-		Gold:       200,
-		BaseSTR:    10,
-		BaseAGI:    10,
-		BaseVIT:    10,
-		BaseINT:    10,
-		BaseDEX:    10,
-		BaseLUK:    10,
-		StatPoints: 5,
-		HP:         1000,
-		MaxHP:      1000,
-		MP:         200,
-		MaxMP:      200,
-		MapName:    "Starter Zone",
-		LastX:      0,
-		LastY:      0,
-		LastZ:      0,
+		XP:              0,
+		Gold:            200,
+		BaseSTR:         10,
+		BaseAGI:         10,
+		BaseVIT:         10,
+		BaseINT:         10,
+		BaseDEX:         10,
+		BaseLUK:         10,
+		StatPoints:      5,
+		HP:              1000,
+		MaxHP:           1000,
+		MP:              200,
+		MaxMP:           200,
+		MapName:         "Starter Zone",
+		LastX:           0,
+		LastY:           0,
+		LastZ:           0,
 		Inventory: []domain.PlayerItem{
+			buildClassStarterWeapon(playerID, class),
 			{
-				ID:         playerID + "-item-1",
-				PlayerID:   playerID,
-				ItemID:     "sword_starter",
-				Name:       "Wooden Sword",
-				Type:       "equipment",
-				SlotType:   "weapon",
-				Quantity:   1,
-				IsEquipped: true,
-				SlotIndex:  0,
-				AddAttack:  15,
+				ID:        playerID + "-item-2",
+				PlayerID:  playerID,
+				ItemID:    "potion_red",
+				Name:      "Red Potion",
+				Type:      "consumable",
+				SlotIndex: 1,
+				Quantity:  5,
+				AddHP:     150,
 			},
 			{
-				ID:         playerID + "-item-2",
-				PlayerID:   playerID,
-				ItemID:     "potion_red",
-				Name:       "Red Potion",
-				Type:       "consumable",
-				SlotIndex:  1,
-				Quantity:   5,
-				AddHP:      150,
-			},
-			{
-				ID:         playerID + "-item-3",
-				PlayerID:   playerID,
-				ItemID:     "potion_blue",
-				Name:       "Blue Potion",
-				Type:       "consumable",
-				SlotIndex:  2,
-				Quantity:   5,
-				AddMP:      50,
+				ID:        playerID + "-item-3",
+				PlayerID:  playerID,
+				ItemID:    "potion_blue",
+				Name:      "Blue Potion",
+				Type:      "consumable",
+				SlotIndex: 2,
+				Quantity:  5,
+				AddMP:     50,
 			},
 		},
-		Skills: []domain.PlayerSkill{
-			{
-				ID:         playerID + "-skill-1",
-				PlayerID:   playerID,
-				SkillID:    "strike",
-				Name:       "Heavy Strike",
-				Level:      1,
-				Type:       "active",
-				ManaCost:   15,
-				MaxCD:      3.0,
-				Damage:     1.5,
-				IsUnlocked: true,
-			},
-			{
-				ID:         playerID + "-skill-2",
-				PlayerID:   playerID,
-				SkillID:    "heal",
-				Name:       "Lesser Heal",
-				Level:      1,
-				Type:       "active",
-				ManaCost:   25,
-				MaxCD:      6.0,
-				Damage:     120,
-				IsUnlocked: true,
-			},
-		},
-		Quests: []domain.PlayerQuest{
-			{
-				ID:          playerID + "-quest-1",
-				PlayerID:    playerID,
-				QuestID:     "quest_goblin",
-				Title:       "Defeat Goblins",
-				Status:      "active",
-				Progress:    0,
-				TargetCount: 3,
-				RewardGold:  100,
-				RewardXP:    150,
-			},
-		},
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
+		Skills:    buildClassSkills(playerID, class),
+		Quests:    []domain.PlayerQuest{},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
+
+	// Assign first story quest
+	player.AssignStoryQuest()
 
 	// Calculate correct class attributes
 	player.RecalculateStats()
@@ -273,6 +229,84 @@ func (u *authUsecase) CreateCharacter(userID string, name string, class string, 
 	}
 
 	return player, nil
+}
+
+// buildClassStarterWeapon returns the appropriate starter weapon for a given class
+func buildClassStarterWeapon(playerID string, class string) domain.PlayerItem {
+	switch class {
+	case "Mage":
+		return domain.PlayerItem{
+			ID: playerID + "-item-1", PlayerID: playerID,
+			ItemID: "staff_starter", Name: "Wooden Staff",
+			Type: "equipment", SlotType: "weapon", WeaponCategory: "staff",
+			Quantity: 1, IsEquipped: true, SlotIndex: 0, AddAttack: 12,
+		}
+	case "Beginner": // Archer
+		return domain.PlayerItem{
+			ID: playerID + "-item-1", PlayerID: playerID,
+			ItemID: "bow_starter", Name: "Wooden Bow",
+			Type: "equipment", SlotType: "weapon", WeaponCategory: "bow",
+			Quantity: 1, IsEquipped: true, SlotIndex: 0, AddAttack: 14,
+		}
+	case "Priest": // Tank
+		return domain.PlayerItem{
+			ID: playerID + "-item-1", PlayerID: playerID,
+			ItemID: "mace_starter", Name: "Wooden Mace",
+			Type: "equipment", SlotType: "weapon", WeaponCategory: "mace",
+			Quantity: 1, IsEquipped: true, SlotIndex: 0, AddAttack: 13,
+		}
+	case "Thief": // Assassin
+		return domain.PlayerItem{
+			ID: playerID + "-item-1", PlayerID: playerID,
+			ItemID: "dagger_starter", Name: "Wooden Dagger",
+			Type: "equipment", SlotType: "weapon", WeaponCategory: "dagger",
+			Quantity: 1, IsEquipped: true, SlotIndex: 0, AddAttack: 12,
+		}
+	default: // Warrior / Fighter
+		return domain.PlayerItem{
+			ID: playerID + "-item-1", PlayerID: playerID,
+			ItemID: "sword_starter", Name: "Wooden Sword",
+			Type: "equipment", SlotType: "weapon", WeaponCategory: "sword",
+			Quantity: 1, IsEquipped: true, SlotIndex: 0, AddAttack: 15,
+		}
+	}
+}
+
+// buildClassSkills returns class-specific skill sets for character creation
+func buildClassSkills(playerID string, class string) []domain.PlayerSkill {
+	base := []domain.PlayerSkill{
+		{ID: playerID + "-skill-heal", PlayerID: playerID, SkillID: "heal", Name: "Lesser Heal", Level: 1, Type: "active", ManaCost: 25, MaxCD: 6.0, Damage: 120, IsUnlocked: true},
+	}
+	switch class {
+	case "Warrior", "Tank":
+		return append(base,
+			domain.PlayerSkill{ID: playerID + "-skill-1", PlayerID: playerID, SkillID: "strike", Name: "Heavy Strike", Level: 1, Type: "active", ManaCost: 15, MaxCD: 3.0, Damage: 1.5, IsUnlocked: true},
+			domain.PlayerSkill{ID: playerID + "-skill-2", PlayerID: playerID, SkillID: "shield_bash", Name: "Shield Bash", Level: 1, Type: "active", ManaCost: 30, MaxCD: 8.0, Damage: 2.0, IsUnlocked: true},
+			domain.PlayerSkill{ID: playerID + "-skill-3", PlayerID: playerID, SkillID: "war_cry", Name: "War Cry", Level: 1, Type: "active", ManaCost: 40, MaxCD: 30.0, Damage: 0, IsUnlocked: true},
+		)
+	case "Mage":
+		return append(base,
+			domain.PlayerSkill{ID: playerID + "-skill-1", PlayerID: playerID, SkillID: "fireball", Name: "Fireball", Level: 1, Type: "active", ManaCost: 35, MaxCD: 4.0, Damage: 2.5, IsUnlocked: true},
+			domain.PlayerSkill{ID: playerID + "-skill-2", PlayerID: playerID, SkillID: "ice_bolt", Name: "Ice Bolt", Level: 1, Type: "active", ManaCost: 25, MaxCD: 3.0, Damage: 1.8, IsUnlocked: true},
+			domain.PlayerSkill{ID: playerID + "-skill-3", PlayerID: playerID, SkillID: "lightning", Name: "Lightning Storm", Level: 1, Type: "active", ManaCost: 50, MaxCD: 10.0, Damage: 3.0, IsUnlocked: true},
+		)
+	case "Priest":
+		return []domain.PlayerSkill{
+			{ID: playerID + "-skill-1", PlayerID: playerID, SkillID: "heal", Name: "Greater Heal", Level: 1, Type: "active", ManaCost: 30, MaxCD: 5.0, Damage: 200, IsUnlocked: true},
+			{ID: playerID + "-skill-2", PlayerID: playerID, SkillID: "blessing", Name: "Blessing", Level: 1, Type: "active", ManaCost: 45, MaxCD: 30.0, Damage: 0, IsUnlocked: true},
+			{ID: playerID + "-skill-3", PlayerID: playerID, SkillID: "holy_light", Name: "Holy Light", Level: 1, Type: "active", ManaCost: 30, MaxCD: 4.0, Damage: 2.0, IsUnlocked: true},
+		}
+	case "Thief", "Assassin":
+		return append(base,
+			domain.PlayerSkill{ID: playerID + "-skill-1", PlayerID: playerID, SkillID: "strike", Name: "Backstab", Level: 1, Type: "active", ManaCost: 20, MaxCD: 2.5, Damage: 2.0, IsUnlocked: true},
+			domain.PlayerSkill{ID: playerID + "-skill-2", PlayerID: playerID, SkillID: "poison_strike", Name: "Poison Strike", Level: 1, Type: "active", ManaCost: 25, MaxCD: 5.0, Damage: 1.5, IsUnlocked: true},
+			domain.PlayerSkill{ID: playerID + "-skill-3", PlayerID: playerID, SkillID: "stealth", Name: "Stealth", Level: 1, Type: "active", ManaCost: 35, MaxCD: 20.0, Damage: 0, IsUnlocked: true},
+		)
+	default: // Beginner
+		return append(base,
+			domain.PlayerSkill{ID: playerID + "-skill-1", PlayerID: playerID, SkillID: "strike", Name: "Heavy Strike", Level: 1, Type: "active", ManaCost: 15, MaxCD: 3.0, Damage: 1.5, IsUnlocked: true},
+		)
+	}
 }
 
 // Simple unique ID generator

@@ -14,6 +14,8 @@ export interface PlayerNetworkState {
     targetId?: string;
     hp?: number;
     maxHp?: number;
+    mp?: number;
+    maxMp?: number;
     gold?: number;
     level?: number;
     aspd?: number;
@@ -29,6 +31,7 @@ export interface MonsterNetworkState {
     id: string;
     name: string;
     type: string;
+    level?: number;
     // Flat coordinates (not nested position object) — matches new lean backend payload
     x: number;
     y: number;
@@ -39,6 +42,7 @@ export interface MonsterNetworkState {
     target_player_id?: string;
     animation?: string;
     ai_state?: string;
+    current_skill?: string;
 }
 
 export interface GameStatePayload {
@@ -85,8 +89,8 @@ export const useWebSocketGame = (
                     const data = JSON.parse(event.data);
                     if (data && data.type === "chat") {
                         onChatReceived(data.name || "Unknown", data.msg || "");
-                    } else if (data && data.type === "combat_damage_event") {
-                        window.dispatchEvent(new CustomEvent("combat_damage_event", { detail: data.data }));
+                    } else if (data && (data.type === "combat_damage_event" || data.type === "item_drop_event" || data.type === "buff_event" || data.type === "stealth_event" || data.type === "party_event")) {
+                        window.dispatchEvent(new CustomEvent(data.type, { detail: data.data }));
                     } else {
                         onStateReceived(data as GameStatePayload);
                     }
@@ -148,6 +152,18 @@ export const useWebSocketGame = (
         }
     };
 
+    // Send authoritative player skill cast actions
+    const sendPlayerSkill = (skillId: string, targetId: string) => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            const binaryData = encode({
+                action: "cast_skill",
+                skillId,
+                targetId
+            });
+            wsRef.current.send(binaryData);
+        }
+    };
+
     // Send authoritative player attribute allocation request to Go backend
     const sendDistributeStat = (stat: string, amount: number) => {
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -188,5 +204,73 @@ export const useWebSocketGame = (
         }
     };
 
-    return { sendPlayerState, sendPlayerAttack, sendDistributeStat, sendChatMessage, sendPerformanceReport };
+    // Equip an item from inventory
+    const sendEquipItem = (playerItemId: string) => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            const binaryData = encode({
+                action: "equip_item",
+                playerItemId
+            });
+            wsRef.current.send(binaryData);
+        }
+    };
+
+    // Use a consumable item (e.g. potions)
+    const sendUseItem = (playerItemId: string) => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            const binaryData = encode({
+                action: "use_item",
+                playerItemId
+            });
+            wsRef.current.send(binaryData);
+        }
+    };
+
+    // Buy an item from the shop catalogue
+    const sendBuyItem = (playerItemId: string, amount: number) => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            const binaryData = encode({
+                action: "buy_item",
+                playerItemId,
+                amount
+            });
+            wsRef.current.send(binaryData);
+        }
+    };
+
+    // Sell an item from inventory
+    const sendSellItem = (playerItemId: string) => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            const binaryData = encode({
+                action: "sell_item",
+                playerItemId
+            });
+            wsRef.current.send(binaryData);
+        }
+    };
+
+    // Refine an item (Tempa)
+    const sendRefineItem = (playerItemId: string) => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            const binaryData = encode({
+                action: "refine_item",
+                playerItemId
+            });
+            wsRef.current.send(binaryData);
+        }
+    };
+
+    return { 
+        sendPlayerState, 
+        sendPlayerAttack, 
+        sendPlayerSkill, 
+        sendDistributeStat, 
+        sendChatMessage, 
+        sendPerformanceReport,
+        sendEquipItem,
+        sendUseItem,
+        sendBuyItem,
+        sendSellItem,
+        sendRefineItem
+    };
 };

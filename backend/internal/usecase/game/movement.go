@@ -10,6 +10,15 @@ import (
 )
 
 func (u *gameUsecase) UpdatePlayerMovement(playerID string, x, y, z, rotation float32, animation string, targetID string) {
+	// Debuff enforcement: stun/freeze blocks movement updates
+	u.activePlayersMu.RLock()
+	pData, existsProfile := u.activePlayers[playerID]
+	if existsProfile && pData != nil && (pData.Debuff == "stun" || pData.Debuff == "freeze") && time.Now().Before(pData.DebuffUntil) {
+		u.activePlayersMu.RUnlock()
+		return // Block movement while stunned/frozen
+	}
+	u.activePlayersMu.RUnlock()
+
 	u.playersMu.Lock()
 	pState, exists := u.players[playerID]
 	if exists {
@@ -44,7 +53,7 @@ func (u *gameUsecase) UpdatePlayerMovement(playerID string, x, y, z, rotation fl
 
 	// Update last-known position in activePlayer (in-memory only, no DB write per frame)
 	u.activePlayersMu.Lock()
-	pData, existsProfile := u.activePlayers[playerID]
+	pData, existsProfile = u.activePlayers[playerID]
 	if existsProfile && pData != nil {
 		// Lift spawn protection early if player moves actively (>2.0 units)
 		if !pData.SpawnProtectedUntil.IsZero() && time.Now().Before(pData.SpawnProtectedUntil) {

@@ -237,6 +237,11 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
       ctx.drawImage(img, 0, 0);
       paintTexture.needsUpdate = true;
     };
+    img.onerror = (e) => {
+      console.warn("[StormEnvironment] Failed to load paintData image:", e);
+      ctx.clearRect(0, 0, 1024, 1024);
+      paintTexture.needsUpdate = true;
+    };
     img.src = paintData;
   }, [paintCanvas, paintTexture, paintData]);
 
@@ -274,6 +279,20 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
         const rValue = imgData[i * 4];
         heights[i] = ((rValue - 128) / 128) * 35; // maxDisplacement = 35 meters
       }
+      if (typeof window !== 'undefined') {
+        (window as any).sculptHeights = heights;
+      }
+      setSculptTrigger(prev => prev + 1);
+      globalIsSculptLoaded = true;
+      setIsSculptLoaded(true);
+      onSculptLoaded?.();
+    };
+    img.onerror = (e) => {
+      console.warn("[StormEnvironment] Failed to load sculptData image, falling back to flat terrain:", e);
+      ctx.fillStyle = '#808080';
+      ctx.fillRect(0, 0, 256, 256);
+      const heights = sculptHeightsRef.current;
+      heights.fill(0);
       if (typeof window !== 'undefined') {
         (window as any).sculptHeights = heights;
       }
@@ -743,19 +762,48 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
   debug?: boolean;
   onReady?: () => void;
 }) => {
+  // ── ALL hooks must be unconditionally at the top (React Rules of Hooks) ──
   const [skyLoadFailed, setSkyLoadFailed] = useState(false);
-  const weather    = useStore(s => s.weather);
-  const gameState  = useStore(s => s.gameState);
-  const isSetup    = gameState === "SETUP";
+  const weather   = useStore(s => s.weather);
+  const gameState = useStore(s => s.gameState);
+  const isSetup   = gameState === "SETUP";
   const { spawnVFX } = useVFX();
   const lightRef = useRef<THREE.DirectionalLight>(null);
   const { scene } = useThree();
 
+  // Editor store — specific selectors to minimise re-renders
+  const lightIntensity  = useEditorStore(s => s.lightIntensity);
+  const ambientIntensity = useEditorStore(s => s.ambientIntensity);
+  const sunAngle        = useEditorStore(s => s.sunAngle);
+  const fogDensity      = useEditorStore(s => s.fogDensity);
+  const skyboxIntensity = useEditorStore(s => s.skyboxIntensity);
+  const sky = useEditorStore(s => s.sky) || 'sunset';
+
+  // Derived values (memo hooks must also be unconditional)
+  const skyFile = useMemo(() => {
+    if (sky === 'night') return `${API_BASE_URL}/assets/textures/skyboxes/qwantani_night_1k.hdr`;
+    if (sky === 'sunset') return `${API_BASE_URL}/assets/textures/skyboxes/qwantani_sunset_1k.hdr`;
+    return null;
+  }, [sky]);
+
+  const sunPosition = useMemo(() => {
+    const rad = (sunAngle * Math.PI) / 180;
+    return [Math.cos(rad) * 120, 80, Math.sin(rad) * 120] as [number, number, number];
+  }, [sunAngle]);
+
+  const fogColor = sky === 'night' ? "#0b0f19" : "#c8dff0";
+
+  // Resolved background intensity (used both in JSX and useFrame)
+  const resolvedBgIntensity = skyboxIntensity !== null
+    ? skyboxIntensity
+    : (sky === 'night' ? 0.02 : 0.15);
+
   useFrame(state => {
-    // Clear global EXR reflection lighting so that only Editor-configured lights control the scene brightness
-    if (scene.environment) {
-      scene.environment = null;
-    }
+    // Sync scene background intensity to editor value every frame imperatively
+    // NOTE: Do NOT set scene.environment = null here — it fights Drei's Environment
+    //       component and causes the "Cannot commit the same tree" R3F crash.
+    scene.backgroundIntensity = resolvedBgIntensity;
+    scene.environmentIntensity = resolvedBgIntensity;
 
     PainterlyWaterMaterial.uniforms.time.value = state.clock.elapsedTime;
 
@@ -763,11 +811,11 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
       if (lightRef.current.target.parent !== scene) {
         scene.add(lightRef.current.target);
       }
-      
+
       let centerX = 0;
       let centerY = 0;
       let centerZ = 0;
-      
+
       const isEditorOpen = useEditorStore.getState().isEditorOpen;
       if (isEditorOpen) {
         centerX = state.camera.position.x;
@@ -786,39 +834,23 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
       lightRef.current.position.set(centerX + ox, centerY + 45, centerZ + oz);
       lightRef.current.target.position.set(centerX, centerY, centerZ);
       lightRef.current.target.updateMatrixWorld();
-      // REMOVED: updateProjectionMatrix() — shadow projection is static (bounds set in JSX), only position changes matter
     }
 
     if (isSetup || potatoMode) return;
     if (state.clock.elapsedTime % 0.25 < 0.025) {
       if (characterStatus && characterStatus.position) {
-          const px = characterStatus.position.x;
-          const pz = characterStatus.position.z;
-          if (weather === "CLEAR") {
-            spawnVFX([px + (Math.random()-0.5)*60, 1+Math.random()*5, pz + (Math.random()-0.5)*60], "dust-mote", "#ffffff");
-          } else if (weather === "THUNDER") {
-            spawnVFX([px + (Math.random()-0.5)*80, 0.5, pz + (Math.random()-0.5)*80], "environment-mist", "#a855f7");
-          }
+        const px = characterStatus.position.x;
+        const pz = characterStatus.position.z;
+        if (weather === "CLEAR") {
+          spawnVFX([px + (Math.random()-0.5)*60, 1+Math.random()*5, pz + (Math.random()-0.5)*60], "dust-mote", "#ffffff");
+        } else if (weather === "THUNDER") {
+          spawnVFX([px + (Math.random()-0.5)*80, 0.5, pz + (Math.random()-0.5)*80], "environment-mist", "#a855f7");
+        }
       }
     }
   });
 
-  // DISABLED: Weather rotation hidden to maintain permanent daytime
-  /*
-  useEffect(() => {
-    if (isSetup) return;
-    const cycle = () => {
-      const opts = ["CLEAR","RAIN","STORM","THUNDER"] as const;
-      setWeather(opts[Math.floor(Math.random() * opts.length)]);
-      setTimeout(cycle, 20000 + Math.random() * 30000);
-    };
-    const t = setTimeout(cycle, 60000);
-    return () => clearTimeout(t);
-  }, [setWeather, isSetup]);
-  */
-
-
-
+  // ── Conditional early return — all hooks are already registered above ──
   if (potatoMode) {
     return (
       <group>
@@ -830,31 +862,14 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
     );
   }
 
-  const { lightIntensity, ambientIntensity, sunAngle, fogDensity } = useEditorStore();
-
-  const sky = useEditorStore(s => s.sky) || 'sunset';
-
-  const skyFile = useMemo(() => {
-    if (sky === 'night') return `${API_BASE_URL}/assets/textures/skyboxes/qwantani_night_1k.hdr`;
-    if (sky === 'sunset') return `${API_BASE_URL}/assets/textures/skyboxes/qwantani_sunset_1k.hdr`;
-    return null;
-  }, [sky]);
-
-  const sunPosition = useMemo(() => {
-    const rad = (sunAngle * Math.PI) / 180;
-    // Keep a beautiful elevation of 80 units
-    return [Math.cos(rad) * 120, 80, Math.sin(rad) * 120] as [number, number, number];
-  }, [sunAngle]);
-
-  const fogColor = sky === 'night' ? "#0b0f19" : "#c8dff0";
-
   return (
     <group>
       {skyFile && !skyLoadFailed ? (
         <EnvironmentErrorBoundary onCatch={() => setSkyLoadFailed(true)}>
-          <Environment 
+          <Environment
             files={skyFile}
             background
+            backgroundIntensity={resolvedBgIntensity}
             blur={0}
           />
         </EnvironmentErrorBoundary>
@@ -864,9 +879,9 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
           <Sky sunPosition={sunPosition} />
         </>
       )}
-      <ambientLight intensity={(ambientIntensity ?? (sky === 'night' ? 0.2 : 0.8)) + 0.5} />
+      <ambientLight intensity={ambientIntensity ?? (sky === 'night' ? 0.15 : 0.45)} />
       <hemisphereLight
-        intensity={sky === 'night' ? 0.3 : 1.2}
+        intensity={sky === 'night' ? 0.1 : 0.4}
         color={sky === 'night' ? "#a5b4fc" : "#ffffff"}
         groundColor="#556677"
       />
@@ -874,7 +889,7 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
       <directionalLight
         ref={lightRef}
         position={sunPosition}
-        intensity={lightIntensity ?? (sky === 'night' ? 0.6 : 1.8)}
+        intensity={lightIntensity ?? (sky === 'night' ? 0.15 : 0.8)}
 
         castShadow
         shadow-mapSize-width={2048}
@@ -889,19 +904,19 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
         shadow-camera-bottom={-35}
       />
 
-      <Terrain 
-        baseDistance={baseDistance} 
-        debug={debug} 
-        onReady={onReady} 
-        onSculptLoaded={() => {}} 
+      <Terrain
+        baseDistance={baseDistance}
+        debug={debug}
+        onReady={onReady}
+        onSculptLoaded={() => {}}
       />
-      
+
       {/* WATER PLANE (NO COLLIDER) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.85, 0]}>
         <planeGeometry args={[1500, 1500]} />
         <primitive object={PainterlyWaterMaterial} attach="material" />
       </mesh>
-      
+
       {/* Exponential Fog for depth */}
       <fogExp2 attach="fog" args={[fogColor, fogDensity]} />
     </group>

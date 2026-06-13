@@ -39,12 +39,22 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 		return
 	}
 
+	// Debuff enforcement: stun/freeze blocks all attacks
+	if (playerData.Debuff == "stun" || playerData.Debuff == "freeze") && time.Now().Before(playerData.DebuffUntil) {
+		fmt.Printf("🧊 Player %s tidak dapat menyerang karena sedang %s!\n", playerData.Username, playerData.Debuff)
+		return
+	}
+	// Clear expired debuff
+	if playerData.Debuff != "" && !time.Now().Before(playerData.DebuffUntil) {
+		playerData.Debuff = ""
+	}
+
 	// Authoritative Attack Rate-Limiting based on dynamic ASPD (Ragnarok Renewal / New World style)
 	// Formula matches frontend: hitsPerSecond = 1 + (ASPD% / 125)
 	// With new RO Renewal ASPD scale (0-1000%), this gives 1-9 hits/sec
 	hitsPerSecond := 1.0 + (float64(playerData.ASPD) / 125.0)
 	cooldownMs := time.Duration(1000.0/hitsPerSecond) * time.Millisecond
-	buffer := 30 * time.Millisecond // Reduced buffer for more responsive combat
+	buffer := 55 * time.Millisecond // Increased buffer for high ASPD network jitter tolerance
 
 	u.activePlayersMu.Lock()
 	if !playerData.LastBasicAttackTime.IsZero() && time.Since(playerData.LastBasicAttackTime) < cooldownMs-buffer {
@@ -155,6 +165,25 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 			targetRES,
 		)
 		isCrit = isCritRaw
+
+		// Apply active buffs to damage
+		now := time.Now()
+		for i := len(playerData.Buffs) - 1; i >= 0; i-- {
+			b := &playerData.Buffs[i]
+			if now.After(b.ExpiresAt) {
+				playerData.Buffs = append(playerData.Buffs[:i], playerData.Buffs[i+1:]...)
+				continue
+			}
+			if b.Type == "war_cry" {
+				finalDamage *= (1.0 + b.Value) // +20% damage
+			}
+		}
+
+		// Stealth check: stealthed players deal 2x damage (backstab bonus)
+		if playerData.IsStealthed && now.Before(playerData.StealthUntil) {
+			finalDamage *= 2.0
+			playerData.IsStealthed = false // Break stealth on attack
+		}
 
 		// Hard cap — only apply to Boss types to prevent instant-melting
 		if monster.Type == "boss" {

@@ -73,7 +73,11 @@ export function usePlayerAnimations(
     const now = performance.now();
     if (charState[0] === 1) {
       let targetAnim = animationSet.attack;
-      if (playerClass === "Warrior" || playerClass === "Thief" || playerClass === "Beginner") {
+      if (playerClass === "Beginner") {
+        targetAnim = "Standing Draw Arrow";
+      } else if (playerClass === "Mage" || playerClass === "Priest") {
+        targetAnim = "Magic Heal";
+      } else {
         if (actions['SwordSlash']) targetAnim = 'SwordSlash';
         else if (actions['1H_Melee_Attack_Chop']) targetAnim = '1H_Melee_Attack_Chop';
       }

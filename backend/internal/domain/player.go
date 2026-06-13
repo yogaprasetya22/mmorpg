@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+// ActiveBuff represents a temporary in-memory buff on a player
+type ActiveBuff struct {
+	Type      string    `json:"type"`  // "war_cry", "blessing", etc.
+	Value     float32   `json:"value"` // Buff magnitude
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
 // Player represents a persistent game character
 type Player struct {
 	ID       string `json:"id" gorm:"primaryKey"`
@@ -16,9 +23,9 @@ type Player struct {
 	Password string `json:"-" gorm:"default:''"`
 
 	// Customization & Class
-	Class     string `json:"class" gorm:"default:'Beginner'"` // Beginner, Warrior, Mage, Priest, Thief
-	Gender    string `json:"gender" gorm:"default:'Male'"`
-	HairStyle int    `json:"hair_style" gorm:"default:1"`
+	Class           string `json:"class" gorm:"default:'Beginner'"` // Beginner, Warrior, Mage, Priest, Thief
+	Gender          string `json:"gender" gorm:"default:'Male'"`
+	HairStyle       int    `json:"hair_style" gorm:"default:1"`
 	HairColor       string `json:"hair_color" gorm:"default:'#5A3E2D'"`
 	CustomAvatarURL string `json:"custom_avatar_url" gorm:"default:''"` // URL to baked GLB from Avatar Configurator
 
@@ -105,13 +112,23 @@ type Player struct {
 	CRatePlus int `json:"c_rate" gorm:"-"`
 
 	// RO Substats (In-Memory)
-	HIT          int     `json:"hit" gorm:"-"`
-	FLEE         int     `json:"flee" gorm:"-"`
-	PerfectDodge float32 `json:"perfect_dodge" gorm:"-"`
-	CastTime     float32 `json:"cast_time" gorm:"-"` // Cast speed multiplier (0.0 to 1.0)
-	Debuff       string    `json:"debuff" gorm:"-"`
-	DebuffUntil  time.Time `json:"-" gorm:"-"`
+	HIT               int       `json:"hit" gorm:"-"`
+	FLEE              int       `json:"flee" gorm:"-"`
+	PerfectDodge      float32   `json:"perfect_dodge" gorm:"-"`
+	CastTime          float32   `json:"cast_time" gorm:"-"` // Cast speed multiplier (0.0 to 1.0)
+	Debuff            string    `json:"debuff" gorm:"-"`
+	DebuffUntil       time.Time `json:"-" gorm:"-"`
 	DebuffImmuneUntil time.Time `json:"-" gorm:"-"`
+
+	// Active Buffs (in-memory only, not persisted)
+	Buffs []ActiveBuff `json:"buffs" gorm:"-"`
+
+	// Stealth state (in-memory only)
+	IsStealthed  bool      `json:"is_stealthed" gorm:"-"`
+	StealthUntil time.Time `json:"-" gorm:"-"`
+
+	// Party membership (in-memory only)
+	PartyID string `json:"party_id" gorm:"-"`
 
 	// Map Coordinate Persistence
 	MapName string  `json:"map_name" gorm:"default:'Starter Zone'"`
@@ -216,10 +233,10 @@ func (p *Player) RecalculateStats() {
 	p.CRT = p.BaseCRT + p.BonusCRT
 
 	// Compute Talent Stats Substat Amplifications
-	p.PATK = p.POW * 1 + p.CON * 1
-	p.SMATK = p.SPL * 1 + p.CON * 1
-	p.RES = p.STA * 1 + (p.STA / 10) * 5
-	p.MRES = p.WIS * 1 + (p.WIS / 10) * 5
+	p.PATK = p.POW*1 + p.CON*1
+	p.SMATK = p.SPL*1 + p.CON*1
+	p.RES = p.STA*1 + (p.STA/10)*5
+	p.MRES = p.WIS*1 + (p.WIS/10)*5
 	p.HRatePlus = p.CRT * 1
 	p.CRatePlus = p.CRT * 1
 
@@ -354,6 +371,21 @@ func (p *Player) RecalculateStats() {
 			p.MaxMP += item.AddMP
 			p.Attack += item.AddAttack
 			p.Defense += item.AddDefense
+
+			// Apply Refinement System (Tempa) Bonuses
+			if item.RefineLevel > 0 {
+				level := float32(item.RefineLevel)
+				if item.SlotType == "weapon" {
+					p.Attack += level * 8.0
+					p.MagicAttack += level * 8.0
+					// Add physical and magic attack amplifications
+					p.PATK += int(level)
+					p.SMATK += int(level)
+				} else {
+					p.Defense += level * 4.0
+					p.MaxHP += level * 15.0
+				}
+			}
 		}
 	}
 

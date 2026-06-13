@@ -33,7 +33,7 @@ const GroundCrackMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
             float dist = length(vUv - 0.5);
             // Golden pulsing intensity
             float pulse = 0.8 + 0.5 * sin(uTime * 8.0 - dist * 10.0);
-            vec3 goldenGlow = vColor * pulse * 5.0;
+            vec3 goldenGlow = vColor * pulse * 1.2;
             gl_FragColor = vec4(goldenGlow * tex.rgb, tex.a * smoothstep(0.5, 0.2, dist));
             // OPTIMIZATION: Discard aggressively to save fill-rate on low-end GPUs
             if (gl_FragColor.a < 0.15) discard;
@@ -70,7 +70,7 @@ const ForceFieldMat = () => new THREE.ShaderMaterial({
             float pulse = 0.5 + 0.5 * sin(uTime * 5.0);
             vec3 goldenColor = vec3(0.98, 0.72, 0.12);
             
-            vec3 finalGlow = goldenColor * (intensity * 4.5 + grid * 2.0) * (0.8 + 0.2 * pulse);
+            vec3 finalGlow = goldenColor * (intensity * 1.5 + grid * 0.8) * (0.8 + 0.2 * pulse);
             gl_FragColor = vec4(finalGlow, intensity * 0.7 + grid * 0.4);
             if (gl_FragColor.a < 0.05) discard;
         }
@@ -206,7 +206,7 @@ export function TankSpellEffect({
                     _obj.scale.setScalar(v.scale * (0.8 + rt * 0.5));
                     _obj.updateMatrix();
                     crackRef.current.setMatrixAt(cn, _obj.matrix);
-                    _col.set(v.color).multiplyScalar(4.0 * ease);
+                    _col.set(v.color).multiplyScalar(0.8 * ease);
                     crackRef.current.setColorAt(cn, _col);
                     cn++;
                 }
@@ -219,7 +219,7 @@ export function TankSpellEffect({
                     _obj.scale.setScalar(v.scale * (1.0 + rt * 1.5));
                     _obj.updateMatrix();
                     dustRef.current.setMatrixAt(dn, _obj.matrix);
-                    _col.set(v.color).multiplyScalar(1.5 * ease);
+                    _col.set(v.color).multiplyScalar(0.3 * ease);
                     dustRef.current.setColorAt(dn, _col);
                     dn++;
                 }

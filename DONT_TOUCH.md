@@ -26,6 +26,11 @@
 | 14 | WS Hub Sync Fan-Out (Non-Blocking) | `hub.go` | Goroutine explosion, memory leak | [Stage 7: Network Sync Protocol](wiki/architecture/07_network_sync_protocol.md) |
 | 15 | Monster Leash & Respawn Logic | `monster_ai.go` | Monster exploit, health reset failure | [Stage 2: Backend Combat Usecase](wiki/architecture/02_backend_combat.md) |
 | 16 | AdaptivePerformanceOptimizer | `AdaptivePerformanceOptimizer.tsx` | Bloom/shadow tidak mati saat FPS drop | [Stage 4: Frontend Combat UI](wiki/architecture/04_frontend_combat_ui.md) |
+| 17 | Locomotion Root Motion Stripping | `AvatarModel.tsx` | Animation snap-back / teleport glitch | [Stage 9: Animation System](wiki/architecture/09_animation_system.md) |
+| 18 | Two-Layer Rotation System | `PlayerController.tsx`, `usePlayerTargeting.ts` | Character faces wrong direction | [Stage 9: Animation System](wiki/architecture/09_animation_system.md) |
+| 19 | Zero-Re-Render Architecture | `RemotePlayersRenderer.tsx`, `AvatarModel.tsx` | React reconciliation storm (500+ re-renders/sec) | [Stage 10: Performance](wiki/architecture/10_performance_optimization.md) |
+| 20 | Terrain Height Spatial Cache | `terrainCache.ts`, both remote renderers | 1,680 BVH raycasts/sec → FPS drop | [Stage 10: Performance](wiki/architecture/10_performance_optimization.md) |
+| 21 | Exponential Smoothing Interpolation | `RemotePlayersRenderer.tsx` | Object allocation storm (560 alloc/sec) | [Stage 10: Performance](wiki/architecture/10_performance_optimization.md) |
 
 ---
 
@@ -453,6 +458,130 @@ Berikut area yang **AMAN** untuk ditambah, diubah, atau di-refactor:
 
 ---
 
+## 🔴 ZONA MERAH TAMBAHAN — Sistem Baru yang Kritis
+
+### 17. 🎬 Locomotion Root Motion Stripping
+
+**File:** `frontend/src/components/game/avatar/AvatarModel.tsx`
+```typescript
+// Locomotion clips: STRIP root Hips tracks entirely
+if (isLocomotion) {
+  clip.tracks = clip.tracks.filter((t) => {
+    if (t.name === "mixamorigHips.position" || t.name === "mixamorig:Hips.position") return false;
+    if (t.name === "mixamorigHips.quaternion" || t.name === "mixamorig:Hips.quaternion") return false;
+    if (t.name.startsWith("Armature.")) return false;
+    return true;
+  });
+}
+```
+
+**Jangan:**
+- Keep Hips position tracks on locomotion clips — causes snap-back teleport on loop
+- Keep Hips rotation tracks on locomotion clips — fights BVHEcctrl's rotation
+- Apply root motion stripping to combat/death clips — they need root rotation for dramatic effect
+- Remove the `LOCOMOTION_CLIPS` set — it controls which clips get stripped
+
+**Alasan:** Mixamo FBX locomotion clips contain forward hip displacement. When the clip loops, position snaps back to origin causing visible "teleport backward". BVHEcctrl handles all world-space movement, so root tracks are redundant and harmful.
+
+---
+
+### 18. 🧭 Two-Layer Rotation System
+
+**Files:** `PlayerController.tsx`, `player/usePlayerTargeting.ts`
+```
+BVHEcctrl "Model" group (PARENT)   ← Movement rotation + Idle camera-facing slerp
+  └─ characterRef group (CHILD)    ← Attack target rotation (temporary, reset after attack)
+       └─ AvatarModel (Armature)   ← Bone animations
+```
+
+**Jangan:**
+- Rotate `characterRef` (child) when NOT attacking — compounds with parent, causes offset
+- Rotate `ecctrlRef.current.model` (parent) during attack — fights BVHEcctrl
+- Use `lookAt` for idle rotation — use `atan2(-camDir.z, camDir.x)` + `setFromAxisAngle` for pure Y quaternion
+- Forget to reset `characterRef.current.rotation.y` to 0 after attack — accumulated rotation persists
+
+**Child rotation reset (WAJIB ada saat charState[0] === 0):**
+```typescript
+if (charState[0] === 0 && characterRef.current) {
+  const childRotY = characterRef.current.rotation.y;
+  if (Math.abs(childRotY) > 0.001) {
+    characterRef.current.rotation.y += (0 - childRotY) * (1 - Math.exp(-12.0 * delta));
+  }
+}
+```
+
+**Alasan:** `usePlayerTargeting.ts` adds to `characterRef.rotation.y` every frame during attack to face the target. This accumulated rotation is NEVER automatically reset. Without the explicit lerp-to-zero, the child rotation compounds with the parent's idle slerp, causing the character to face the wrong direction.
+
+---
+
+### 19. 🚀 Zero-Re-Render Architecture
+
+**Files:** `RemotePlayersRenderer.tsx`, `AvatarModel.tsx`
+```typescript
+// Per-frame values: useRef ONLY, never useState
+const poseRef = useRef("Idle");
+const timeScaleRef = useRef(1.0);
+const avatarControlRef = useRef<AvatarHandle>(null);
+
+// Animation changes via imperative handle (zero React involvement)
+avatarControlRef.current?.setPose(nextPose);
+avatarControlRef.current?.setTimeScale(nextTimeScale);
+```
+
+**Jangan:**
+- Convert `poseRef`, `timeScaleRef`, or `animPausedRef` back to `useState` — triggers re-render storm
+- Remove `skipAnimControl` prop from remote AvatarModel — internal useEffect would fight imperative control
+- Remove the `AvatarHandle` imperative interface — it's the bridge for zero-re-render control
+- Add React state for any value that changes more than once per second per player
+
+**Alasan:** With 20 players, each `useState` for pose/timescale causes ~180 React re-renders/sec. Each re-render traverses AvatarModel → 8 AvatarAsset children. The imperative handle bypasses React entirely, updating Three.js AnimationAction objects directly.
+
+---
+
+### 20. 🗺️ Terrain Height Spatial Cache
+
+**File:** `frontend/src/core/utils/terrainCache.ts`
+```typescript
+export function getCachedTerrainHeight(x, z, fallback) {
+  const key = `${Math.round(x)},${Math.round(z)}`;
+  const entry = cache.get(key);
+  if (entry && performance.now() - entry.t < TTL_MS) return entry.h;
+  const h = fallback();
+  cache.set(key, { h, t: performance.now() });
+  return h;
+}
+```
+
+**Jangan:**
+- Call raw `getGroundHeight()` or `getTerrainElevation()` directly in entity useFrame — always go through cache
+- Reduce TTL below 1 second — terrain sculpt changes need to propagate
+- Increase GRID above 2 metres — loses precision for steep slopes
+- Remove the MAX_ENTRIES cap — prevents unbounded memory growth
+
+**Alasan:** Without cache, 28 entities × 60fps = 1,680 BVH raycasts/sec. Each raycast is O(log N) tree traversal. The cache reduces this to ~20 lookups/sec (only on cache miss when entity moves to new grid cell).
+
+---
+
+### 21. 📐 Exponential Smoothing Interpolation
+
+**File:** `RemotePlayersRenderer.tsx`
+```typescript
+// Replaces buffer-based interpolation (zero allocation)
+const SMOOTH_TAU = 0.08; // converges ~90% in 160ms
+const factor = 1 - Math.exp(-delta / SMOOTH_TAU);
+smoothPos.current.x += (targetX - smoothPos.current.x) * factor;
+```
+
+**Jangan:**
+- Reintroduce the state buffer array (`stateBufferRef`) — causes 560 object allocations/sec
+- Use `array.push()` + `array.shift()` for network interpolation — GC pressure
+- Change `SMOOTH_TAU` below 0.04 — too snappy, exposes 20Hz network jitter
+- Change `SMOOTH_TAU` above 0.15 — too laggy, 300ms+ perceived delay
+
+**Alasan:** The old buffer system allocated `{x, y, z, rotation, timestamp}` objects every network update (20Hz × 28 entities = 560/sec) plus `array.shift()` GC. Exponential smoothing achieves the same 160ms convergence with zero allocations.
+
+---
+
 ## 🔍 Quick Reference: Simbol Error → Penyebab
 
 | Error di Console | Penyebab Paling Mungkin |
@@ -466,6 +595,11 @@ Berikut area yang **AMAN** untuk ditambah, diubah, atau di-refactor:
 | Character slideshow / rubberband | Send rate player dinaikkan / dedup dimatikan |
 | Server hang saat 100+ monster aktif | Lock mutex ditambah ke monster FSM, atau loop O(N) aggro dikembalikan |
 | Game client mati total saat load | MessagePack decoder dipindah ke Web Worker CDN |
+| Character "teleport backward" saat loop lari | Hips position track tidak di-strip dari locomotion clip |
+| Character menghadap arah salah setelah attack | `characterRef.rotation.y` tidak di-reset ke 0 setelah `charState[0]` jadi 0 |
+| FPS drop ke 33 dengan 20 player | `useState` dipakai untuk pose/timescale (harus `useRef` + imperative handle) |
+| Monster raycast FPS drop | `getGroundHeight` dipanggil langsung tanpa `getCachedTerrainHeight` |
+| Remote player movement tersendat | Buffer interpolation (`stateBufferRef`) dipakai — ganti exponential smoothing |
 
 ---
 
@@ -474,4 +608,4 @@ Berikut area yang **AMAN** untuk ditambah, diubah, atau di-refactor:
 
 ---
 
-*Dokumen ini diperbarui per: 2026-05-27. Referensi lengkap: [README.md](README.md) · [SKILL.md](SKILL.md)*
+*Dokumen ini diperbarui per: 2026-06-10. Referensi lengkap: [README.md](wiki/architecture/README.md) · [SKILL.md](SKILL.md)*

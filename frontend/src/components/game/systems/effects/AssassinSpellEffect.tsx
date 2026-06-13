@@ -36,7 +36,7 @@ const ShadowBurstMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
             float dist = length(vUv - 0.5);
             // Inverting and boosting for a shadow-kinetic look
             vec3 shadow = mix(vColor * 0.2, vec3(1.0), tex.r);
-            gl_FragColor = vec4(shadow * 8.0 * tex.rgb, tex.a * smoothstep(0.5, 0.2, dist));
+            gl_FragColor = vec4(shadow * 1.5 * tex.rgb, tex.a * smoothstep(0.5, 0.2, dist));
             if (gl_FragColor.a < 0.05) discard;
         }
     `,
@@ -67,8 +67,8 @@ const LuxuriousCritMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
         void main() {
             vec4 tex = texture2D(tDiffuse, vUv);
             // Ultra-bright intensity
-            float bright = pow(tex.r, 2.5) * 5.0;
-            vec3 finalCol = mix(vColor * 6.0, vec3(2.0), bright);
+            float bright = pow(tex.r, 2.5) * 1.2;
+            vec3 finalCol = mix(vColor * 1.5, vec3(2.0), bright);
             gl_FragColor = vec4(finalCol * tex.rgb, tex.a * 0.95);
             if (gl_FragColor.a < 0.04) discard;
         }
@@ -134,7 +134,7 @@ export function AssassinSpellEffect({ assassinSpellsRef, simTimeRef }: { assassi
                     _obj.scale.setScalar((4.0 + t * 8.0) * ease * rScale);
                     _obj.updateMatrix();
                     bMesh.setMatrixAt(bn, _obj.matrix);
-                    _col.set('#4400ff').multiplyScalar(ease * rGlow * 1.5);
+                    _col.set('#4400ff').multiplyScalar(ease * rGlow * 0.2);
                     bMesh.setColorAt(bn, _col);
                     bn++;
                 }
@@ -149,7 +149,7 @@ export function AssassinSpellEffect({ assassinSpellsRef, simTimeRef }: { assassi
                     _obj.scale.setScalar(sc);
                     _obj.updateMatrix();
                     mesh.setMatrixAt(n, _obj.matrix);
-                    _col.set(s.color || '#FFFF00').multiplyScalar(ease * rGlow);
+                    _col.set(s.color || '#FFFF00').multiplyScalar(ease * rGlow * 0.15);
                     mesh.setColorAt(n, _col);
                     n++;
                 }
@@ -162,7 +162,7 @@ export function AssassinSpellEffect({ assassinSpellsRef, simTimeRef }: { assassi
                     _obj.scale.setScalar((2.0 + t * 5.0) * ease * 2.0 * rScale);
                     _obj.updateMatrix();
                     sMesh.setMatrixAt(sn, _obj.matrix);
-                    _col.set('#ffffff').multiplyScalar(ease * rGlow * 0.6);
+                    _col.set('#ffffff').multiplyScalar(ease * rGlow * 0.1);
                     sMesh.setColorAt(sn, _col);
                     sn++;
                 }

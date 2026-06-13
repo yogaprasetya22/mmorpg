@@ -3,25 +3,28 @@ package domain
 // PlayerNetworkState is the minimal real-time position + status snapshot sent to all clients.
 // Only contains fields the renderer needs — keeps msgpack payload small.
 type PlayerNetworkState struct {
-	ID        string  `json:"id" msgpack:"id"`
-	X         float32 `json:"x" msgpack:"x"`
-	Y         float32 `json:"y" msgpack:"y"`
-	Z         float32 `json:"z" msgpack:"z"`
-	Rotation  float32 `json:"rotation" msgpack:"rotation"`
-	Animation string  `json:"animation" msgpack:"animation"`
-	Class     string  `json:"class" msgpack:"class"`
-	Gender    string  `json:"gender" msgpack:"gender"`
-	Username  string  `json:"username" msgpack:"username"`
-	TargetID  string  `json:"targetId" msgpack:"targetId"`
-	HP        float32 `json:"hp" msgpack:"hp"`
-	MaxHP     float32 `json:"maxHp" msgpack:"maxHp"`
-	Gold      int     `json:"gold" msgpack:"gold"`
-	Level     int     `json:"level" msgpack:"level"`
-	ASPD      float32 `json:"aspd" msgpack:"aspd"`
-	XP        int     `json:"xp" msgpack:"xp"`
-	CustomAvatarURL string `json:"custom_avatar_url" msgpack:"custom_avatar_url"`
-	HairStyle       int    `json:"hair_style" msgpack:"hair_style"`
-	HairColor       string `json:"hair_color" msgpack:"hair_color"`
+	ID              string  `json:"id" msgpack:"id"`
+	X               float32 `json:"x" msgpack:"x"`
+	Y               float32 `json:"y" msgpack:"y"`
+	Z               float32 `json:"z" msgpack:"z"`
+	Rotation        float32 `json:"rotation" msgpack:"rotation"`
+	Animation       string  `json:"animation" msgpack:"animation"`
+	Class           string  `json:"class" msgpack:"class"`
+	Gender          string  `json:"gender" msgpack:"gender"`
+	Username        string  `json:"username" msgpack:"username"`
+	TargetID        string  `json:"targetId" msgpack:"targetId"`
+	HP              float32 `json:"hp" msgpack:"hp"`
+	MaxHP           float32 `json:"maxHp" msgpack:"maxHp"`
+	MP              float32 `json:"mp" msgpack:"mp"`
+	MaxMP           float32 `json:"maxMp" msgpack:"maxMp"`
+	Gold            int     `json:"gold" msgpack:"gold"`
+	Level           int     `json:"level" msgpack:"level"`
+	ASPD            float32 `json:"aspd" msgpack:"aspd"`
+	XP              int     `json:"xp" msgpack:"xp"`
+	CustomAvatarURL string  `json:"custom_avatar_url" msgpack:"custom_avatar_url"`
+	HairStyle       int     `json:"hair_style" msgpack:"hair_style"`
+	HairColor       string  `json:"hair_color" msgpack:"hair_color"`
+	EquippedWeaponCategory string `json:"equipped_weapon_category" msgpack:"equipped_weapon_category"` // sword, bow, staff, dagger, mace
 
 	// Talent Stats
 	BasePOW      int `json:"base_pow" msgpack:"base_pow"`
@@ -70,6 +73,7 @@ type MonsterNetworkState struct {
 	ID             string  `json:"id" msgpack:"id"`
 	Name           string  `json:"name" msgpack:"name"`
 	Type           string  `json:"type" msgpack:"type"`
+	Level          int     `json:"level" msgpack:"level"`
 	X              float32 `json:"x" msgpack:"x"`
 	Y              float32 `json:"y" msgpack:"y"`
 	Z              float32 `json:"z" msgpack:"z"`
@@ -79,6 +83,7 @@ type MonsterNetworkState struct {
 	TargetPlayerID string  `json:"target_player_id" msgpack:"target_player_id"`
 	Animation      string  `json:"animation" msgpack:"animation"`
 	AIState        string  `json:"ai_state" msgpack:"ai_state"`
+	CurrentSkill   string  `json:"current_skill" msgpack:"current_skill"` // Active skill being cast/used
 }
 
 // GameStatePayload is the full world snapshot broadcast to every connected client each tick.

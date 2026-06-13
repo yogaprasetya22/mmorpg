@@ -6,7 +6,7 @@ export interface GameChatRef {
 
 export interface PlayerStatsHUDRef {
   updateStats: (stats: any) => void;
-  updateHpMp: (hp: number, maxHp: number) => void;
+  updateHpMp: (hp: number, maxHp: number, mp?: number, maxMp?: number) => void;
   getStats: () => any;
 }
 
@@ -70,6 +70,8 @@ export interface ArenaGameState {
   // Modals
   showStatsModal: boolean;
   setShowStatsModal: (v: boolean) => void;
+  showInventoryModal: boolean;
+  setShowInventoryModal: (v: boolean) => void;
   showEnemyEditorModal: boolean;
   setShowEnemyEditorModal: (v: boolean) => void;
   monsterConfigs: any[];

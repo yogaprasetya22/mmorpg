@@ -29,6 +29,8 @@ export const Minimap: React.FC<MinimapProps> = ({
 
     const monsterDots: HTMLDivElement[] = [];
     const playerDots: HTMLDivElement[] = [];
+    // Track last assigned type per dot to skip redundant className writes
+    const monsterDotTypes: string[] = new Array(maxMonsters).fill('');
 
     const dotsContainer = dotsContainerRef.current;
     if (dotsContainer) {
@@ -102,11 +104,20 @@ export const Minimap: React.FC<MinimapProps> = ({
             el.style.display = "block";
 
             // Stylize based on type: larger pulsating dot for legendary Boss
-            if (m.type === "boss") {
-              el.className = "absolute w-3 h-3 rounded-full bg-rose-600 border border-yellow-300 shadow-[0_0_12px_rgba(225,29,72,0.9)] animate-pulse z-30 pointer-events-auto cursor-help";
+            // Only update className when type actually changes (avoids CSS re-parse)
+            const isBoss = m.type === "boss";
+            const typeKey = isBoss ? 'boss' : 'normal';
+            if (monsterDotTypes[monsterIdx] !== typeKey) {
+              monsterDotTypes[monsterIdx] = typeKey;
+              if (isBoss) {
+                el.className = "absolute w-3 h-3 rounded-full bg-rose-600 border border-yellow-300 shadow-[0_0_12px_rgba(225,29,72,0.9)] animate-pulse z-30 pointer-events-auto cursor-help";
+              } else {
+                el.className = "absolute w-2 h-2 rounded-full bg-rose-500 border border-black/80 shadow-[0_0_5px_rgba(244,63,94,0.7)] z-10 pointer-events-auto cursor-help";
+              }
+            }
+            if (isBoss) {
               el.title = `👑 ${m.name} (Lvl 50 Boss) - HP: ${Math.round(m.hp)}/${m.max_hp}`;
             } else {
-              el.className = "absolute w-2 h-2 rounded-full bg-rose-500 border border-black/80 shadow-[0_0_5px_rgba(244,63,94,0.7)] z-10 pointer-events-auto cursor-help";
               el.title = `${m.name} (Lvl 15) - HP: ${Math.round(m.hp)}/${m.max_hp}`;
             }
 

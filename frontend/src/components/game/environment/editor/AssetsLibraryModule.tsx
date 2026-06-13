@@ -1,13 +1,47 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useGLTF } from '@react-three/drei';
+import React, { useState, Suspense, useMemo, useRef } from 'react';
+import { useGLTF, Center, View } from '@react-three/drei';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { useInView } from 'react-intersection-observer';
 import { Search, Package } from 'lucide-react';
+import * as THREE from 'three';
 import { useEditorStore, ASSET_LIBRARY } from '@/src/state/useEditorStore';
 import { FULL_MATERIAL_LIBRARY } from '@/src/core/logic/environment/assetRegistry';
 
-// ─── GPU-FREE VECTOR THUMBNAIL COMPONENT ───
+// ─── 3D GLB MODEL VIEWER COMPONENT ───
+const ModelViewer = ({ path }: { path: string }) => {
+  const { scene } = useGLTF(path);
+  const cloned = useMemo(() => scene.clone(), [scene]);
+  const groupRef = useRef<THREE.Group>(null);
+  
+  const box = useMemo(() => {
+    return new THREE.Box3().setFromObject(cloned);
+  }, [cloned]);
+
+  const scale = useMemo(() => {
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z);
+    return maxDim > 0 ? 1.6 / maxDim : 1;
+  }, [box]);
+
+  useFrame((state) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y = state.clock.getElapsedTime() * 0.5;
+    }
+  });
+
+  return (
+    <group ref={groupRef}>
+      <Center>
+        <primitive object={cloned} scale={[scale, scale, scale]} />
+      </Center>
+    </group>
+  );
+};
+
+// ─── ASSET CARD COMPONENT ───
 const AssetCard = React.memo(({ asset, isActive, onClick }: { asset: any, isActive: boolean, onClick: () => void }) => {
   const { ref, inView } = useInView({
     triggerOnce: false,
@@ -18,6 +52,7 @@ const AssetCard = React.memo(({ asset, isActive, onClick }: { asset: any, isActi
   const nameLower = (asset.name || '').toLowerCase();
   
   const getThumbnailContent = () => {
+    // Material textures use image previews
     if (asset.diffuse) {
       return (
         <img 
@@ -69,8 +104,18 @@ const AssetCard = React.memo(({ asset, isActive, onClick }: { asset: any, isActi
     >
       {inView ? (
         <>
-          <div className="aspect-square w-full bg-zinc-950 rounded flex items-center justify-center relative shadow-inner">
-            {getThumbnailContent()}
+          <div className="aspect-square w-full bg-zinc-950 rounded flex items-center justify-center relative shadow-inner overflow-hidden">
+            {inView && asset.path ? (
+              <Suspense fallback={getThumbnailContent()}>
+                <View className="w-full h-full">
+                  <ambientLight intensity={1.5} />
+                  <directionalLight position={[3, 3, 3]} intensity={2.0} />
+                  <ModelViewer path={asset.path} />
+                </View>
+              </Suspense>
+            ) : (
+              getThumbnailContent()
+            )}
             <div className="absolute inset-0 bg-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
           </div>
           <span className={`text-[8px] font-mono tracking-tighter truncate w-full px-0.5 text-center ${isActive ? 'text-white font-extrabold' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
@@ -87,6 +132,7 @@ const AssetCard = React.memo(({ asset, isActive, onClick }: { asset: any, isActi
 AssetCard.displayName = 'AssetCard';
 
 export const AssetsLibraryModule = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
   const {
     activeAsset,
     setActiveAsset,
@@ -107,7 +153,7 @@ export const AssetsLibraryModule = () => {
       });
 
   return (
-    <div className="flex flex-col gap-3 font-mono text-[9px]">
+    <div ref={containerRef} className="relative flex flex-col gap-3 font-mono text-[9px] h-full">
       
       {/* Category selector */}
       <div className="grid grid-cols-3 gap-1 p-0.5 bg-zinc-950 border border-zinc-850 rounded">
@@ -167,6 +213,15 @@ export const AssetsLibraryModule = () => {
         </span>
         <span className="text-white font-bold">{filteredAssets.length} nodes</span>
       </div>
+
+      {/* Local Canvas for rendering views */}
+      <Canvas 
+        eventSource={containerRef as any}
+        className="pointer-events-none absolute inset-0 z-10"
+        gl={{ antialias: true }}
+      >
+        <View.Port />
+      </Canvas>
 
     </div>
   );

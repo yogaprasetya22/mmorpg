@@ -1,6 +1,7 @@
 /** Admin CRUD modal for server monster configuration management. */
 'use client';
 
+import { useEffect } from 'react';
 import { Skull, X } from 'lucide-react';
 
 interface MonsterEditorModalProps {
@@ -19,6 +20,13 @@ export function MonsterEditorModal({
   errorMsg, successMsg, onClose,
   handleSaveMonsterConfig, handleDeleteMonsterConfig
 }: MonsterEditorModalProps) {
+  useEffect(() => {
+    document.body.classList.add('modal-open');
+    return () => {
+      document.body.classList.remove('modal-open');
+    };
+  }, []);
+
   const handleClose = () => {
     onClose();
     setEditingMonster(null);

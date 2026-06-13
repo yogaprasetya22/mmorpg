@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"mmorpg-backend/internal/domain"
+
 	"github.com/gorilla/websocket"
 	"github.com/vmihailenco/msgpack/v5"
 )
@@ -52,12 +54,12 @@ type Client struct {
 }
 
 type WSIncomingMessage struct {
-	Action   string  `json:"action" msgpack:"action"` // "move", "attack", "distribute_stat", "equip_item", "use_item", "cast_skill", "change_class", "telemetry_performance"
-	X        float64 `json:"x" msgpack:"x"`
-	Y        float64 `json:"y" msgpack:"y"`
-	Z        float64 `json:"z" msgpack:"z"`
-	Rotation float64 `json:"rotation" msgpack:"rotation"`
-	Animation string `json:"animation" msgpack:"animation"`
+	Action    string  `json:"action" msgpack:"action"` // "move", "attack", "distribute_stat", "equip_item", "use_item", "cast_skill", "change_class", "telemetry_performance"
+	X         float64 `json:"x" msgpack:"x"`
+	Y         float64 `json:"y" msgpack:"y"`
+	Z         float64 `json:"z" msgpack:"z"`
+	Rotation  float64 `json:"rotation" msgpack:"rotation"`
+	Animation string  `json:"animation" msgpack:"animation"`
 
 	TargetType string  `json:"targetType" msgpack:"targetType"` // "monster", "player"
 	TargetID   string  `json:"targetId" msgpack:"targetId"`
@@ -131,10 +133,28 @@ func (c *Client) ReadPump() {
 			c.Hub.gameUsecase.EquipPlayerItem(c.PlayerID, msg.PlayerItemID)
 		case "use_item":
 			c.Hub.gameUsecase.UseConsumable(c.PlayerID, msg.PlayerItemID)
+		case "refine_item":
+			if err := c.Hub.gameUsecase.RefineItem(c.PlayerID, msg.PlayerItemID); err != nil {
+				fmt.Printf("⚠️ [WS] Refine failed for %s: %v\n", c.Username, err)
+			}
 		case "cast_skill":
 			c.Hub.gameUsecase.CastPlayerSkill(c.PlayerID, msg.SkillID, msg.TargetID)
 		case "change_class":
 			c.Hub.gameUsecase.ChangeClass(c.PlayerID, msg.NewClass)
+		case "buy_item":
+			if err := c.Hub.gameUsecase.BuyItem(c.PlayerID, msg.PlayerItemID, msg.Amount); err != nil {
+				fmt.Printf("⚠️ [WS] Buy failed for %s: %v\n", c.Username, err)
+			}
+		case "sell_item":
+			if err := c.Hub.gameUsecase.SellItem(c.PlayerID, msg.PlayerItemID); err != nil {
+				fmt.Printf("⚠️ [WS] Sell failed for %s: %v\n", c.Username, err)
+			}
+		case "create_party":
+			c.Hub.gameUsecase.CreateParty(c.PlayerID)
+		case "invite_party":
+			c.Hub.gameUsecase.InviteToParty(c.PlayerID, msg.TargetID)
+		case "leave_party":
+			c.Hub.gameUsecase.LeaveParty(c.PlayerID)
 		case "chat":
 			if strings.HasPrefix(msg.Msg, "/reload") || strings.HasPrefix(msg.Msg, "/sync") {
 				err := c.Hub.gameUsecase.SyncPlayerStatsFromDB(c.PlayerID)
@@ -142,6 +162,58 @@ func (c *Client) ReadPump() {
 					c.Hub.BroadcastChatMessage("Server", fmt.Sprintf("❌ Gagal sinkronisasi data database untuk %s: %v", c.Username, err))
 				} else {
 					c.Hub.BroadcastChatMessage("Server", fmt.Sprintf("🔄 Sukses sinkronisasi data database untuk %s!", c.Username))
+				}
+			} else if strings.HasPrefix(msg.Msg, "/godgear") {
+				player := c.Hub.gameUsecase.GetActivePlayer(c.PlayerID)
+				if player != nil {
+					// Determine weapon item and category based on player class
+					godWeaponID := "sword_iron"
+					godWeaponCategory := "sword"
+					godWeaponName := "Excalibur [Godly]"
+					
+					if player.Class == "Beginner" {
+						godWeaponID = "bow_hunter"
+						godWeaponCategory = "bow"
+						godWeaponName = "Failnaught [Godly]"
+					} else if player.Class == "Mage" {
+						godWeaponID = "staff_magic"
+						godWeaponCategory = "staff"
+						godWeaponName = "Staff of Ra [Godly]"
+					}
+
+					// Spawning godly weapon
+					excalibur := domain.PlayerItem{
+						ID:             fmt.Sprintf("%s-god-weapon-%d", c.PlayerID, time.Now().UnixNano()%10000),
+						PlayerID:       c.PlayerID,
+						ItemID:         godWeaponID,
+						WeaponCategory: godWeaponCategory,
+						Name:           godWeaponName,
+						Type:           "equipment",
+						SlotType:       "weapon",
+						Quantity:       1,
+						IsEquipped:     false,
+						AddAttack:      4800,
+						AddHP:          1500,
+						AddMP:          500,
+					}
+					// Spawning godly armor (Dragon Armor)
+					armor := domain.PlayerItem{
+						ID:         fmt.Sprintf("%s-god-armor-%d", c.PlayerID, time.Now().UnixNano()%10000),
+						PlayerID:   c.PlayerID,
+						ItemID:     "plate_armor",
+						Name:       "Dragon Armor [Godly]",
+						Type:       "equipment",
+						SlotType:   "armor",
+						Quantity:   1,
+						IsEquipped: false,
+						AddDefense: 800,
+						AddHP:      3000,
+						AddAttack:  500,
+					}
+					player.Inventory = append(player.Inventory, excalibur, armor)
+					player.Gold += 100000
+					player.RecalculateStats()
+					c.Hub.BroadcastChatMessage("Server", fmt.Sprintf("🎁 Godly Gear (Excalibur + Dragon Armor) & 100k Zeny ditambahkan ke inventori %s!", c.Username))
 				}
 			} else {
 				c.Hub.BroadcastChatMessage(c.Username, msg.Msg)

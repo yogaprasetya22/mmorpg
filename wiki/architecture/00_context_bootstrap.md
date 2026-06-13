@@ -61,7 +61,7 @@ Game ini dibangun menggunakan teknologi mutakhir dengan arsitektur hibrida untuk
 
 ## 🚨 3. Batasan Desain & Aturan Optimasi Kritis (DONT_TOUCH Guardrails)
 
-Untuk menjaga kestabilan server pada beban 100+ entitas dan 60 FPS stabil di sisi client, aturan optimasi dari `@[/home/yoga/Dokumen/game mmorpg/DONT_TOUCH.md]` berikut **harus dipatuhi secara absolut**:
+Untuk menjaga kestabilan server pada beban 100+ entitas dan 60 FPS stabil di sisi client, aturan optimasi dari `DONT_TOUCH.md` berikut **harus dipatuhi secara absolut**. Saat ini terdapat **21 area kritis** yang tidak boleh diubah:
 
 ### A. Aturan Sisi Frontend (Client-Side Constraints)
 1.  **Zero-Allocation di `useFrame`**: 
@@ -74,6 +74,16 @@ Untuk menjaga kestabilan server pada beban 100+ entitas dan 60 FPS stabil di sis
     Loop pengurutan jarak monster terdekat di `RemoteMonstersRenderer.tsx` dibatasi maksimal berjalan setiap 100ms, bukan setiap frame (60Hz).
 5.  **Local MessagePack Decoder**: 
     Decoding biner MessagePack berjalan langsung di Main Thread lewat file lokal `@msgpack/msgpack`. Jangan memindahkannya ke Web Worker karena diblokir oleh CSP (Content Security Policy) browser di production.
+6.  **Locomotion Root Motion Stripping** *(BARU)*:
+    Semua klip animasi locomotion (Walking, Jogging, Slow Run, Run With Sword, Fast Run, Jump With Sword) **wajib** di-strip track `mixamorig:Hips.position` dan `mixamorig:Hips.quaternion`. BVHEcctrl menangani semua pergerakan dan rotasi world-space. Track root yang tidak di-strip menyebabkan glitch snap-back saat loop.
+7.  **Two-Layer Rotation System** *(BARU)*:
+    Rotasi karakter menggunakan sistem dua layer: **Parent** (BVHEcctrl model group) untuk rotasi gerakan + idle camera-facing, dan **Child** (characterRef) untuk rotasi target serangan. Rotasi child **wajib** di-lerp kembali ke 0 setelah serangan selesai. Jangan pernah memutar child saat tidak menyerang.
+8.  **Zero-Re-Render Architecture** *(BARU)*:
+    Semua nilai per-frame remote player (pose, timescale, visibility) **wajib** menggunakan `useRef` + `AvatarHandle` imperative. Jangan gunakan `useState` untuk nilai yang berubah lebih dari sekali per detik per player.
+9.  **Terrain Height Spatial Cache** *(BARU)*:
+    Semua entity **wajib** memanggil `getCachedTerrainHeight()` bukan `getGroundHeight()` langsung. Cache grid 1m dengan TTL 2s mengurangi 1.680 raycast/detik menjadi ~20 lookup/detik.
+10. **Exponential Smoothing** *(BARU)*:
+    Interpolasi posisi remote player menggunakan exponential smoothing (`SMOOTH_TAU = 0.08`) bukan buffer array. Ini menghilangkan 560 alokasi objek/detik.
 
 ### B. Aturan Sisi Backend (Server-Side Constraints)
 1.  **Lock-Free Monster AI State Machine**: 
@@ -122,11 +132,13 @@ Dengan mengasimilasi panduan global arsitektur ini, Anda sekarang memiliki kenda
 ---
 
 🏆 **Indeks Wiki Lengkap**:
-*   [01. Tahap 1: Backend Domain & Recalculate Logic](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/01_backend_domain.md)
-*   [02. Tahap 2: Backend Combat Usecase & Accuracy Checks](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/02_backend_combat.md)
-*   [03. Tahap 3: Frontend Client State & WebSocket Allocation](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/03_frontend_state.md)
-*   [04. Tahap 4: Frontend Combat UI & Animations](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/04_frontend_combat_ui.md)
-*   [05. Tahap 5: Database Migrations & Data Seeding](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/05_database_migrations.md)
-*   [06. Tahap 6: Lembar Rumus Matematika Combat](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/06_combat_formula_ref.md)
-*   [07. Tahap 7: Protokol WebSocket & Skema JSON](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/07_network_sync_protocol.md)
-*   [08. Tahap 8: Integrasi & Optimasi Modul Kustomisasi Avatar](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/08_avatar_configurator_integration.md)
+*   [01. Tahap 1: Backend Domain & Recalculate Logic](01_backend_domain.md)
+*   [02. Tahap 2: Backend Combat Usecase & Accuracy Checks](02_backend_combat.md)
+*   [03. Tahap 3: Frontend Client State & WebSocket Allocation](03_frontend_state.md)
+*   [04. Tahap 4: Frontend Combat UI & Animations](04_frontend_combat_ui.md)
+*   [05. Tahap 5: Database Migrations & Data Seeding](05_database_migrations.md)
+*   [06. Tahap 6: Lembar Rumus Matematika Combat](06_combat_formula_ref.md)
+*   [07. Tahap 7: Protokol WebSocket & Skema JSON](07_network_sync_protocol.md)
+*   [08. Tahap 8: Integrasi & Optimasi Modul Kustomisasi Avatar](08_avatar_configurator_integration.md)
+*   [09. Tahap 9: Sistem Animasi FBX & Rotasi Karakter](09_animation_system.md)
+*   [10. Tahap 10: Arsitektur Optimasi Performa 60 FPS](10_performance_optimization.md)

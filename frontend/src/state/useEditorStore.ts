@@ -94,6 +94,16 @@ export interface EditorState {
   setSunAngle: (angle: number) => void;
   fogDensity: number;
   setFogDensity: (density: number) => void;
+  
+  skyboxIntensity: number | null;
+  setSkyboxIntensity: (intensity: number | null) => void;
+
+  bloomThreshold: number | null;
+  setBloomThreshold: (threshold: number | null) => void;
+  bloomStrength: number | null;
+  setBloomStrength: (strength: number | null) => void;
+  bloomRadius: number | null;
+  setBloomRadius: (radius: number | null) => void;
 
   paintMode: boolean;
   setPaintMode: (mode: boolean) => void;
@@ -220,7 +230,11 @@ const debouncedSave = () => {
         lastUsedScales: state.lastUsedScales,
         lastUsedRotations: state.lastUsedRotations,
         brushTextureId: state.brushTextureId,
-        savedPaintBlueprints: state.savedPaintBlueprints
+        savedPaintBlueprints: state.savedPaintBlueprints,
+        skyboxIntensity: state.skyboxIntensity,
+        bloomThreshold: state.bloomThreshold,
+        bloomStrength: state.bloomStrength,
+        bloomRadius: state.bloomRadius
       }));
       if (state.paintData) {
         localStorage.setItem('world_editor_paint', state.paintData);
@@ -379,7 +393,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           lastUsedScales: parsed.lastUsedScales || {},
           lastUsedRotations: parsed.lastUsedRotations || {},
           brushTextureId: parsed.brushTextureId || null,
-          savedPaintBlueprints: parsed.savedPaintBlueprints || []
+          savedPaintBlueprints: parsed.savedPaintBlueprints || [],
+          skyboxIntensity: parsed.skyboxIntensity !== undefined ? parsed.skyboxIntensity : null,
+          bloomThreshold: parsed.bloomThreshold !== undefined ? parsed.bloomThreshold : null,
+          bloomStrength: parsed.bloomStrength !== undefined ? parsed.bloomStrength : null,
+          bloomRadius: parsed.bloomRadius !== undefined ? parsed.bloomRadius : null
         });
       } catch (e) {}
     }
@@ -451,10 +469,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
   
   saveToStorage: () => {
-    const { items, gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment, paintData, sculptData } = get();
+    const { items, gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment, paintData, sculptData, lightIntensity, ambientIntensity, sunAngle, fogDensity, lastUsedScales, lastUsedRotations, brushTextureId, savedPaintBlueprints, skyboxIntensity, bloomThreshold, bloomStrength, bloomRadius } = get();
     try {
       localStorage.setItem('world_editor_map', JSON.stringify(items));
-      localStorage.setItem('world_editor_settings', JSON.stringify({ gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment }));
+      localStorage.setItem('world_editor_settings', JSON.stringify({ gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment, lightIntensity, ambientIntensity, sunAngle, fogDensity, lastUsedScales, lastUsedRotations, brushTextureId, savedPaintBlueprints, skyboxIntensity, bloomThreshold, bloomStrength, bloomRadius }));
       if (paintData) localStorage.setItem('world_editor_paint', paintData);
       if (sculptData) localStorage.setItem('world_editor_sculpt', sculptData);
     } catch (e) {
@@ -616,7 +634,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   saveToDatabase: async () => {
-    const { selectedMapId, items, gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment, paintData, sculptData, lightIntensity, ambientIntensity, sunAngle, fogDensity, brushTextureId } = get();
+    const { selectedMapId, items, gridSize, gridEnabled, terrainConfig, terrainMaterialId, terrainColor, sky, environment, paintData, sculptData, lightIntensity, ambientIntensity, sunAngle, fogDensity, brushTextureId, skyboxIntensity, bloomThreshold, bloomStrength, bloomRadius } = get();
     
     // Map IDs to specific high-quality PBR PNG filenames for database compatibility
     let savedMaterialId = terrainMaterialId;
@@ -664,7 +682,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         sunAngle, 
         fogDensity,
         brushTextureId: savedBrushTextureId,
-        savedPaintBlueprints: get().savedPaintBlueprints
+        savedPaintBlueprints: get().savedPaintBlueprints,
+        skyboxIntensity,
+        bloomThreshold,
+        bloomStrength,
+        bloomRadius
       },
       paintData,
       sculptData
@@ -766,6 +788,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           sculptData: sanitizeCanvasData(data.sculptData) || null,
           brushTextureId: loadedBrushTextureId,
           savedPaintBlueprints: data.settings?.savedPaintBlueprints || [],
+          skyboxIntensity: data.settings?.skyboxIntensity !== undefined ? data.settings?.skyboxIntensity : null,
+          bloomThreshold: data.settings?.bloomThreshold !== undefined ? data.settings?.bloomThreshold : null,
+          bloomStrength: data.settings?.bloomStrength !== undefined ? data.settings?.bloomStrength : null,
+          bloomRadius: data.settings?.bloomRadius !== undefined ? data.settings?.bloomRadius : null,
           history: [sanitizedItems],
           historyIndex: 0
         });
@@ -842,6 +868,27 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   fogDensity: 0.002,
   setFogDensity: (fogDensity) => {
     set({ fogDensity });
+    debouncedSave();
+  },
+
+  skyboxIntensity: null,
+  setSkyboxIntensity: (skyboxIntensity) => {
+    set({ skyboxIntensity });
+    debouncedSave();
+  },
+  bloomThreshold: null,
+  setBloomThreshold: (bloomThreshold) => {
+    set({ bloomThreshold });
+    debouncedSave();
+  },
+  bloomStrength: null,
+  setBloomStrength: (bloomStrength) => {
+    set({ bloomStrength });
+    debouncedSave();
+  },
+  bloomRadius: null,
+  setBloomRadius: (bloomRadius) => {
+    set({ bloomRadius });
     debouncedSave();
   },
 

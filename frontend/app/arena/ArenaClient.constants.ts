@@ -1,11 +1,9 @@
 /** Arena-specific constant values and label mappings. */
 
 export const CLASS_LABELS: Record<string, string> = {
-  Beginner: "MM",
+  Beginner: "Archer",
   Warrior: "Fighter",
-  Mage: "Mage",
-  Priest: "Tank",
-  Thief: "Assassin"
+  Mage: "Mage"
 };
 
 export const HAIR_COLORS = [
@@ -14,19 +12,15 @@ export const HAIR_COLORS = [
 ];
 
 export const CLASS_OPTIONS = [
-  { key: "Beginner", label: "MM" },
+  { key: "Beginner", label: "Archer" },
   { key: "Warrior", label: "Fighter" },
-  { key: "Mage", label: "Mage" },
-  { key: "Priest", label: "Tank" },
-  { key: "Thief", label: "Assassin" }
+  { key: "Mage", label: "Mage" }
 ];
 
 export const CLASS_DESCRIPTIONS: Record<string, string> = {
   Warrior: "Fighter adalah petarung garis depan yang handal. Memiliki daya serang fisik luar biasa dan pertahanan tinggi dengan pedang besarnya.",
   Mage: "Mage menguasai sihir kuno. Mampu memberikan serangan jarak jauh ber-damage tinggi dengan sihir elemen badai api dan es.",
-  Priest: "Tank adalah pelindung garis depan yang kokoh. Mampu menyerap kerusakan besar dan memberikan perlindungan suci bagi tim.",
-  Thief: "Assassin menyerang dari bayangan dengan kelincahan penuh. Memiliki kecepatan serang tertinggi dan peluang kritikal tebasan belati mematikan.",
-  Beginner: "MM (Marksman) adalah penembak jitu jarak jauh. Memberikan serangan fisik beruntun yang presisi dari jarak aman."
+  Beginner: "Archer adalah penembak jitu jarak jauh. Memberikan serangan fisik beruntun yang presisi dari jarak aman."
 };
 
 /** Stat attributes displayed in the Character Stats Modal. */

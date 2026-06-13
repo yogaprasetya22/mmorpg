@@ -31,70 +31,71 @@ export function SkillBar({ selectedCharacter, isAutoMode, setIsAutoMode }: Skill
   };
 
   const skills = [
-    { num: 1, icon: <Sword className="w-5 h-5" />, color: "from-amber-500 to-orange-600", glow: "rgba(245,158,11,0.5)", label: "ATK" },
-    { num: 2, icon: <Zap className="w-5 h-5" />, color: "from-cyan-500 to-blue-600", glow: "rgba(6,182,212,0.5)", label: "SKL" },
-    { num: 3, icon: <Sparkles className="w-5 h-5" />, color: "from-purple-500 to-indigo-600", glow: "rgba(168,85,247,0.5)", label: "PSV" },
-    { num: 4, icon: <Shield className="w-5 h-5" />, color: "from-emerald-500 to-teal-600", glow: "rgba(16,185,129,0.5)", label: "DEF" },
+    { num: 1, icon: <Sword className="w-5 h-5" />, color: "from-[#dfb76c] to-[#b88c42]", border: "border-[#8c5b1b]", text: "text-zinc-950", label: "ATK" },
+    { num: 2, icon: <Zap className="w-5 h-5" />, color: "from-[#38bdf8] to-[#0284c7]", border: "border-[#0369a1]", text: "text-white", label: "SKL" },
+    { num: 3, icon: <Sparkles className="w-5 h-5" />, color: "from-[#c084fc] to-[#7e22ce]", border: "border-[#581c87]", text: "text-white", label: "PSV" },
+    { num: 4, icon: <Shield className="w-5 h-5" />, color: "from-[#34d399] to-[#059669]", border: "border-[#065f46]", text: "text-white", label: "DEF" },
   ];
 
   return (
-    <div className="absolute right-3 bottom-14 flex flex-col items-end gap-2 pointer-events-auto">
+    <div className="absolute right-4 bottom-14 flex flex-col items-end gap-3.5 pointer-events-auto">
       {/* Top row: 4 numbered skill slots */}
-      <div className="flex gap-1.5">
+      <div className="flex gap-2.5">
         {skills.map(s => (
-          <div key={s.num} className="relative flex flex-col items-center gap-0.5">
+          <div key={s.num} className="relative flex flex-col items-center gap-1">
             <button
-              className={`w-[52px] h-[52px] rounded-xl bg-gradient-to-br ${s.color} border border-white/20 flex items-center justify-center text-white active:scale-95 transition-all shadow-lg`}
-              style={{ boxShadow: `0 0 12px ${s.glow}` }}
+              className={`w-[50px] h-[50px] rounded-full bg-gradient-to-br ${s.color} border-2 ${s.border} ${s.text} flex items-center justify-center active:scale-95 transition-all shadow-[0_4px_10px_rgba(0,0,0,0.4)] relative hover:brightness-110`}
               onClick={() => handleSlotClick(s.num)}
             >
               {s.icon}
+              <span className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-[#ebdcb9] border border-[#b88c42] flex items-center justify-center text-[7px] font-black text-[#5c3e16] shadow-sm">{s.num}</span>
             </button>
-            <span className="absolute top-0.5 left-1 text-[8px] font-black text-white/70">{s.num}</span>
-            <span className="text-[7px] font-black text-zinc-400 uppercase tracking-wider">{s.label}</span>
+            <span className="text-[7.5px] font-black text-[#fdf6e2] drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.85)] uppercase tracking-wider">{s.label}</span>
           </div>
         ))}
       </div>
 
       {/* Bottom row: AUTO + big skill button */}
-      <div className="flex items-end gap-2">
+      <div className="flex items-center gap-3">
         {/* AUTO battle */}
         <button
           onClick={() => setIsAutoMode(v => !v)}
-          className={`flex flex-col items-center justify-center w-[48px] h-[48px] rounded-full border-2 transition-all ${isAutoMode ? "bg-emerald-500/30 border-emerald-400 shadow-[0_0_16px_rgba(16,185,129,0.6)]" : "bg-black/50 border-white/20"}`}
+          className={`flex flex-col items-center justify-center w-[48px] h-[48px] rounded-full border-2 transition-all ${
+            isAutoMode 
+              ? "bg-[#10b981]/20 border-[#047857] shadow-[0_0_12px_rgba(16,185,129,0.5)]" 
+              : "bg-black/50 border-[#b88c42]/30 text-zinc-400"
+          }`}
         >
-          <span className={`text-[9px] font-black tracking-wider ${isAutoMode ? "text-emerald-300 animate-pulse" : "text-zinc-500"}`}>AUTO</span>
+          <span className={`text-[8.5px] font-black tracking-wider ${isAutoMode ? "text-[#10b981] animate-pulse" : "text-[#8c6b4f]"}`}>AUTO</span>
         </button>
 
         {/* Main attack big button */}
         <button
           onClick={handleAttackDispatch}
-          className="relative w-[76px] h-[76px] rounded-full bg-gradient-to-br from-cyan-400 via-indigo-500 to-purple-600 border-2 border-white/25 active:scale-95 flex items-center justify-center text-white shadow-2xl transition-all hover:brightness-110 group"
-          style={{ boxShadow: "0 0 28px rgba(99,102,241,0.6), inset 0 2px 4px rgba(255,255,255,0.15)" }}
+          className="relative w-[78px] h-[78px] rounded-full bg-gradient-to-br from-[#dfb76c] via-[#b88c42] to-[#8c5b1b] border-2 border-[#5c3e16] active:scale-95 flex items-center justify-center text-zinc-950 shadow-[0_6px_20px_rgba(0,0,0,0.5)] transition-all hover:brightness-115 group"
         >
-          <div className="absolute inset-1 rounded-full bg-black/20 group-hover:bg-black/10 transition-all" />
+          <div className="absolute inset-1 rounded-full bg-white/10 group-hover:bg-white/20 transition-all border border-[#ebdcb9]/40" />
           {selectedCharacter.class === "Warrior" && <Sword className="w-9 h-9 relative z-10 group-hover:rotate-12 transition-transform" />}
           {selectedCharacter.class === "Mage" && <Zap className="w-9 h-9 relative z-10" />}
           {selectedCharacter.class === "Priest" && <Sparkles className="w-9 h-9 relative z-10" />}
           {selectedCharacter.class === "Thief" && <Target className="w-9 h-9 relative z-10" />}
-          {selectedCharacter.class === "Beginner" && <Shield className="w-9 h-9 relative z-10" />}
-          <span className="absolute bottom-1 text-[7px] font-black text-white/80 uppercase tracking-widest z-10">ATTACK</span>
+          {selectedCharacter.class === "Beginner" && <Target className="w-9 h-9 relative z-10" />}
+          <span className="absolute bottom-1.5 text-[7px] font-black text-black uppercase tracking-widest z-10 drop-shadow-sm">ATTACK</span>
         </button>
 
         {/* Q Skill */}
         <button
           id="skill-button-active"
           onClick={handleSkillDispatch}
-          className="relative w-[56px] h-[56px] rounded-full bg-gradient-to-br from-orange-500 to-red-600 border-2 border-white/20 active:scale-95 flex items-center justify-center text-white shadow-xl transition-all hover:brightness-110 group"
-          style={{ boxShadow: "0 0 16px rgba(249,115,22,0.5)" }}
+          className="relative w-[58px] h-[58px] rounded-full bg-gradient-to-br from-[#ffb547] to-[#e07b00] border-2 border-[#b25900] active:scale-95 flex items-center justify-center text-white shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-all hover:brightness-110 group"
         >
           <div id="skill-cooldown-overlay" className="absolute inset-0 bg-black/85 backdrop-blur-[1px] rounded-full flex items-center justify-center text-[9px] font-black text-amber-400 transition-all translate-y-[100%]">CD</div>
-          {selectedCharacter.class === "Warrior" && <RefreshCw className="w-6 h-6 relative z-10" />}
-          {selectedCharacter.class === "Mage" && <Zap className="w-6 h-6 relative z-10" />}
-          {selectedCharacter.class === "Priest" && <Sparkles className="w-6 h-6 relative z-10" />}
-          {selectedCharacter.class === "Thief" && <Target className="w-6 h-6 relative z-10" />}
-          {selectedCharacter.class === "Beginner" && <Shield className="w-6 h-6 relative z-10" />}
-          <div className="absolute -top-1 -left-1 bg-zinc-900 border border-white/10 text-[7px] font-black px-1.5 py-0.5 rounded-full text-zinc-300">Q</div>
+          {selectedCharacter.class === "Warrior" && <RefreshCw className="w-6 h-6 relative z-10 text-black" />}
+          {selectedCharacter.class === "Mage" && <Zap className="w-6 h-6 relative z-10 text-black" />}
+          {selectedCharacter.class === "Priest" && <Sparkles className="w-6 h-6 relative z-10 text-black" />}
+          {selectedCharacter.class === "Thief" && <Target className="w-6 h-6 relative z-10 text-black" />}
+          {selectedCharacter.class === "Beginner" && <Target className="w-6 h-6 relative z-10 text-black" />}
+          <div className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-[#ebdcb9] border border-[#b88c42] flex items-center justify-center text-[7px] font-black text-[#5c3e16] shadow-sm">Q</div>
         </button>
       </div>
     </div>
