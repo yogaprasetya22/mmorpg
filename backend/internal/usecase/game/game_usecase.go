@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"gorm.io/gorm"
 	"mmorpg-backend/internal/domain"
 	"mmorpg-backend/internal/repository/redis"
 )
@@ -46,6 +47,12 @@ type GameUsecase interface {
 	GetActivePlayer(playerID string) *domain.Player
 	SetEventCallback(cb func(eventType string, data interface{}))
 
+	// Rewards & Auction System
+	ClaimDailyReward(playerID string) error
+	ListAuctionItem(playerID string, playerItemID string, price int) error
+	BuyoutAuctionItem(playerID string, auctionItemID string) error
+	GetAuctionItems() ([]domain.AuctionItem, error)
+
 	// Party Actions
 	CreateParty(playerID string) string
 	InviteToParty(leaderID string, targetID string) bool
@@ -53,6 +60,7 @@ type GameUsecase interface {
 }
 
 type gameUsecase struct {
+	db         *gorm.DB
 	registry   *domain.Registry
 	playerRepo domain.PlayerRepository
 	stateRepo  redis.StateRepository
@@ -79,6 +87,7 @@ type gameUsecase struct {
 }
 
 func NewGameUsecase(
+	db *gorm.DB,
 	registry *domain.Registry,
 	playerRepo domain.PlayerRepository,
 	stateRepo redis.StateRepository,
@@ -86,6 +95,7 @@ func NewGameUsecase(
 	broadcastCallback func(payload domain.GameStatePayload),
 ) GameUsecase {
 	u := &gameUsecase{
+		db:                db,
 		registry:          registry,
 		playerRepo:        playerRepo,
 		stateRepo:         stateRepo,

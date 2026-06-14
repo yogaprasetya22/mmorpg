@@ -284,7 +284,7 @@ export function usePlayerCombat({
     if (finalASPDPercent > 1000) {
       finalASPDPercent = 1000;
     }
-    const hitsPerSecond = 1 + (finalASPDPercent / 125);
+    const hitsPerSecond = 1 + (finalASPDPercent / 25);
     const dynamicAttackInterval = 1000 / hitsPerSecond;
 
     // ── Input attack handler ──

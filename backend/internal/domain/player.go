@@ -136,6 +136,10 @@ type Player struct {
 	LastY   float32 `json:"last_y" gorm:"default:0"`
 	LastZ   float32 `json:"last_z" gorm:"default:0"`
 
+	// Rewards System Check-in details
+	LastDailyClaim *time.Time `json:"last_daily_claim" gorm:"default:null"`
+	CheckInCount   int        `json:"check_in_count" gorm:"default:0"`
+
 	// Relational Associations
 	Inventory []PlayerItem  `json:"inventory" gorm:"foreignKey:PlayerID;constraint:OnDelete:CASCADE"`
 	Skills    []PlayerSkill `json:"skills" gorm:"foreignKey:PlayerID;constraint:OnDelete:CASCADE"`
@@ -299,25 +303,44 @@ func (p *Player) RecalculateStats() {
 	p.Defense = float32(p.VIT)/2.0 + float32(p.AGI)/5.0 + float32(p.Level)/15.0 + 10.0
 	p.MagicDefense = float32(p.INT) + float32(p.VIT/5.0) + float32(p.DEX/5.0) + float32(p.Level/4.0) + 10.0
 
-	// 4. iRO LUK scaling for Critical Rate (1 + LUK/3)% and AGI scaling for Movement Speed
+	// 4. iRO LUK scaling for Critical Rate (1 + LUK/3)%
 	p.CriticalRate = 0.01 * (1.0 + float32(p.LUK)/3.0)
 	if p.CriticalRate > 0.80 {
 		p.CriticalRate = 0.80 // Cap Critical Rate at 80%
 	}
-	classMult := float32(1.0)
-	switch p.Class {
-	case "Thief": // Assassin
-		classMult = 1.4
-	case "Warrior": // Fighter
-		classMult = 1.1
-	case "Mage":
-		classMult = 0.9
-	case "Beginner": // Marksman / MM
-		classMult = 1.05
-	case "Priest": // Tank
-		classMult = 1.0
+	
+	// Modern Ragnarok Movement Speed Calculation System
+	var totalBuffPercentage float32 = 0.0
+	now := time.Now()
+	for _, buff := range p.Buffs {
+		if now.Before(buff.ExpiresAt) {
+			switch buff.Type {
+			case "increase_agi":
+				totalBuffPercentage += 25.0
+			case "cart_boost":
+				totalBuffPercentage += 20.0
+			case "speed_potion":
+				totalBuffPercentage += 15.0
+			case "mount":
+				totalBuffPercentage += 100.0
+			case "speed_buff":
+				totalBuffPercentage += buff.Value
+			}
+		}
 	}
-	p.Speed = (5.0 + float32(p.AGI)*0.015) * classMult
+
+	// Calculate final speed: 150 * (1 + (Total Buff / 100))
+	ragnarokSpeed := 150.0 * (1.0 + float64(totalBuffPercentage)/100.0)
+
+	// Hard Cap at 300% of base speed (Max = 450.0)
+	if ragnarokSpeed > 450.0 {
+		ragnarokSpeed = 450.0
+	}
+
+	// Project it to physics engine coordinates so character moves normally (meters per second)
+	// Base speed 150.0 maps to 6.0 m/s
+	// Max speed 450.0 maps to 18.0 m/s
+	p.Speed = float32(ragnarokSpeed / 25.0)
 
 	// 5. HIT & FLEE & PerfectDodge & CastTime calculation (100% iROWiki match, augmented with CON)
 	p.HIT = 175 + p.Level + p.DEX + (p.LUK / 3) + (p.CON * 2)

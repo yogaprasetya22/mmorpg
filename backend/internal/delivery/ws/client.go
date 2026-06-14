@@ -69,6 +69,7 @@ type WSIncomingMessage struct {
 	// RPG Attributes Payload
 	Stat         string `json:"stat" msgpack:"stat"` // str, int, con, vit, wis, luk
 	Amount       int    `json:"amount" msgpack:"amount"`
+	Price        int    `json:"price" msgpack:"price"`
 	PlayerItemID string `json:"playerItemId" msgpack:"playerItemId"`
 	SkillID      string `json:"skillId" msgpack:"skillId"`
 	NewClass     string `json:"newClass" msgpack:"newClass"`
@@ -149,6 +150,61 @@ func (c *Client) ReadPump() {
 			if err := c.Hub.gameUsecase.SellItem(c.PlayerID, msg.PlayerItemID); err != nil {
 				fmt.Printf("⚠️ [WS] Sell failed for %s: %v\n", c.Username, err)
 			}
+		case "claim_daily_reward":
+			if err := c.Hub.gameUsecase.ClaimDailyReward(c.PlayerID); err != nil {
+				payload := map[string]interface{}{
+					"type":  "reward_claim_failed",
+					"error": err.Error(),
+				}
+				if data, err := json.Marshal(payload); err == nil {
+					select {
+					case c.Send <- data:
+					default:
+					}
+				}
+			}
+		case "list_auction_item":
+			if err := c.Hub.gameUsecase.ListAuctionItem(c.PlayerID, msg.PlayerItemID, msg.Price); err != nil {
+				payload := map[string]interface{}{
+					"type":  "auction_action_failed",
+					"error": err.Error(),
+				}
+				if data, err := json.Marshal(payload); err == nil {
+					select {
+					case c.Send <- data:
+					default:
+					}
+				}
+			}
+		case "buyout_auction_item":
+			if err := c.Hub.gameUsecase.BuyoutAuctionItem(c.PlayerID, msg.TargetID); err != nil {
+				payload := map[string]interface{}{
+					"type":  "auction_action_failed",
+					"error": err.Error(),
+				}
+				if data, err := json.Marshal(payload); err == nil {
+					select {
+					case c.Send <- data:
+					default:
+					}
+				}
+			}
+		case "get_auction_items":
+			items, err := c.Hub.gameUsecase.GetAuctionItems()
+			if err != nil {
+				fmt.Printf("⚠️ [WS] Failed to get auction items: %v\n", err)
+				break
+			}
+			payload := map[string]interface{}{
+				"type":  "auction_list",
+				"items": items,
+			}
+			if data, err := json.Marshal(payload); err == nil {
+				select {
+				case c.Send <- data:
+				default:
+				}
+			}
 		case "create_party":
 			c.Hub.gameUsecase.CreateParty(c.PlayerID)
 		case "invite_party":
@@ -166,19 +222,55 @@ func (c *Client) ReadPump() {
 			} else if strings.HasPrefix(msg.Msg, "/godgear") {
 				player := c.Hub.gameUsecase.GetActivePlayer(c.PlayerID)
 				if player != nil {
-					// Determine weapon item and category based on player class
+					// Class-specific configuration placeholders
 					godWeaponID := "sword_iron"
 					godWeaponCategory := "sword"
 					godWeaponName := "Excalibur [Godly]"
 					
+					godArmorID := "plate_armor"
+					godArmorName := "Dragon Armor [Godly]"
+					
+					godHelmetName := "Dragon Helm [Godly]"
+					godBootsName := "Dragon Greaves [Godly]"
+					godAccessoryName := "Dragon Ring [Godly]"
+					
+					// Attribute configuration
+					var wAtk, wHp, wMp float32 = 4800, 1500, 500
+					var aDef, aHp, aAtk float32 = 800, 3000, 500
+					var hDef, hHp float32 = 500, 1500
+					var bDef, bHp float32 = 400, 1000
+					var accAtk, accHp, accMp float32 = 800, 1000, 200
+
 					if player.Class == "Beginner" {
 						godWeaponID = "bow_hunter"
 						godWeaponCategory = "bow"
 						godWeaponName = "Failnaught [Godly]"
+						godArmorID = "chain_mail"
+						godArmorName = "Novice Jerkin [Godly]"
+						godHelmetName = "Novice Hat [Godly]"
+						godBootsName = "Novice Boots [Godly]"
+						godAccessoryName = "Novice Ring [Godly]"
+						
+						wAtk, wHp, wMp = 4800, 1500, 500
+						aDef, aHp, aAtk = 600, 2500, 300
+						hDef, hHp = 400, 1200
+						bDef, bHp = 300, 1000
+						accAtk, accHp, accMp = 600, 800, 200
 					} else if player.Class == "Mage" {
 						godWeaponID = "staff_magic"
 						godWeaponCategory = "staff"
 						godWeaponName = "Staff of Ra [Godly]"
+						godArmorID = "leather_armor"
+						godArmorName = "Archmage Robe [Godly]"
+						godHelmetName = "Archmage Hat [Godly]"
+						godBootsName = "Archmage Boots [Godly]"
+						godAccessoryName = "Archmage Ring [Godly]"
+						
+						wAtk, wHp, wMp = 4800, 1500, 1500
+						aDef, aHp, aAtk = 600, 2000, 0
+						hDef, hHp = 400, 1000
+						bDef, bHp = 300, 800
+						accAtk, accHp, accMp = 800, 500, 500
 					}
 
 					// Spawning godly weapon
@@ -192,28 +284,69 @@ func (c *Client) ReadPump() {
 						SlotType:       "weapon",
 						Quantity:       1,
 						IsEquipped:     false,
-						AddAttack:      4800,
-						AddHP:          1500,
-						AddMP:          500,
+						AddAttack:      wAtk,
+						AddHP:          wHp,
+						AddMP:          wMp,
 					}
-					// Spawning godly armor (Dragon Armor)
+					// Spawning godly armor
 					armor := domain.PlayerItem{
 						ID:         fmt.Sprintf("%s-god-armor-%d", c.PlayerID, time.Now().UnixNano()%10000),
 						PlayerID:   c.PlayerID,
-						ItemID:     "plate_armor",
-						Name:       "Dragon Armor [Godly]",
+						ItemID:     godArmorID,
+						Name:       godArmorName,
 						Type:       "equipment",
 						SlotType:   "armor",
 						Quantity:   1,
 						IsEquipped: false,
-						AddDefense: 800,
-						AddHP:      3000,
-						AddAttack:  500,
+						AddDefense: aDef,
+						AddHP:      aHp,
+						AddAttack:  aAtk,
 					}
-					player.Inventory = append(player.Inventory, excalibur, armor)
+					// Spawning godly helmet
+					helmet := domain.PlayerItem{
+						ID:         fmt.Sprintf("%s-god-helm-%d", c.PlayerID, time.Now().UnixNano()%10000),
+						PlayerID:   c.PlayerID,
+						ItemID:     "iron_helm",
+						Name:       godHelmetName,
+						Type:       "equipment",
+						SlotType:   "helmet",
+						Quantity:   1,
+						IsEquipped: false,
+						AddDefense: hDef,
+						AddHP:      hHp,
+					}
+					// Spawning godly boots
+					boots := domain.PlayerItem{
+						ID:         fmt.Sprintf("%s-god-boots-%d", c.PlayerID, time.Now().UnixNano()%10000),
+						PlayerID:   c.PlayerID,
+						ItemID:     "leather_boots",
+						Name:       godBootsName,
+						Type:       "equipment",
+						SlotType:   "boots",
+						Quantity:   1,
+						IsEquipped: false,
+						AddDefense: bDef,
+						AddHP:      bHp,
+					}
+					// Spawning godly accessory
+					accessory := domain.PlayerItem{
+						ID:         fmt.Sprintf("%s-god-accessory-%d", c.PlayerID, time.Now().UnixNano()%10000),
+						PlayerID:   c.PlayerID,
+						ItemID:     "ring_godly",
+						Name:       godAccessoryName,
+						Type:       "equipment",
+						SlotType:   "accessory",
+						Quantity:   1,
+						IsEquipped: false,
+						AddAttack:  accAtk,
+						AddHP:      accHp,
+						AddMP:      accMp,
+					}
+					
+					player.Inventory = append(player.Inventory, excalibur, armor, helmet, boots, accessory)
 					player.Gold += 100000
 					player.RecalculateStats()
-					c.Hub.BroadcastChatMessage("Server", fmt.Sprintf("🎁 Godly Gear (Excalibur + Dragon Armor) & 100k Zeny ditambahkan ke inventori %s!", c.Username))
+					c.Hub.BroadcastChatMessage("Server", fmt.Sprintf("🎁 Godly Gear Set (%s, %s, %s, %s, %s) & 100k Zeny ditambahkan ke inventori %s!", godWeaponName, godArmorName, godHelmetName, godBootsName, godAccessoryName, c.Username))
 				}
 			} else {
 				c.Hub.BroadcastChatMessage(c.Username, msg.Msg)

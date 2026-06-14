@@ -1,4 +1,4 @@
-/** In-game chat messages panel with input field (isolated microservice). */
+/** Premium In-game chat messages panel with advanced glassmorphism and tag badges (isolated microservice). */
 'use client';
 
 import { useState, useRef, forwardRef, useImperativeHandle } from 'react';
@@ -34,41 +34,68 @@ export const GameChat = forwardRef<GameChatRef, { sendChatMessage: (msg: string)
       }
     };
 
-    const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      e.stopPropagation(); // Shield from three-drei keyboard capture
-      if (e.key === "Enter" && chatInput.trim()) {
-        sendChatMessage(chatInput.trim());
-        setChatInput("");
-      }
-    };
-
     return (
-      <div className="absolute left-3 bottom-16 w-[280px] flex flex-col gap-1 pointer-events-auto">
-        <div ref={chatScrollRef} className="max-h-[80px] overflow-y-auto flex flex-col gap-1 pr-1">
+      <div className="absolute left-6 bottom-6 w-[380px] bg-zinc-950/45 backdrop-blur-lg border-2 border-white/10 rounded-2xl p-3.5 flex flex-col gap-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.65)] pointer-events-auto z-30 transition-all hover:border-white/15">
+        
+        {/* Chat Header / Mode */}
+        <div className="flex items-center justify-between border-b border-white/5 pb-1.5">
+          <span className="text-[9.5px] font-black text-cyan-400 tracking-wider uppercase">💬 Obrolan Dunia</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+        </div>
+
+        {/* Message Panel */}
+        <div 
+          ref={chatScrollRef} 
+          className="max-h-[130px] overflow-y-auto flex flex-col gap-1.5 pr-1 select-text scrollbar-thin scrollbar-thumb-white/10"
+        >
           {chatMessages.map((m, i) => (
-            <p key={i} className="text-[9px] leading-relaxed">
-              {m.type === "system" && <><span className="text-emerald-400 font-black mr-1">[Sistem]</span><span className="text-zinc-300">{m.msg}</span></>}
-              {m.type === "info" && <><span className="text-amber-400 font-black mr-1">[Info]</span><span className="text-zinc-300">{m.msg}</span></>}
-              {m.type === "player" && <><span className="text-indigo-400 font-black mr-1">[{m.name}]</span><span className="text-zinc-100">{m.msg}</span></>}
-            </p>
+            <div key={i} className="text-[9px] leading-relaxed flex items-start gap-1">
+              {m.type === "system" && (
+                <>
+                  <span className="bg-emerald-500/15 text-emerald-400 text-[7px] font-black px-1.5 py-0.5 rounded border border-emerald-500/25 uppercase shrink-0">Sistem</span>
+                  <span className="text-zinc-200">{m.msg}</span>
+                </>
+              )}
+              {m.type === "info" && (
+                <>
+                  <span className="bg-cyan-500/15 text-cyan-400 text-[7px] font-black px-1.5 py-0.5 rounded border border-cyan-500/25 uppercase shrink-0">Info</span>
+                  <span className="text-zinc-200">{m.msg}</span>
+                </>
+              )}
+              {m.type === "player" && (
+                <>
+                  <span className="bg-indigo-500/15 text-indigo-400 text-[7px] font-black px-1.5 py-0.5 rounded border border-indigo-500/25 uppercase shrink-0">{m.name}</span>
+                  <span className="text-zinc-100 font-medium">{m.msg}</span>
+                </>
+              )}
+            </div>
           ))}
         </div>
-        {/* Input */}
-        <div className="flex gap-1.5">
+
+        {/* Input Form */}
+        <form 
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSendClick();
+          }}
+          className="flex gap-2"
+        >
           <input
             type="text"
             value={chatInput}
             onChange={e => setChatInput(e.target.value)}
-            onKeyDown={handleInputKeyDown}
+            onKeyDown={e => e.stopPropagation()} // Shield from three-drei keyboard capture
             onKeyUp={e => e.stopPropagation()} // Shield from three-drei keyboard release
-            placeholder="Ketik pesan..."
-            className="flex-1 bg-black/55 border border-white/10 rounded-lg px-2.5 py-1 text-[9px] text-white placeholder-zinc-600 focus:outline-none focus:border-cyan-500/50 backdrop-blur-sm"
+            placeholder="Ketik pesan dunia..."
+            className="flex-1 bg-white/5 border border-white/15 rounded-xl px-3 py-1.5 text-[9.5px] text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-500/40 focus:bg-white/10 transition-all shadow-inner"
           />
           <button
-            onClick={handleSendClick}
-            className="bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-500/30 px-2.5 py-1 rounded-lg text-[9px] font-black text-cyan-300 transition-all"
-          >Enter</button>
-        </div>
+            type="submit"
+            className="bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 px-3.5 py-1.5 rounded-xl text-[9px] font-black text-cyan-300 transition-all active:scale-95 shadow-md"
+          >
+            Kirim
+          </button>
+        </form>
       </div>
     );
   }

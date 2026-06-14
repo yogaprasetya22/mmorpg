@@ -31,23 +31,23 @@ export const GameStatusBar = memo(forwardRef<GameStatusBarRef, { mapId?: string 
   }));
 
   return (
-    <div className="flex flex-col items-end gap-1.5 mt-2">
+    <div className="flex flex-col items-end gap-1 mt-1">
       {/* Map Zone Name Badge */}
-      <div className="bg-gradient-to-r from-indigo-950/80 to-purple-900/60 border border-purple-500/30 px-3 py-1 rounded-xl shadow-[0_0_12px_rgba(168,85,247,0.2)] flex items-center gap-1.5 self-end">
-        <span className="text-[9px] font-black text-purple-300 tracking-wider uppercase">
+      <div className="bg-black/20 backdrop-blur-md border border-white/10 px-2.5 py-0.5 rounded-full shadow-md flex items-center gap-1 self-end">
+        <span className="text-[7.5px] font-bold text-white tracking-wider uppercase">
           {getMapName(mapId)}
         </span>
       </div>
 
       {/* Server info pills */}
-      <div className="flex gap-1.5">
-        <div className="bg-black/55 border border-white/10 px-2.5 py-1 rounded-lg flex items-center gap-1">
-          <Users className="w-3 h-3 text-cyan-400" />
-          <span className="text-[9px] font-black text-white">{counts.pc}</span>
+      <div className="flex gap-1">
+        <div className="bg-black/20 backdrop-blur-md border border-white/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+          <Users className="w-2.5 h-2.5 text-cyan-400" />
+          <span className="text-[7.5px] font-bold text-zinc-300">{counts.pc}</span>
         </div>
-        <div className="bg-black/55 border border-white/10 px-2.5 py-1 rounded-lg flex items-center gap-1">
-          <Skull className="w-3 h-3 text-red-400 animate-pulse" />
-          <span className="text-[9px] font-black text-white">{counts.mc}</span>
+        <div className="bg-black/20 backdrop-blur-md border border-white/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+          <Skull className="w-2.5 h-2.5 text-red-400 animate-pulse" />
+          <span className="text-[7.5px] font-bold text-zinc-300">{counts.mc}</span>
         </div>
       </div>
     </div>

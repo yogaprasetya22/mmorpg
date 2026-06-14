@@ -1,8 +1,9 @@
 /** ArenaClient — thin page-level wrapper composing all Arena sub-modules. */
 'use client';
 
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { Gavel, Scale, Gift, Sparkles, Gem, ChevronRight, LogOut, User, BookOpen } from 'lucide-react';
 const AvatarExperience = dynamic(
   () => import('@/src/components/game/avatar/AvatarExperience'),
   { ssr: false }
@@ -28,7 +29,6 @@ import { FighterSpellEffect } from '@/src/components/game/systems/effects/Fighte
 import { TankSpellEffect } from '@/src/components/game/systems/effects/TankSpellEffect';
 import { AssassinSpellEffect } from '@/src/components/game/systems/effects/AssassinSpellEffect';
 import { MageSpellEffect } from '@/src/components/game/systems/effects/MageSpellEffect';
-import { Users, Sparkles, Skull, LogOut } from 'lucide-react';
 import { useEditorStore } from '@/src/state/useEditorStore';
 
 // BVH bootstrap + GLTF preloads (side-effect import)
@@ -50,10 +50,14 @@ import { AuthScreen } from './components/AuthScreen';
 import { CharacterSelectScreen } from './components/CharacterSelectScreen';
 import { LoadingScreen } from './components/LoadingScreen';
 import { CharacterStatsModal } from './components/CharacterStatsModal';
-import { PlayerInventoryModal } from './components/PlayerInventoryModal';
+import { PlayerInventory } from './components/PlayerInventory';
+import { PlayerShop } from './components/PlayerShop';
+import { PlayerRewards } from './components/PlayerRewards';
+import { PlayerAuction } from './components/PlayerAuction';
 import { MonsterEditorModal } from './components/MonsterEditorModal';
 import { SkillBar } from './components/SkillBar';
 import { QuestPanel } from './components/QuestPanel';
+import { SettingsDashboardModal } from './components/SettingsDashboardModal';
 
 // Re-export types and constants for backward compatibility
 export { CLASS_LABELS } from './ArenaClient.constants';
@@ -64,11 +68,23 @@ const CameraDirector = () => null;
 
 export default function MultiplayerArena() {
   const state = useArenaGameState();
+  const [showQuickMenu, setShowQuickMenu] = useState(true);
+  const [showSettingsDashboard, setShowSettingsDashboard] = useState(false);
+  const [showShopModal, setShowShopModal] = useState(false);
+  const [showAuctionModal, setShowAuctionModal] = useState(false);
+  const [showRewardsModal, setShowRewardsModal] = useState(false);
 
   // Set global modal open flag for input hooks
   useEffect(() => {
-    (window as any).isModalOpen = !!(state.showStatsModal || state.showInventoryModal || state.showEnemyEditorModal);
-  }, [state.showStatsModal, state.showInventoryModal, state.showEnemyEditorModal]);
+    (window as any).isModalOpen = !!(
+      state.showStatsModal || 
+      state.showInventoryModal || 
+      state.showEnemyEditorModal || 
+      showShopModal || 
+      showAuctionModal || 
+      showRewardsModal
+    );
+  }, [state.showStatsModal, state.showInventoryModal, state.showEnemyEditorModal, showShopModal, showAuctionModal, showRewardsModal]);
 
   // Expose statsHudRef to window for usePlayerCombat to update mana locally
   useEffect(() => {
@@ -255,6 +271,7 @@ export default function MultiplayerArena() {
                 playerStats={state.playerStatsRef.current.hp >= 0 ? state.playerStatsRef.current : undefined}
                 playerStatsRef={state.playerStatsRef}
                 selectedCharacter={state.selectedCharacter}
+                isAutoMode={state.isAutoMode}
               />
 
               <RemotePlayersRenderer
@@ -330,46 +347,126 @@ export default function MultiplayerArena() {
           onOpenStats={() => state.setShowStatsModal(true)}
         />
 
-        {/* Top-Right: Minimap + Status + Menu */}
-        <div className="absolute right-3 top-3 flex flex-col items-end gap-2 pointer-events-auto">
-          <Minimap
-            connectedPlayersRef={state.connectedPlayersRef}
-            worldMonstersRef={state.worldMonstersRef}
-            localPlayerId={state.selectedCharacter?.id || ""}
-            mapId={state.selectedMapId || "Starter Zone"}
-          />
-          <GameStatusBar ref={state.statusBarRef} mapId={state.selectedMapId} />
-
-          <div className="flex gap-1.5">
+        {/* Top-Right: Minimap + Quick Menu + Status + Exit Portal */}
+        <div className="absolute right-4 top-4 flex flex-col items-end gap-2.5 pointer-events-auto">
+          {/* Quick Menu shortcuts above/left of minimap */}
+          <div className="flex items-center gap-1.5 bg-black/30 backdrop-blur-md border border-white/10 rounded-full px-3 py-1 shadow-md">
+            {showQuickMenu && (
+              <div className="flex items-center gap-3 mr-1 animate-in slide-in-from-right-3 duration-200">
+                <button 
+                  onClick={() => setShowAuctionModal(true)}
+                  className="flex items-center gap-1 text-[8px] font-black text-zinc-300 hover:text-white transition-colors"
+                >
+                  <Gavel className="w-3 h-3 text-yellow-400" /> Auction
+                </button>
+                <button 
+                  onClick={() => alert("Sistem Perdagangan (Trade) Peer-to-Peer akan hadir di fase berikutnya!")}
+                  className="flex items-center gap-1 text-[8px] font-black text-zinc-300 hover:text-white transition-colors"
+                >
+                  <Scale className="w-3 h-3 text-cyan-400" /> Trade
+                </button>
+                <button 
+                  onClick={() => setShowRewardsModal(true)}
+                  className="flex items-center gap-1 text-[8px] font-black text-zinc-300 hover:text-white transition-colors"
+                >
+                  <Gift className="w-3 h-3 text-pink-400" /> Rewards
+                </button>
+                <button 
+                  onClick={() => alert("Informasi Event Server sedang disiapkan!")}
+                  className="flex items-center gap-1 text-[8px] font-black text-zinc-300 hover:text-white transition-colors"
+                >
+                  <Sparkles className="w-3 h-3 text-indigo-400" /> Event
+                </button>
+                <button 
+                  onClick={() => setShowShopModal(true)}
+                  className="flex items-center gap-1 text-[8px] font-black text-zinc-300 hover:text-white transition-colors"
+                >
+                  <Gem className="w-3 h-3 text-amber-400" /> Shop
+                </button>
+              </div>
+            )}
             <button
-              onClick={() => state.setShowInventoryModal(true)}
-              className="bg-gradient-to-b from-[#dfb76c] to-[#b88c42] border border-[#5c3e16] px-3.5 py-1.5 rounded-xl text-[9px] font-black text-[#5c3e16] hover:brightness-110 active:scale-95 flex items-center gap-1.5 shadow-md"
+              onClick={() => setShowQuickMenu(!showQuickMenu)}
+              className="text-zinc-400 hover:text-white p-0.5 transition-transform"
+              style={{ transform: showQuickMenu ? 'rotate(0deg)' : 'rotate(180deg)' }}
             >
-              <span>🎒</span> TAS
-            </button>
-            <button
-              onClick={() => state.setShowMiniActions(v => !v)}
-              className="bg-black/55 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-xl text-[8px] font-black text-zinc-300 hover:text-white flex items-center gap-1.5 transition-all"
-            >
-              <span>☰</span> MENU
+              <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
-          {state.showMiniActions && (
-            <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-2 duration-150">
-              <button onClick={state.handleSwitchCharacter} className="bg-cyan-500/15 border border-cyan-500/30 px-3 py-1.5 rounded-xl text-[8.5px] font-black text-cyan-400 flex items-center gap-1.5 transition-all hover:bg-cyan-500/25">
-                <Users className="w-3 h-3" /> Ganti Kelas
+
+          <div className="flex items-start gap-3">
+            {/* Circular Exit Portal button on the left of Minimap */}
+            <button
+              onClick={state.handleLogout}
+              className="w-10 h-10 rounded-full bg-blue-600/35 hover:bg-blue-600/50 backdrop-blur-md border-2 border-blue-400/50 flex items-center justify-center text-white active:scale-95 transition-all shadow-lg self-center"
+              title="Keluar / Logout"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+
+            <Minimap
+              connectedPlayersRef={state.connectedPlayersRef}
+              worldMonstersRef={state.worldMonstersRef}
+              localPlayerId={state.selectedCharacter?.id || ""}
+              mapId={state.selectedMapId || "Starter Zone"}
+            />
+          </div>
+
+          <GameStatusBar ref={state.statusBarRef} mapId={state.selectedMapId} />
+
+          {/* ── C, K, B & MENU Quick Access Buttons ── */}
+          <div className="flex items-center gap-2 mt-1.5 bg-black/35 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-2xl shadow-lg">
+            {/* C: Profile/Stats */}
+            <div className="relative">
+              <button
+                onClick={() => state.setShowStatsModal(true)}
+                className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 flex items-center justify-center text-zinc-300 hover:text-white transition-all active:scale-90"
+                title="Profile & Stats (C)"
+              >
+                <User className="w-4 h-4 text-cyan-400" />
               </button>
-              <button onClick={async () => { const s = useEditorStore.getState(); let l = s.mapList; if (!l.length) { await s.fetchMapList(); l = s.mapList; } if (l.length > 1) { const i = l.findIndex(m => m.id === s.selectedMapId); state.setEnvReady(false); await s.setSelectedMapId(l[(i + 1) % l.length].id); } else { state.setEnvReady(false); await s.loadFromDatabase(); } }} className="bg-indigo-500/15 border border-indigo-500/30 px-3 py-1.5 rounded-xl text-[8.5px] font-black text-indigo-300 flex items-center gap-1.5 transition-all hover:bg-indigo-500/25">
-                <Sparkles className="w-3 h-3" /> Ganti Peta
-              </button>
-              <button onClick={() => { state.fetchMonsterConfigs(); state.setShowEnemyEditorModal(true); state.setShowMiniActions(() => false); }} className="bg-amber-500/15 border border-amber-500/30 px-3 py-1.5 rounded-xl text-[8.5px] font-black text-amber-400 flex items-center gap-1.5 transition-all hover:bg-amber-500/25">
-                <Skull className="w-3 h-3" /> Edit Monster
-              </button>
-              <button onClick={state.handleLogout} className="bg-red-500/15 border border-red-500/30 px-3 py-1.5 rounded-xl text-[8.5px] font-black text-red-400 flex items-center gap-1.5 transition-all hover:bg-red-500/25">
-                <LogOut className="w-3 h-3" /> Keluar
-              </button>
+              <span className="absolute -top-1.5 -left-1 px-1 bg-black/80 rounded text-[7px] font-black text-zinc-500">C</span>
             </div>
-          )}
+
+            {/* K: Skills */}
+            <div className="relative">
+              <button
+                onClick={() => alert("Membuka jendela Skill & Kombinasi!")}
+                className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 flex items-center justify-center text-zinc-300 hover:text-white transition-all active:scale-90"
+                title="Skills (K)"
+              >
+                <BookOpen className="w-4 h-4 text-yellow-400" />
+              </button>
+              <span className="absolute -top-1.5 -left-1 px-1 bg-black/80 rounded text-[7px] font-black text-zinc-500">K</span>
+            </div>
+
+            {/* B: Bag / Inventory */}
+            <div className="relative">
+              <button
+                onClick={() => state.setShowInventoryModal(true)}
+                className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 flex items-center justify-center text-zinc-300 hover:text-white transition-all active:scale-90"
+                title="Inventory Bag (B)"
+              >
+                <span className="text-sm">🎒</span>
+              </button>
+              <span className="absolute -top-1.5 -left-1 px-1 bg-black/80 rounded text-[7px] font-black text-zinc-500">B</span>
+            </div>
+
+            {/* Divider */}
+            <div className="w-[1px] h-6 bg-white/10 mx-0.5" />
+
+            {/* Menu Circle Button (Witch Portrait) */}
+            <button
+              onClick={() => setShowSettingsDashboard(true)}
+              className="relative w-9 h-9 rounded-full bg-gradient-to-tr from-purple-500 to-indigo-600 border border-white/20 flex items-center justify-center text-white active:scale-95 transition-all shadow-md overflow-hidden hover:brightness-110"
+              title="Settings Dashboard & Menu"
+            >
+              {/* Cute Witch/Warlock Symbol Emoji */}
+              <span className="text-lg relative z-10 leading-none">🧙‍♀️</span>
+              {/* Red Notification Badge */}
+              <span className="absolute top-0 right-0 w-2.5 h-2.5 rounded-full bg-rose-500 border border-white/20 animate-pulse" />
+            </button>
+          </div>
         </div>
 
         {/* Quest Panel */}
@@ -398,18 +495,63 @@ export default function MultiplayerArena() {
           );
         })()}
 
-        {/* Dedicated Player Inventory Modal */}
+        {/* Dedicated Player Inventory */}
         {state.showInventoryModal && (() => {
           const playerStats = state.statsHudRef.current?.getStats();
           if (!playerStats) return null;
           return (
-            <PlayerInventoryModal
+            <PlayerInventory
               playerStats={playerStats}
               onClose={() => state.setShowInventoryModal(false)}
+              onOpenShop={() => {
+                state.setShowInventoryModal(false);
+                setShowShopModal(true);
+              }}
               sendEquipItem={state.sendEquipItem}
               sendUseItem={state.sendUseItem}
               sendSellItem={state.sendSellItem}
               sendRefineItem={state.sendRefineItem}
+            />
+          );
+        })()}
+
+        {/* Dedicated Player Shop */}
+        {showShopModal && (() => {
+          const playerStats = state.statsHudRef.current?.getStats();
+          if (!playerStats) return null;
+          return (
+            <PlayerShop
+              playerStats={playerStats}
+              onClose={() => setShowShopModal(false)}
+              sendBuyItem={state.sendBuyItem}
+            />
+          );
+        })()}
+
+        {/* Dedicated Player Rewards */}
+        {showRewardsModal && (() => {
+          const playerStats = state.statsHudRef.current?.getStats();
+          if (!playerStats) return null;
+          return (
+            <PlayerRewards
+              playerStats={playerStats}
+              onClose={() => setShowRewardsModal(false)}
+              sendClaimDailyReward={state.sendClaimDailyReward}
+            />
+          );
+        })()}
+
+        {/* Dedicated Player Auction */}
+        {showAuctionModal && (() => {
+          const playerStats = state.statsHudRef.current?.getStats();
+          if (!playerStats) return null;
+          return (
+            <PlayerAuction
+              playerStats={playerStats}
+              onClose={() => setShowAuctionModal(false)}
+              sendGetAuctionItems={state.sendGetAuctionItems}
+              sendListAuctionItem={state.sendListAuctionItem}
+              sendBuyoutAuctionItem={state.sendBuyoutAuctionItem}
             />
           );
         })()}
@@ -425,6 +567,15 @@ export default function MultiplayerArena() {
             onClose={() => state.setShowEnemyEditorModal(false)}
             handleSaveMonsterConfig={state.handleSaveMonsterConfig}
             handleDeleteMonsterConfig={state.handleDeleteMonsterConfig}
+          />
+        )}
+
+        {/* Ragnarok settings Dashboard Grid Modal */}
+        {showSettingsDashboard && (
+          <SettingsDashboardModal
+            onClose={() => setShowSettingsDashboard(false)}
+            onOpenStats={() => state.setShowStatsModal(true)}
+            onOpenInventory={() => state.setShowInventoryModal(true)}
           />
         )}
       </div>

@@ -89,8 +89,8 @@ export const useWebSocketGame = (
                     const data = JSON.parse(event.data);
                     if (data && data.type === "chat") {
                         onChatReceived(data.name || "Unknown", data.msg || "");
-                    } else if (data && (data.type === "combat_damage_event" || data.type === "item_drop_event" || data.type === "buff_event" || data.type === "stealth_event" || data.type === "party_event")) {
-                        window.dispatchEvent(new CustomEvent(data.type, { detail: data.data }));
+                    } else if (data && (data.type === "combat_damage_event" || data.type === "item_drop_event" || data.type === "buff_event" || data.type === "stealth_event" || data.type === "party_event" || data.type === "reward_claimed_success" || data.type === "reward_claim_failed" || data.type === "auction_action_failed" || data.type === "auction_list" || data.type === "auction_list_changed")) {
+                        window.dispatchEvent(new CustomEvent(data.type, { detail: data.data || data }));
                     } else {
                         onStateReceived(data as GameStatePayload);
                     }
@@ -260,6 +260,49 @@ export const useWebSocketGame = (
         }
     };
 
+    // Claim daily login rewards
+    const sendClaimDailyReward = () => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            const binaryData = encode({
+                action: "claim_daily_reward"
+            });
+            wsRef.current.send(binaryData);
+        }
+    };
+
+    // List an item for auction
+    const sendListAuctionItem = (playerItemId: string, price: number) => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            const binaryData = encode({
+                action: "list_auction_item",
+                playerItemId,
+                price
+            });
+            wsRef.current.send(binaryData);
+        }
+    };
+
+    // Buyout an item from auction house
+    const sendBuyoutAuctionItem = (targetId: string) => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            const binaryData = encode({
+                action: "buyout_auction_item",
+                targetId
+            });
+            wsRef.current.send(binaryData);
+        }
+    };
+
+    // Request full auction listings
+    const sendGetAuctionItems = () => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            const binaryData = encode({
+                action: "get_auction_items"
+            });
+            wsRef.current.send(binaryData);
+        }
+    };
+
     return { 
         sendPlayerState, 
         sendPlayerAttack, 
@@ -271,6 +314,10 @@ export const useWebSocketGame = (
         sendUseItem,
         sendBuyItem,
         sendSellItem,
-        sendRefineItem
+        sendRefineItem,
+        sendClaimDailyReward,
+        sendListAuctionItem,
+        sendBuyoutAuctionItem,
+        sendGetAuctionItems
     };
 };

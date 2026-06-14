@@ -16,20 +16,20 @@ export const Minimap: React.FC<MinimapProps> = ({
 }) => {
   const playerArrowRef = useRef<SVGSVGElement>(null);
   const dotsContainerRef = useRef<HTMLDivElement>(null);
+  const coordsRef = useRef<HTMLSpanElement>(null);
 
-  // Define dynamic map visibility range in world units (50 meters radius)
+  // Define map visibility range (50 meters radius)
   const MAP_RANGE = 55.0;
 
   useEffect(() => {
     let active = true;
 
-    // Pool up to 35 monster dots and 12 player dots to eliminate frame allocations
+    // Pools to eliminate frame allocations
     const maxMonsters = 35;
     const maxPlayers = 12;
 
     const monsterDots: HTMLDivElement[] = [];
     const playerDots: HTMLDivElement[] = [];
-    // Track last assigned type per dot to skip redundant className writes
     const monsterDotTypes: string[] = new Array(maxMonsters).fill('');
 
     const dotsContainer = dotsContainerRef.current;
@@ -66,20 +66,22 @@ export const Minimap: React.FC<MinimapProps> = ({
         return;
       }
 
+      // Update coordinates text ref directly
+      if (coordsRef.current) {
+        coordsRef.current.innerText = `${Math.round(localPos.x)}, ${Math.round(localPos.z)}`;
+      }
+
       const px = localPos.x;
       const pz = localPos.z;
 
-      // 1. Update player center arrow angle (North-up coordinate system)
+      // 1. Update player center arrow angle
       if (playerArrowRef.current) {
-        // Offset by Math.PI (180 degrees) since Math.atan2(fwd.x, fwd.z) in PlayerController
-        // is out of phase by exactly 180 degrees relative to 2D North-up vector.
         const adjustedRot = localRot - Math.PI;
         const deg = (adjustedRot * 180) / Math.PI;
-        // Invert for clockwise 2D SVG canvas rotation
         playerArrowRef.current.style.transform = `translate(-50%, -50%) rotate(${-deg}deg)`;
       }
 
-      // 2. Render actual, relative monster positions
+      // 2. Render relative monster positions
       const monsters = worldMonstersRef.current || [];
       let monsterIdx = 0;
 
@@ -87,7 +89,6 @@ export const Minimap: React.FC<MinimapProps> = ({
         const m = monsters[i];
         if (m.is_dead || monsterIdx >= maxMonsters) continue;
 
-        // Relative delta (flat x/z fields from new lean MonsterNetworkState)
         const dx = m.x - px;
         const dz = m.z - pz;
         const dist = Math.sqrt(dx * dx + dz * dz);
@@ -95,7 +96,6 @@ export const Minimap: React.FC<MinimapProps> = ({
         if (dist <= MAP_RANGE) {
           const el = monsterDots[monsterIdx];
           if (el) {
-            // Map [-MAP_RANGE, MAP_RANGE] to percent coordinates [0%, 100%]
             const xPct = 50 + (dx / MAP_RANGE) * 50;
             const zPct = 50 + (dz / MAP_RANGE) * 50;
 
@@ -103,8 +103,6 @@ export const Minimap: React.FC<MinimapProps> = ({
             el.style.top = `${zPct}%`;
             el.style.display = "block";
 
-            // Stylize based on type: larger pulsating dot for legendary Boss
-            // Only update className when type actually changes (avoids CSS re-parse)
             const isBoss = m.type === "boss";
             const typeKey = isBoss ? 'boss' : 'normal';
             if (monsterDotTypes[monsterIdx] !== typeKey) {
@@ -126,12 +124,12 @@ export const Minimap: React.FC<MinimapProps> = ({
         }
       }
 
-      // Hide remaining unused monster dots
+      // Hide unused monster dots
       for (let i = monsterIdx; i < maxMonsters; i++) {
         if (monsterDots[i]) monsterDots[i].style.display = "none";
       }
 
-      // 3. Render actual, relative player positions
+      // 3. Render relative player positions
       const players = connectedPlayersRef.current || [];
       let playerIdx = 0;
 
@@ -159,7 +157,7 @@ export const Minimap: React.FC<MinimapProps> = ({
         }
       }
 
-      // Hide remaining unused player dots
+      // Hide unused player dots
       for (let i = playerIdx; i < maxPlayers; i++) {
         if (playerDots[i]) playerDots[i].style.display = "none";
       }
@@ -175,17 +173,22 @@ export const Minimap: React.FC<MinimapProps> = ({
   }, [connectedPlayersRef, worldMonstersRef, localPlayerId, MAP_RANGE]);
 
   return (
-    <div className="relative w-[110px] h-[110px]">
-      {/* Outer Glow Ring & Glassmorphism Backing */}
-      <div className="w-full h-full rounded-full bg-[#041208]/92 border-2 border-emerald-500/70 shadow-[0_0_25px_rgba(16,185,129,0.3)] overflow-hidden relative">
+    <div className="relative flex flex-col items-center select-none pointer-events-auto">
+      {/* Title above minimap */}
+      <span className="text-[10px] font-black text-white tracking-widest drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.95)] mb-1">
+        {mapId === "Starter Zone" ? "Tower Stage !" : mapId.replace(/[-_]/g, ' ').toUpperCase()}
+      </span>
+
+      {/* Circle Minimap */}
+      <div className="w-[105px] h-[105px] rounded-full bg-black/40 backdrop-blur-md border-2 border-white/20 shadow-[0_4px_16px_rgba(0,0,0,0.5)] overflow-hidden relative">
         
         {/* Radar grids & Concentric Circles */}
-        <svg className="absolute inset-0 w-full h-full opacity-35" viewBox="0 0 100 100">
-          <circle cx="50" cy="50" r="48" stroke="#10b981" strokeWidth="0.5" fill="none" />
-          <circle cx="50" cy="50" r="32" stroke="#10b981" strokeWidth="0.5" fill="none" />
-          <circle cx="50" cy="50" r="16" stroke="#10b981" strokeWidth="0.5" fill="none" />
-          <line x1="2" y1="50" x2="98" y2="50" stroke="#10b981" strokeWidth="0.5" strokeDasharray="1,2" />
-          <line x1="50" y1="2" x2="50" y2="98" stroke="#10b981" strokeWidth="0.5" strokeDasharray="1,2" />
+        <svg className="absolute inset-0 w-full h-full opacity-25" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="48" stroke="#ffffff" strokeWidth="0.5" fill="none" />
+          <circle cx="50" cy="50" r="32" stroke="#ffffff" strokeWidth="0.5" fill="none" />
+          <circle cx="50" cy="50" r="16" stroke="#ffffff" strokeWidth="0.5" fill="none" />
+          <line x1="2" y1="50" x2="98" y2="50" stroke="#ffffff" strokeWidth="0.5" strokeDasharray="1,2" />
+          <line x1="50" y1="2" x2="50" y2="98" stroke="#ffffff" strokeWidth="0.5" strokeDasharray="1,2" />
         </svg>
 
         {/* Real-time Dynamic Dots Container */}
@@ -194,7 +197,7 @@ export const Minimap: React.FC<MinimapProps> = ({
         {/* Player arrow in center */}
         <svg
           ref={playerArrowRef}
-          className="absolute top-1/2 left-1/2 w-4 h-4 text-cyan-400 drop-shadow-[0_0_5px_rgba(34,211,238,0.9)] z-40 transition-transform duration-75 ease-out pointer-events-none"
+          className="absolute top-1/2 left-1/2 w-4 h-4 text-[#38bdf8] drop-shadow-[0_0_5px_rgba(56,189,248,0.95)] z-40 transition-transform duration-75 ease-out pointer-events-none"
           style={{ transform: "translate(-50%, -50%) rotate(0deg)" }}
           viewBox="0 0 24 24"
           fill="currentColor"
@@ -202,24 +205,24 @@ export const Minimap: React.FC<MinimapProps> = ({
           <path d="M12 2L2 22l10-6 10 6L12 2z" />
         </svg>
 
-        {/* Radar Sweep sweep animation */}
+        {/* Sweep effect */}
         <div className="absolute inset-0 rounded-full overflow-hidden pointer-events-none z-10">
           <div
-            className="absolute top-0 left-1/2 w-[55px] h-[55px] origin-bottom-left animate-spin"
+            className="absolute top-0 left-1/2 w-[52px] h-[52px] origin-bottom-left animate-spin"
             style={{ animationDuration: "3.5s" }}
           >
             <div
-              className="w-full h-[2px] bg-gradient-to-r from-emerald-400/80 to-transparent"
+              className="w-full h-[1.5px] bg-gradient-to-r from-cyan-400/40 to-transparent"
               style={{ transformOrigin: "0 100%", transform: "rotate(-45deg)" }}
             />
           </div>
         </div>
       </div>
 
-      {/* Map Zone Text Label */}
-      <div className="absolute -bottom-3 left-0 right-0 text-center pointer-events-none z-20">
-        <span className="text-[7.5px] font-black text-emerald-300 uppercase tracking-widest bg-black/85 border border-emerald-500/40 px-2.5 py-0.5 rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
-          {mapId?.toUpperCase() ?? "ZONE"}
+      {/* Coordinate Readout below minimap */}
+      <div className="mt-1 flex items-center justify-center pointer-events-none z-20">
+        <span ref={coordsRef} className="text-[10px] font-black text-zinc-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)] tracking-wide">
+          0, 0
         </span>
       </div>
     </div>

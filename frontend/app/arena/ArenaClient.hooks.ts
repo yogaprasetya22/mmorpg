@@ -1,7 +1,7 @@
 /** Custom hook orchestrating all Arena game state: auth, WebSocket, profile polling, and combat. */
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useWebSocketGame, GameStatePayload } from '@/src/hooks/useWebSocketGame';
 import { useEditorStore } from '@/src/state/useEditorStore';
 import { battleGrid } from '@/src/core/logic/combat/spatialGrid';
@@ -254,7 +254,11 @@ export function useArenaGameState() {
     sendUseItem,
     sendBuyItem,
     sendSellItem,
-    sendRefineItem
+    sendRefineItem,
+    sendClaimDailyReward,
+    sendListAuctionItem,
+    sendBuyoutAuctionItem,
+    sendGetAuctionItems
   } = useWebSocketGame(
     WS_BASE_URL,
     token,
@@ -414,6 +418,62 @@ export function useArenaGameState() {
     }
   );
 
+  // Reusable helper to update player profile info/inventory immediately
+  const fetchProfile = useCallback(async () => {
+    if (!token || !selectedCharacter) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/player/profile?character_id=${selectedCharacter.id}`, {
+        headers: { "Authorization": `Bearer ${token}` },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.player) {
+          Object.assign(playerStatsRef.current, data.player);
+          playerStatsRef.current.maxHp = data.player.max_hp;
+          statsHudRef.current?.updateStats(data.player);
+          questPanelRef.current?.updateQuests(data.player.quests || []);
+        }
+      } else if (response.status === 401) {
+        handleLogout();
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }, [token, selectedCharacter]);
+
+  // Wrap WebSocket callbacks to trigger immediate & follow-up fetches
+  const handleEquipItem = useCallback((playerItemId: string) => {
+    sendEquipItem(playerItemId);
+    fetchProfile();
+    setTimeout(fetchProfile, 150);
+  }, [sendEquipItem, fetchProfile]);
+
+  const handleUseItem = useCallback((playerItemId: string) => {
+    sendUseItem(playerItemId);
+    fetchProfile();
+    setTimeout(fetchProfile, 150);
+  }, [sendUseItem, fetchProfile]);
+
+  const handleBuyItem = useCallback((playerItemId: string, amount: number) => {
+    sendBuyItem(playerItemId, amount);
+    fetchProfile();
+    setTimeout(fetchProfile, 150);
+  }, [sendBuyItem, fetchProfile]);
+
+  const handleSellItem = useCallback((playerItemId: string) => {
+    sendSellItem(playerItemId);
+    fetchProfile();
+    setTimeout(fetchProfile, 150);
+  }, [sendSellItem, fetchProfile]);
+
+  const handleRefineItem = useCallback((playerItemId: string) => {
+    sendRefineItem(playerItemId);
+    fetchProfile();
+    setTimeout(fetchProfile, 150);
+  }, [sendRefineItem, fetchProfile]);
+
+
   // ── Authoritative Combat Damage Event Listener ──
   useEffect(() => {
     const onCombatDamage = (e: Event) => {
@@ -459,13 +519,6 @@ export function useArenaGameState() {
           color: isMiss ? "#90a4ae" : (isCrit ? "#ff3b30" : (isMagic ? "#00e5ff" : "#ffcc00")),
           timestamp: performance.now()
         });
-
-        // Authoritative camera shakes synced with server hits
-        if (isCrit) {
-          (window as any).triggerCameraShake?.(0.5);
-        } else if (!isMiss) {
-          (window as any).triggerCameraShake?.(0.2);
-        }
       }
     };
 
@@ -499,27 +552,7 @@ export function useArenaGameState() {
           const mCount = worldMonstersRef.current?.filter((m: any) => !m.is_dead).length ?? 0;
           statusBarRef.current?.update(pCount, mCount);
 
-          fetch(`${API_BASE_URL}/api/player/profile?character_id=${selectedCharacter.id}`, {
-            headers: { "Authorization": `Bearer ${token}` },
-            signal: AbortSignal.timeout(4000),
-          })
-            .then(async (response) => {
-              if (destroyed) return;
-              if (response.ok) {
-                const data = await response.json();
-                if (data.player) {
-                  // Copy all server-authoritative properties to local ref so combat engine gets accurate stats
-                  Object.assign(playerStatsRef.current, data.player);
-                  // Ensure both camelCase and snake_case fields are kept in sync
-                  playerStatsRef.current.maxHp = data.player.max_hp;
-                  statsHudRef.current?.updateStats(data.player);
-                  questPanelRef.current?.updateQuests(data.player.quests || []);
-                }
-              } else if (response.status === 401) {
-                handleLogout();
-              }
-            })
-            .catch(() => { /* Ignore — next tick retries */ });
+          fetchProfile();
         }
 
         if (!destroyed) {
@@ -535,7 +568,7 @@ export function useArenaGameState() {
     return () => {
       destroyed = true;
     };
-  }, [token, selectedCharacter]);
+  }, [token, selectedCharacter, fetchProfile]);
 
   // ── AUTH ACTIONS ──
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -696,7 +729,7 @@ export function useArenaGameState() {
     }
   };
 
-  const handleLogout = () => {
+  function handleLogout() {
     localStorage.removeItem("game_auth_token");
     localStorage.removeItem("game_active_char_id");
     setToken("");
@@ -709,7 +742,7 @@ export function useArenaGameState() {
     connectedPlayersRef.current = [];
     worldMonstersRef.current = [];
     setSuccessMsg("");
-  };
+  }
 
   const handleAuthoritativeAttack = (monsterId: string, damage?: number, isCrit?: boolean) => {
     sendPlayerAttack("monster", monsterId, damage, isCrit);
@@ -758,6 +791,14 @@ export function useArenaGameState() {
 
     // WebSocket
     sendPlayerState, sendPlayerAttack, sendPlayerSkill, sendDistributeStat, sendChatMessage,
-    sendEquipItem, sendUseItem, sendBuyItem, sendSellItem, sendRefineItem,
+    sendEquipItem: handleEquipItem,
+    sendUseItem: handleUseItem,
+    sendBuyItem: handleBuyItem,
+    sendSellItem: handleSellItem,
+    sendRefineItem: handleRefineItem,
+    sendClaimDailyReward,
+    sendListAuctionItem,
+    sendBuyoutAuctionItem,
+    sendGetAuctionItems,
   };
 }

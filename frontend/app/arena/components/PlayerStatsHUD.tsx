@@ -65,104 +65,98 @@ export const PlayerStatsHUD = forwardRef<PlayerStatsHUDRef, {
     return (
       <>
         {/* ── TOP-LEFT: Ragnarok-Style Portrait & HP/SP/Job Bars ── */}
-        <div className="absolute left-4 top-4 flex items-center gap-3 pointer-events-auto">
-          {/* Circular Portrait with Golden Ornate Ring */}
-          <div className="relative cursor-pointer select-none group" onClick={onOpenStats}>
-            {/* Outer Golden/Bronze Ornate Ring */}
-            <div className="w-[72px] h-[72px] rounded-full bg-gradient-to-b from-[#dfb76c] via-[#b88c42] to-[#8c5b1b] p-[3px] shadow-[0_4px_10px_rgba(0,0,0,0.5),_0_0_15px_rgba(223,183,108,0.25)] relative z-10 hover:brightness-110 transition-all duration-200">
-              <div className="w-full h-full rounded-full bg-gradient-to-tr from-[#1a2333] to-[#2c3d59] flex items-center justify-center overflow-hidden border border-[#5c3e16]">
-                <div className="text-2xl">
+        <div className="absolute left-4 top-4 flex items-center gap-2 pointer-events-auto select-none">
+          {/* Circular Portrait with custom border */}
+          <div className="relative cursor-pointer group" onClick={onOpenStats}>
+            {/* Outer Ring */}
+            <div className="w-[64px] h-[64px] rounded-full bg-gradient-to-tr from-[#86efac] via-[#10b981] to-[#67e8f9] p-[2px] shadow-[0_4px_12px_rgba(0,0,0,0.4)] relative z-10 hover:scale-105 transition-transform duration-200">
+              <div className="w-full h-full rounded-full bg-gradient-to-tr from-[#1e293b] to-[#0f172a] flex items-center justify-center overflow-hidden border border-black/30">
+                <div className="text-2xl transform group-hover:scale-110 transition-transform">
                   {stats.class === "Mage" ? "🧙" : stats.class === "Priest" ? "👼" : stats.class === "Tank" ? "🛡️" : stats.class === "Assassin" ? "🥷" : "⚔️"}
                 </div>
               </div>
             </div>
 
-            {/* Level Badge Overlay (Classic Base Level) */}
-            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 z-20 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-[#dfb76c] to-[#a67c32] border border-[#5c3e16] flex items-center justify-center shadow-md">
-              <span className="text-[9px] font-black text-black tracking-tight leading-none">
-                Lv.{stats.level ?? defaultLevel}
+            {/* Level Badge Overlay (Top right overlapping avatar, RO style) */}
+            <div className="absolute -top-1.5 -right-1 z-20 px-2 py-0.5 rounded-full bg-[#10b981] border border-white/20 flex items-center justify-center shadow-md">
+              <span className="text-[8px] font-black text-white tracking-tight leading-none">
+                Lv {stats.level ?? defaultLevel}
               </span>
             </div>
           </div>
 
           {/* Bar Panel - Ragnarok Semi-Transparent Plate */}
-          <div className="flex flex-col gap-1.5 bg-black/40 backdrop-blur-md border border-[#dfb76c]/30 pl-11 pr-4 py-2 rounded-r-2xl -ml-10 relative z-0 shadow-lg">
+          <div className="flex flex-col gap-1 bg-black/30 backdrop-blur-md border border-white/10 pl-4 pr-4 py-1.5 rounded-2xl relative z-0 shadow-lg min-w-[160px]">
             {/* Username and Class Badge */}
-            <div className="flex items-center gap-2">
-              <span className="text-[12px] font-black text-[#fdf6e2] drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] tracking-wide">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] tracking-wide">
                 {stats.username ?? defaultUsername}
               </span>
-              <span className="bg-[#b88c42] text-black text-[7.5px] font-extrabold px-1.5 py-0.5 rounded border border-[#dfb76c]/40 uppercase tracking-wider scale-90 origin-left">
+              <span className="bg-[#10b981]/25 text-[#a7f3d0] text-[7px] font-extrabold px-1 py-0.2 rounded border border-[#10b981]/30 uppercase tracking-wider scale-90 origin-left">
                 {stats.class || "Warrior"}
               </span>
             </div>
 
             {/* HP Bar: Ragnarok Glossy Green */}
-            <div className="w-44 h-[13px] rounded bg-zinc-950 border border-[#7a643f] overflow-hidden relative shadow-inner">
+            <div className="w-36 h-[9px] rounded-full bg-zinc-950/80 border border-white/5 overflow-hidden relative shadow-inner">
               <div 
-                className="h-full bg-gradient-to-b from-[#5cff67] via-[#2cb835] to-[#147a1b] transition-all duration-300 relative" 
+                className="h-full bg-gradient-to-r from-[#22c55e] to-[#4ade80] transition-all duration-300 relative rounded-full" 
                 style={{width:`${hpPct}%`}}
               >
                 {/* Glossy Overlay Reflection */}
-                <div className="absolute inset-x-0 top-0 h-[40%] bg-white/20" />
+                <div className="absolute inset-x-0 top-0 h-[40%] bg-white/25" />
               </div>
-              <span className="absolute inset-0 flex items-center justify-center text-[8.5px] font-black text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
-                HP {Math.round(stats.hp ?? 100)} / {Math.round(stats.max_hp ?? 100)}
-              </span>
             </div>
 
             {/* SP Bar: Ragnarok Glossy Blue */}
-            <div className="w-44 h-[11px] rounded bg-zinc-950 border border-[#7a643f] overflow-hidden relative shadow-inner">
+            <div className="w-36 h-[8px] rounded-full bg-zinc-950/80 border border-white/5 overflow-hidden relative shadow-inner">
               <div 
-                className="h-full bg-gradient-to-b from-[#6ce8ff] via-[#2c9bb8] to-[#176275] transition-all duration-300 relative" 
+                className="h-full bg-gradient-to-r from-[#0ea5e9] to-[#38bdf8] transition-all duration-300 relative rounded-full" 
                 style={{width:`${mpPct}%`}}
               >
-                <div className="absolute inset-x-0 top-0 h-[40%] bg-white/20" />
+                <div className="absolute inset-x-0 top-0 h-[40%] bg-white/25" />
               </div>
-              <span className="absolute inset-0 flex items-center justify-center text-[7.5px] font-black text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
-                SP {Math.round(stats.mp ?? 50)} / {Math.round(stats.max_mp ?? 50)}
-              </span>
             </div>
           </div>
         </div>
   
-        {/* ── TOP-CENTER: Currency & Channel Bar (Parchment Aesthetic) ── */}
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-gradient-to-b from-[#f9f5eb] to-[#e6dbcc] border-2 border-[#b88c42] px-5 py-1.5 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.35)] pointer-events-auto text-zinc-900 font-medium">
+        {/* ── TOP-CENTER: Currency & Channel Bar (Clean Glassy Aesthetic) ── */}
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-3.5 bg-black/25 backdrop-blur-md border border-white/10 px-4 py-1.5 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.3)] pointer-events-auto text-white">
           {/* Zeny (Z) Currency */}
-          <div className="flex items-center gap-1.5">
-            <span className="w-4 h-4 rounded-full bg-gradient-to-b from-[#ffea75] to-[#c79800] border border-[#7c5d00] flex items-center justify-center text-[9px] font-black text-black shadow-sm">Z</span>
-            <span className="text-[11px] font-black text-[#7a4b08]">{(stats.gold ?? 2048).toLocaleString()}</span>
+          <div className="flex items-center gap-1">
+            <span className="w-4 h-4 rounded-full bg-[#facc15] flex items-center justify-center text-[8.5px] font-bold text-black shadow-sm">Z</span>
+            <span className="text-[10px] font-bold text-[#fef08a]">{(stats.gold ?? 2048).toLocaleString()}</span>
           </div>
-          <div className="w-px h-3.5 bg-[#b88c42]/30" />
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs filter drop-shadow-sm">💎</span>
-            <span className="text-[11px] font-black text-[#c026d3]">88</span>
+          <div className="w-px h-3 bg-white/10" />
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] filter drop-shadow-sm">💎</span>
+            <span className="text-[10px] font-bold text-[#f472b6]">88</span>
           </div>
-          <div className="w-px h-3.5 bg-[#b88c42]/30" />
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs filter drop-shadow-sm">🔷</span>
-            <span className="text-[11px] font-black text-[#0284c7]">150</span>
+          <div className="w-px h-3 bg-white/10" />
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] filter drop-shadow-sm">🔷</span>
+            <span className="text-[10px] font-bold text-[#38bdf8]">150</span>
           </div>
-          <div className="w-px h-3.5 bg-[#b88c42]/30" />
+          <div className="w-px h-3 bg-white/10" />
           <FPSBadge />
         </div>
   
         {/* ── BOTTOM-CENTER: Ragnarok Monster HP Target & EXP ── */}
-        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[380px] flex flex-col gap-1 pointer-events-none">
-          <div className="relative w-full h-[18px] bg-zinc-950 rounded border border-[#7a643f] overflow-hidden shadow-[inset_0_2px_4px_rgba(0,0,0,0.7)]">
+        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[340px] flex flex-col gap-1 pointer-events-none">
+          <div className="relative w-full h-[14px] bg-black/30 backdrop-blur-sm rounded-full border border-white/10 overflow-hidden shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)]">
             <div
-              className="absolute inset-y-0 left-0 bg-gradient-to-b from-[#5cff67] via-[#2cb835] to-[#147a1b] rounded transition-all duration-500 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+              className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#22c55e] to-[#4ade80] rounded-full transition-all duration-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]"
               style={{width:`${hpPct}%`}}
             >
               <div className="absolute inset-x-0 top-0 h-[40%] bg-white/20" />
             </div>
-            <div className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
+            <div className="absolute inset-0 flex items-center justify-center text-[8.5px] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
               HP {hpPct.toFixed(1)}%
             </div>
           </div>
           {/* Job Fever Bar */}
-          <div className="relative w-full h-[10px] bg-zinc-950 rounded border border-[#7a643f] overflow-hidden shadow-[inset_0_1px_3px_rgba(0,0,0,0.7)]">
-            <div className="absolute inset-y-0 left-0 bg-gradient-to-b from-[#f472b6] via-[#db2777] to-[#9d174d] transition-all duration-300" style={{width:"65%"}}>
+          <div className="relative w-full h-[8px] bg-black/30 backdrop-blur-sm rounded-full border border-white/10 overflow-hidden shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
+            <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#ec4899] to-[#f472b6] transition-all duration-300 rounded-full" style={{width:"65%"}}>
               <div className="absolute inset-x-0 top-0 h-[40%] bg-white/20" />
             </div>
             <div className="absolute inset-0 flex items-center justify-center gap-1 text-[7px] font-black text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)] tracking-wider">
@@ -170,18 +164,18 @@ export const PlayerStatsHUD = forwardRef<PlayerStatsHUDRef, {
             </div>
           </div>
         </div>
- 
+  
         {/* Bottom EXP Bar: Classic RO styling */}
-        <div className="absolute bottom-0 inset-x-0 h-2 bg-zinc-950 z-20 flex items-center pointer-events-auto border-t border-[#7a643f]/40">
+        <div className="absolute bottom-0 inset-x-0 h-1.5 bg-zinc-950 z-20 flex items-center pointer-events-auto">
           <div
-            className="h-full bg-gradient-to-b from-[#a855f7] via-[#7e22ce] to-[#581c87] transition-all duration-500"
+            className="h-full bg-gradient-to-r from-[#a855f7] to-[#c084fc] transition-all duration-500"
             style={{ width: `${xpPct}%` }}
           />
-          <div className="absolute bottom-2.5 left-4 text-[8px] font-black text-[#c084fc] uppercase tracking-widest leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
+          <div className="absolute bottom-2 left-4 text-[8px] font-black text-[#c084fc] uppercase tracking-widest leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
             BASE EXP {xpPct.toFixed(2)}%
           </div>
         </div>
       </>
-  );
-});
+    );
+  });
 PlayerStatsHUD.displayName = "PlayerStatsHUD";

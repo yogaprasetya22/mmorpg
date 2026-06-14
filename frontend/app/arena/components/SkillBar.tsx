@@ -1,7 +1,7 @@
-/** Bottom-right skill bar with 4 numbered skill slots, auto-battle toggle, and main attack button. */
+/** Bottom skill bar matching premium PC double-row hotkey interface. */
 'use client';
 
-import { Sword, Shield, Zap, Sparkles, Target, RefreshCw } from 'lucide-react';
+import { Sword, Shield, Zap, Sparkles, Target, RefreshCw, Lock, Flag, Ban, ChevronDown } from 'lucide-react';
 
 interface SkillBarProps {
   selectedCharacter: any;
@@ -30,74 +30,159 @@ export function SkillBar({ selectedCharacter, isAutoMode, setIsAutoMode }: Skill
     }
   };
 
-  const skills = [
-    { num: 1, icon: <Sword className="w-5 h-5" />, color: "from-[#dfb76c] to-[#b88c42]", border: "border-[#8c5b1b]", text: "text-zinc-950", label: "ATK" },
-    { num: 2, icon: <Zap className="w-5 h-5" />, color: "from-[#38bdf8] to-[#0284c7]", border: "border-[#0369a1]", text: "text-white", label: "SKL" },
-    { num: 3, icon: <Sparkles className="w-5 h-5" />, color: "from-[#c084fc] to-[#7e22ce]", border: "border-[#581c87]", text: "text-white", label: "PSV" },
-    { num: 4, icon: <Shield className="w-5 h-5" />, color: "from-[#34d399] to-[#059669]", border: "border-[#065f46]", text: "text-white", label: "DEF" },
-  ];
+  // Predefined skills mapping for visual completeness matching reference image
+  const topRowKeys = ["7", "8", "9", "0", "-", "="];
+  const bottomRowKeys = ["1", "2", "3", "4", "5", "6"];
+  const fRowKeys = ["F1", "F2", "F3", "F4"];
+
+  // Return icons based on keys
+  const getSkillIcon = (key: string) => {
+    switch (key) {
+      // Bottom Row
+      case "1": return <Sparkles className="w-4.5 h-4.5 text-yellow-300 drop-shadow-[0_0_6px_rgba(253,224,71,0.6)]" />;
+      case "2": return <Shield className="w-4.5 h-4.5 text-blue-300 drop-shadow-[0_0_6px_rgba(147,197,253,0.6)]" />;
+      case "3": return <Zap className="w-4.5 h-4.5 text-red-400 drop-shadow-[0_0_6px_rgba(248,113,113,0.6)]" />;
+      case "4": return <Sparkles className="w-4.5 h-4.5 text-cyan-300 drop-shadow-[0_0_6px_rgba(103,232,249,0.6)]" />;
+      case "5": return <Shield className="w-4.5 h-4.5 text-purple-300 drop-shadow-[0_0_6px_rgba(216,180,254,0.6)]" />;
+      case "6": return <Target className="w-4.5 h-4.5 text-[#a7f3d0] drop-shadow-[0_0_6px_rgba(167,243,208,0.6)]" />;
+      // Top Row
+      case "7": return <RefreshCw className="w-4.5 h-4.5 text-emerald-300" />;
+      case "8": return <Sword className="w-4.5 h-4.5 text-zinc-300" />;
+      case "9": return <Zap className="w-4.5 h-4.5 text-[#67e8f9]" />;
+      case "0": return <Sword className="w-4.5 h-4.5 text-yellow-400" />;
+      // F Keys
+      case "F1": return <Shield className="w-4.5 h-4.5 text-zinc-400" />;
+      default: return null;
+    }
+  };
+
+  const getSkillBG = (key: string) => {
+    switch (key) {
+      case "1": return "bg-gradient-to-b from-[#fcd34d]/20 to-[#f59e0b]/10 border-[#fbbf24]/40";
+      case "2": return "bg-gradient-to-b from-[#93c5fd]/20 to-[#3b82f6]/10 border-[#60a5fa]/40";
+      case "3": return "bg-gradient-to-b from-[#f87171]/20 to-[#ef4444]/10 border-[#f87171]/40";
+      case "4": return "bg-gradient-to-b from-[#67e8f9]/20 to-[#06b6d4]/10 border-[#22d3ee]/40";
+      case "5": return "bg-gradient-to-b from-[#d8b4fe]/20 to-[#8b5cf6]/10 border-[#c084fc]/40";
+      case "6": return "bg-gradient-to-b from-[#a7f3d0]/20 to-[#10b981]/10 border-[#34d399]/40";
+      case "7": return "bg-zinc-800/40 border-zinc-700/40";
+      case "8": return "bg-zinc-800/40 border-zinc-700/40";
+      case "9": return "bg-zinc-800/40 border-zinc-700/40";
+      case "0": return "bg-gradient-to-b from-[#fef08a]/20 to-[#eab308]/10 border-[#facc15]/40";
+      case "F1": return "bg-zinc-800/40 border-zinc-700/40";
+      default: return "bg-[#0b0c10]/70 border-[#23272a]/80";
+    }
+  };
 
   return (
-    <div className="absolute right-4 bottom-14 flex flex-col items-end gap-3.5 pointer-events-auto">
-      {/* Top row: 4 numbered skill slots */}
-      <div className="flex gap-2.5">
-        {skills.map(s => (
-          <div key={s.num} className="relative flex flex-col items-center gap-1">
+    <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-end gap-3.5 bg-black/45 backdrop-blur-md border border-white/10 px-5 py-3 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.55)] pointer-events-auto select-none z-30">
+      
+      {/* ── LEFT: Locked Utility Slots ── */}
+      <div className="flex gap-1.5">
+        <div className="relative flex flex-col items-center">
+          <button className="w-[42px] h-[42px] rounded-xl bg-zinc-950/80 border border-zinc-800/50 flex items-center justify-center cursor-not-allowed group shadow-inner">
+            <Lock className="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-500 transition-colors" />
+          </button>
+          <span className="absolute -top-1.5 -left-1 px-1 bg-black/80 rounded text-[7px] font-bold text-zinc-500 uppercase tracking-wider">E</span>
+        </div>
+        <div className="relative flex flex-col items-center">
+          <button className="w-[42px] h-[42px] rounded-xl bg-zinc-950/80 border border-zinc-800/50 flex items-center justify-center cursor-not-allowed group shadow-inner">
+            <Lock className="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-500 transition-colors" />
+          </button>
+          <span className="absolute -top-1.5 -left-1 px-1 bg-black/80 rounded text-[7px] font-bold text-zinc-500 uppercase tracking-wider">Q</span>
+        </div>
+      </div>
+
+      {/* Downward Chevron Separator */}
+      <div className="h-10 self-center flex items-center justify-center opacity-40 text-white">
+        <ChevronDown className="w-4.5 h-4.5 rotate-90" />
+      </div>
+
+      {/* ── CENTER: Double Row Keyboard Slots Grid ── */}
+      <div className="flex flex-col gap-1.5">
+        {/* Row 1: Keys 7 - = */}
+        <div className="flex gap-1.5">
+          {topRowKeys.map((key) => (
+            <div key={key} className="relative">
+              <button
+                onClick={() => key === "7" && handleSlotClick(2)}
+                className={`w-[40px] h-[40px] rounded-xl border flex items-center justify-center active:scale-95 transition-all shadow-[inset_0_1px_2px_rgba(255,255,255,0.05)] ${getSkillBG(key)}`}
+              >
+                {getSkillIcon(key)}
+              </button>
+              <span className="absolute -top-1.5 -left-1.5 px-1 bg-black/75 rounded text-[7px] font-extrabold text-zinc-400">{key}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Row 2: Keys 1 - 6 & F1 - F4 */}
+        <div className="flex gap-1.5 items-center">
+          {/* Main keys 1 - 6 */}
+          {bottomRowKeys.map((key) => (
+            <div key={key} className="relative">
+              <button
+                onClick={() => handleSlotClick(parseInt(key) === 1 ? 1 : 2)}
+                className={`w-[40px] h-[40px] rounded-xl border flex items-center justify-center active:scale-95 transition-all shadow-[inset_0_1px_2px_rgba(255,255,255,0.05)] ${getSkillBG(key)}`}
+              >
+                {getSkillIcon(key)}
+              </button>
+              <span className="absolute -top-1.5 -left-1.5 px-1 bg-black/75 rounded text-[7px] font-extrabold text-zinc-400">{key}</span>
+            </div>
+          ))}
+
+          {/* Vertical subtle divider before F keys */}
+          <div className="w-[1px] h-7 bg-white/10 mx-0.5" />
+
+          {/* F Keys F1 - F4 */}
+          {fRowKeys.map((key) => (
+            <div key={key} className="relative">
+              <button
+                className={`w-[40px] h-[40px] rounded-xl border flex items-center justify-center active:scale-95 transition-all ${getSkillBG(key)}`}
+              >
+                {getSkillIcon(key)}
+              </button>
+              <span className="absolute -top-1.5 -left-1.5 px-1 bg-black/75 rounded text-[7px] font-extrabold text-zinc-400">{key}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── RIGHT: Advance Instance & Auto Controls ── */}
+      <div className="flex items-center gap-3 pl-2 border-l border-white/10 h-16 self-center">
+        
+        {/* Advance Instance Button */}
+        <button className="flex flex-col items-center justify-center bg-black/25 hover:bg-white/5 border border-white/10 rounded-xl px-2.5 py-1.5 transition-all active:scale-95 text-zinc-300 hover:text-white shadow-sm">
+          <Flag className="w-4 h-4 text-emerald-400 animate-bounce" />
+          <span className="text-[6.5px] font-bold tracking-wider uppercase mt-1">Advance Instance</span>
+        </button>
+
+        {/* Auto Battle trigger */}
+        <div className="flex items-center gap-1.5 bg-black/20 px-2 py-1.5 rounded-xl border border-white/5">
+          <button
+            onClick={() => setIsAutoMode(v => !v)}
+            className={`flex flex-col items-center justify-center w-[40px] h-[40px] rounded-xl border transition-all ${
+              isAutoMode 
+                ? "bg-[#10b981]/25 border-[#10b981] text-[#10b981] shadow-[0_0_10px_rgba(16,185,129,0.35)]" 
+                : "bg-zinc-900/40 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700"
+            }`}
+          >
+            <Sword className={`w-4 h-4 ${isAutoMode ? "animate-pulse" : ""}`} />
+            <span className="text-[6.5px] font-extrabold mt-0.5 uppercase tracking-wide">Auto (Z)</span>
+          </button>
+
+          {/* Red/Ban stop auto button */}
+          {isAutoMode && (
             <button
-              className={`w-[50px] h-[50px] rounded-full bg-gradient-to-br ${s.color} border-2 ${s.border} ${s.text} flex items-center justify-center active:scale-95 transition-all shadow-[0_4px_10px_rgba(0,0,0,0.4)] relative hover:brightness-110`}
-              onClick={() => handleSlotClick(s.num)}
+              onClick={() => setIsAutoMode(() => false)}
+              className="w-[40px] h-[40px] rounded-xl bg-red-950/40 border border-red-500/40 hover:bg-red-900/30 flex items-center justify-center text-red-400 active:scale-95 transition-all"
+              title="Batalkan Auto"
             >
-              {s.icon}
-              <span className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-[#ebdcb9] border border-[#b88c42] flex items-center justify-center text-[7px] font-black text-[#5c3e16] shadow-sm">{s.num}</span>
+              <Ban className="w-4 h-4" />
             </button>
-            <span className="text-[7.5px] font-black text-[#fdf6e2] drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.85)] uppercase tracking-wider">{s.label}</span>
-          </div>
-        ))}
+          )}
+        </div>
+
       </div>
 
-      {/* Bottom row: AUTO + big skill button */}
-      <div className="flex items-center gap-3">
-        {/* AUTO battle */}
-        <button
-          onClick={() => setIsAutoMode(v => !v)}
-          className={`flex flex-col items-center justify-center w-[48px] h-[48px] rounded-full border-2 transition-all ${
-            isAutoMode 
-              ? "bg-[#10b981]/20 border-[#047857] shadow-[0_0_12px_rgba(16,185,129,0.5)]" 
-              : "bg-black/50 border-[#b88c42]/30 text-zinc-400"
-          }`}
-        >
-          <span className={`text-[8.5px] font-black tracking-wider ${isAutoMode ? "text-[#10b981] animate-pulse" : "text-[#8c6b4f]"}`}>AUTO</span>
-        </button>
-
-        {/* Main attack big button */}
-        <button
-          onClick={handleAttackDispatch}
-          className="relative w-[78px] h-[78px] rounded-full bg-gradient-to-br from-[#dfb76c] via-[#b88c42] to-[#8c5b1b] border-2 border-[#5c3e16] active:scale-95 flex items-center justify-center text-zinc-950 shadow-[0_6px_20px_rgba(0,0,0,0.5)] transition-all hover:brightness-115 group"
-        >
-          <div className="absolute inset-1 rounded-full bg-white/10 group-hover:bg-white/20 transition-all border border-[#ebdcb9]/40" />
-          {selectedCharacter.class === "Warrior" && <Sword className="w-9 h-9 relative z-10 group-hover:rotate-12 transition-transform" />}
-          {selectedCharacter.class === "Mage" && <Zap className="w-9 h-9 relative z-10" />}
-          {selectedCharacter.class === "Priest" && <Sparkles className="w-9 h-9 relative z-10" />}
-          {selectedCharacter.class === "Thief" && <Target className="w-9 h-9 relative z-10" />}
-          {selectedCharacter.class === "Beginner" && <Target className="w-9 h-9 relative z-10" />}
-          <span className="absolute bottom-1.5 text-[7px] font-black text-black uppercase tracking-widest z-10 drop-shadow-sm">ATTACK</span>
-        </button>
-
-        {/* Q Skill */}
-        <button
-          id="skill-button-active"
-          onClick={handleSkillDispatch}
-          className="relative w-[58px] h-[58px] rounded-full bg-gradient-to-br from-[#ffb547] to-[#e07b00] border-2 border-[#b25900] active:scale-95 flex items-center justify-center text-white shadow-[0_4px_12px_rgba(0,0,0,0.4)] transition-all hover:brightness-110 group"
-        >
-          <div id="skill-cooldown-overlay" className="absolute inset-0 bg-black/85 backdrop-blur-[1px] rounded-full flex items-center justify-center text-[9px] font-black text-amber-400 transition-all translate-y-[100%]">CD</div>
-          {selectedCharacter.class === "Warrior" && <RefreshCw className="w-6 h-6 relative z-10 text-black" />}
-          {selectedCharacter.class === "Mage" && <Zap className="w-6 h-6 relative z-10 text-black" />}
-          {selectedCharacter.class === "Priest" && <Sparkles className="w-6 h-6 relative z-10 text-black" />}
-          {selectedCharacter.class === "Thief" && <Target className="w-6 h-6 relative z-10 text-black" />}
-          {selectedCharacter.class === "Beginner" && <Target className="w-6 h-6 relative z-10 text-black" />}
-          <div className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-[#ebdcb9] border border-[#b88c42] flex items-center justify-center text-[7px] font-black text-[#5c3e16] shadow-sm">Q</div>
-        </button>
-      </div>
     </div>
   );
 }

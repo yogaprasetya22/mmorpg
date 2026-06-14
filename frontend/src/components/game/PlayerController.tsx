@@ -209,6 +209,7 @@ export const PlayerController = (props: PlayerProps) => {
     playerStats,
     playerStatsRef,
     selectedCharacter,
+    isAutoMode = false,
   } = props;
 
   const poolRef      = useRef<ProjectilePoolHandle>(null);
@@ -294,7 +295,10 @@ export const PlayerController = (props: PlayerProps) => {
   const [currentTimeScale, setCurrentTimeScale] = useState(1.0);
 
   const localCustomization = useMemo(() => {
-    const stats = selectedCharacter || playerStatsRef?.current || playerStats || {};
+    const hasStats = playerStats && typeof playerStats.hp !== 'undefined' && playerStats.hp !== -1;
+    const stats = hasStats 
+      ? playerStats 
+      : ((playerStatsRef?.current && playerStatsRef.current.hp !== -1) ? playerStatsRef.current : (selectedCharacter || {}));
     return parseCustomization(
       (stats as any).custom_avatar_url || (stats as any).customAvatarUrl,
       (stats as any).gender || 'Male',
@@ -340,7 +344,7 @@ export const PlayerController = (props: PlayerProps) => {
 
   useFrame((state, delta) => {
     const finalASPDPercent = playerStatsRef?.current?.aspd ?? (playerStats?.aspd ?? 150);
-    const hitsPerSecond = 1 + (finalASPDPercent / 125);
+    const hitsPerSecond = 1 + (finalASPDPercent / 25);
     const attackDuration = 1000 / hitsPerSecond;
 
     if (isTargetingAoE) {
@@ -480,7 +484,7 @@ export const PlayerController = (props: PlayerProps) => {
         (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA'));
       const keys = isChatFocus ? {} : getKeys();
       const isMovingInput = !!(keys.forward || keys.backward || keys.leftward || keys.rightward);
-      const isAttackInput = !!(keys.action1 || (window as any).hasAttackIntent || ((window as any).isAutoAttacking && !isMovingInput));
+      const isAttackInput = !!(keys.action1 || (window as any).hasAttackIntent || (isAutoMode && !isMovingInput) || ((window as any).isAutoAttacking && !isMovingInput));
       if ((window as any).hasAttackIntent) {
         (window as any).hasAttackIntent = false;
       }
@@ -493,9 +497,100 @@ export const PlayerController = (props: PlayerProps) => {
       }
       const lastSkillTime = (window as any).lastSkillTime;
 
-      if (isSkillInput && now - lastSkillTime > SKILL_COOLDOWN) {
+      let triggerAutoSkill = false;
+      if (isAutoMode && now - lastSkillTime > SKILL_COOLDOWN && !castState.current.isCasting && currentDebuff !== "silence" && !isMovingInput) {
+        // Find nearest target position to cast AoE skill
+        const targetId = lastNearestTargetId.current;
+        const targetMonster = targetId ? unitRegistry?.current?.find((m: any) => m.id === targetId && m.isActive && !m.isDying) : null;
+        if (targetMonster) {
+          const tx = targetMonster.position[0];
+          const ty = targetMonster.position[1];
+          const tz = targetMonster.position[2];
+          const dx = tx - _charPos.x;
+          const dz = tz - _charPos.z;
+          const distSq = dx * dx + dz * dz;
+          // Only cast if within range
+          let activeRangeSq = 81.0; // Default Marksman / MM (9.0m)
+          if (playerClass === "Warrior") {
+            activeRangeSq = 12.25;    // Fighter (Melee 3.5 meters)
+          } else if (playerClass === "Thief") {
+            activeRangeSq = 10.89;    // Assassin (Melee 3.3 meters)
+          } else if (playerClass === "Priest") {
+            activeRangeSq = 14.44;    // Tank (Melee 3.8 meters)
+          } else if (playerClass === "Mage") {
+            activeRangeSq = 64.0;    // Mage (Ranged 8.0 meters)
+          } else if (playerClass === "Beginner") {
+            activeRangeSq = 81.0;    // Marksman / MM (Ranged 9.0 meters)
+          }
+          if (distSq <= activeRangeSq) {
+            aoeTargetPos.current.set(tx, ty, tz);
+            triggerAutoSkill = true;
+          }
+        }
+      }
+
+      if ((isSkillInput && now - lastSkillTime > SKILL_COOLDOWN && currentDebuff !== "silence") || triggerAutoSkill) {
         if (currentDebuff === "silence") {
           console.log("🤫 You are silenced and cannot cast spells!");
+        } else if (triggerAutoSkill) {
+          (window as any).lastSkillTime = now;
+          const mockTarget: any = {
+            id: "ground_target",
+            name: "Ground",
+            type: "enemy",
+            isActive: true,
+            isDying: false,
+            hp: 9999,
+            maxHp: 9999,
+            position: [aoeTargetPos.current.x, aoeTargetPos.current.y, aoeTargetPos.current.z],
+            level: 1,
+            poolIdx: 0,
+          };
+          const ctx = {
+            charPos: _charPos.clone(),
+            originVec: _originVec.clone(),
+            camDir: _camDir.clone(),
+            combo: 0,
+            playerStats,
+            dealPlayerDamage,
+            spawnVFX,
+            camera,
+            simTimeRef,
+            mmSpellsRef,
+            mmSpellPtr,
+            fighterSpellsRef,
+            fighterSpellPtr,
+            assassinSpellsRef,
+            assassinSpellPtr,
+            tankSpellsRef,
+            tankSpellPtr,
+            spellsRef,
+            spellsPtr,
+            poolRef,
+            grid: (window as any).battleGrid,
+            ecctrlRef,
+            cameraShake: (window as any).cameraShake,
+          };
+
+          const stats = playerStatsRef?.current || playerStats || {};
+          const dex = stats.base_dex ?? stats.baseDEX ?? 10;
+          const int = stats.base_int ?? stats.baseINT ?? 10;
+
+          const fct = 0.4;
+          const vctBase = 1.2;
+          const vctRatio = Math.min(1.0, (dex + int / 2.0) / 265.0);
+          const vctActual = vctBase * (1.0 - vctRatio);
+          const totalCastTime = fct + vctActual;
+
+          castState.current = {
+            isCasting: true,
+            startTime: now,
+            totalTime: totalCastTime * 1000,
+            fctTime: fct * 1000,
+            vctTime: vctActual * 1000,
+            target: mockTarget,
+            context: ctx,
+          };
         } else if (!isTargetingAoE) {
           setIsTargetingAoE(true);
           console.log("🎯 Entered AoE Ground Targeting Mode. Left click to cast, right click to cancel.");

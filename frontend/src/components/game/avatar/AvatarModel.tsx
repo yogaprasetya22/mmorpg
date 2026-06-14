@@ -401,6 +401,9 @@ const AvatarModelAnimated = ({
     if (skipAnimControl) return; // External controller manages timescale
     const action = actions[pose];
     if (action) {
+      if (!action.isRunning()) {
+        action.play();
+      }
       action.timeScale = paused ? 0 : timeScale;
     }
   });

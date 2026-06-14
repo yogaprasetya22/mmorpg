@@ -19,6 +19,7 @@ export interface PlayerProps {
   playerStats?: any;
   playerStatsRef?: React.RefObject<any>;
   selectedCharacter?: any;
+  isAutoMode?: boolean;
 }
 
 export interface CastState {

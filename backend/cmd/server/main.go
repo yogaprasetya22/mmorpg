@@ -49,6 +49,7 @@ func main() {
 			&domain.Asset{},
 			&domain.AvatarCategory{},
 			&domain.AvatarAsset{},
+			&domain.AuctionItem{},
 		)
 		if err != nil {
 			log.Fatalf("❌ Gagal melakukan auto-migrasi database: %v", err)
@@ -99,6 +100,7 @@ func main() {
 	var kcpServer *kcp.KCPServer
 
 	gameUsecase := game.NewGameUsecase(
+		db,
 		registry,
 		playerRepo,
 		stateRepo,

@@ -50,9 +50,9 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 	}
 
 	// Authoritative Attack Rate-Limiting based on dynamic ASPD (Ragnarok Renewal / New World style)
-	// Formula matches frontend: hitsPerSecond = 1 + (ASPD% / 125)
+	// Formula matches frontend: hitsPerSecond = 1 + (ASPD% / 25)
 	// With new RO Renewal ASPD scale (0-1000%), this gives 1-9 hits/sec
-	hitsPerSecond := 1.0 + (float64(playerData.ASPD) / 125.0)
+	hitsPerSecond := 1.0 + (float64(playerData.ASPD) / 25.0)
 	cooldownMs := time.Duration(1000.0/hitsPerSecond) * time.Millisecond
 	buffer := 55 * time.Millisecond // Increased buffer for high ASPD network jitter tolerance
 
