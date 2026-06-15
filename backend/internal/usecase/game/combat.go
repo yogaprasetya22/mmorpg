@@ -49,12 +49,15 @@ func (u *gameUsecase) HandlePlayerAttack(playerID string, targetType string, tar
 		playerData.Debuff = ""
 	}
 
-	// Authoritative Attack Rate-Limiting based on dynamic ASPD (Ragnarok Renewal / New World style)
-	// Formula matches frontend: hitsPerSecond = 1 + (ASPD% / 25)
-	// With new RO Renewal ASPD scale (0-1000%), this gives 1-9 hits/sec
-	hitsPerSecond := 1.0 + (float64(playerData.ASPD) / 25.0)
+	// Authoritative Attack Rate-Limiting based on official Ragnarok Online formula:
+	// roASPD is converted back from percentASPD (0-1000%) to RO scale (130-193)
+	roASPD := 130.0 + (float64(playerData.ASPD)/1000.0)*63.0
+	hitsPerSecond := 50.0 / (200.0 - roASPD)
 	cooldownMs := time.Duration(1000.0/hitsPerSecond) * time.Millisecond
-	buffer := 55 * time.Millisecond // Increased buffer for high ASPD network jitter tolerance
+	buffer := 85 * time.Millisecond // Network jitter tolerance — 55ms was too tight, causing
+	// alternating allow/block patterns at high ASPD (every other hit silently dropped).
+	// 85ms absorbs typical WebSocket frame scheduling variance (±30ms) while still
+	// preventing speedhacking (max ASPD cooldown ~143ms → min gap 58ms).
 
 	u.activePlayersMu.Lock()
 	if !playerData.LastBasicAttackTime.IsZero() && time.Since(playerData.LastBasicAttackTime) < cooldownMs-buffer {
