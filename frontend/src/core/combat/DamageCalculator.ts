@@ -65,7 +65,8 @@ export const BaseAttackCalculator = (
     window.dispatchEvent(new CustomEvent("combat_damage_event", {
       detail: {
         targetId: target.id,
-        targetType: target.type || "monster",
+        // UnitRuntimeData.type is 'player'|'enemy', but handler expects 'monster'|'player'
+        targetType: target.type === "player" ? "player" : "monster",
         damage: finalDamage,
         isCrit: finalCrit,
         isMiss: false,
@@ -85,7 +86,7 @@ export const BaseAttackCalculator = (
       window.dispatchEvent(new CustomEvent("combat_damage_event", {
         detail: {
           targetId: target.id,
-          targetType: target.type || "monster",
+          targetType: target.type === "player" ? "player" : "monster",
           damage: procDamage,
           isCrit: false,
           isMiss: false,

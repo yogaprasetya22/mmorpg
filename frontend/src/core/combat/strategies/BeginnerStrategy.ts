@@ -266,16 +266,16 @@ const BeginnerStrategy: ClassCombatStrategy = {
         const roASPD = 130 + (Math.min(1000, Math.max(0, aspd)) / 1000) * 63;
         const hps = 50 / (200 - roASPD);
         const attackIntervalMs = 1000 / hps;
-        const arrowIndex = pendingLocalArrows.length - 1;
         setTimeout(() => {
-            // Only force-release if THIS specific arrow is still pending.
-            // If the loop event already released it, the queue has shifted
-            // and this index no longer points to our arrow.
-            if (arrowIndex < pendingLocalArrows.length &&
-                pendingLocalArrows[arrowIndex].startTime === queueTime) {
-                pendingLocalArrows.splice(arrowIndex, 1);
+            // Search by startTime instead of fixed index — the array shifts
+            // when arrows are released via the loop event (FIFO splice).
+            const idx = pendingLocalArrows.findIndex(a => a.startTime === queueTime);
+            if (idx !== -1) {
+                // Loop event didn't fire for this arrow — force release now
+                pendingLocalArrows.splice(idx, 1);
                 releaseNextPendingArrow(performance.now());
             }
+            // If idx === -1, the loop event already released this arrow — no-op
         }, attackIntervalMs);
     },
 

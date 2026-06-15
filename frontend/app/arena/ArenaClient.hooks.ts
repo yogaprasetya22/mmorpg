@@ -507,8 +507,11 @@ export function useArenaGameState() {
       }
 
       // Find target coordinates
+      // NOTE: targetType can be "monster" (server response), "enemy" (frontend unit type),
+      // or "player". Both "monster" and "enemy" refer to NPC enemies in the monster pool.
       let targetX = 0, targetY = 1.0, targetZ = 0;
-      if (ev.targetType === "monster") {
+      const isMonsterTarget = ev.targetType === "monster" || ev.targetType === "enemy";
+      if (isMonsterTarget) {
         const targetMonster = worldMonstersRef.current.find(m => m.id === targetId);
         if (targetMonster) {
           const visualPos = (window as any).monsterVisualPositions?.get(targetId);
