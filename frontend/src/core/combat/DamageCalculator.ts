@@ -54,6 +54,27 @@ export const BaseAttackCalculator = (
   // Directly deal player damage to ensure real-time synchronization with the hit event
   ctx.dealPlayerDamage?.(target.id, finalDamage, finalCrit);
 
+  // ── Client-Side Damage Prediction ─────────────────────────────────────────
+  // Dispatch a local combat_damage_event IMMEDIATELY so the DamageHUDBatcher
+  // shows the damage number on EVERY hit without waiting for the server roundtrip.
+  // The server's authoritative response is deduplicated in ArenaClient.hooks.ts
+  // using a per-target timestamp to prevent double-display.
+  if (typeof window !== 'undefined') {
+    (window as any)._lastClientHitTime = (window as any)._lastClientHitTime || {};
+    (window as any)._lastClientHitTime[target.id] = performance.now();
+    window.dispatchEvent(new CustomEvent("combat_damage_event", {
+      detail: {
+        targetId: target.id,
+        targetType: target.type || "monster",
+        damage: finalDamage,
+        isCrit: finalCrit,
+        isMiss: false,
+        isMagic: playerClass === "Mage",
+        _clientPredicted: true
+      }
+    }));
+  }
+
   // PROC RATE: 12% chance to trigger an automated Double Attack / Lightning Proc!
   const isProc = Math.random() < 0.12;
   if (isProc) {

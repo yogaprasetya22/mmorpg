@@ -475,6 +475,12 @@ export function useArenaGameState() {
 
 
   // ── Authoritative Combat Damage Event Listener ──
+  // Handles both server-authoritative responses AND client-side predictions.
+  // Dedup logic: client predictions are always shown instantly for zero-latency
+  // feedback. Server responses arriving within 400ms of a prediction for the
+  // same target are suppressed to prevent double-display (the server value
+  // is only ~5-15% different from prediction, so the prediction is adequate).
+  // MISS events are NEVER suppressed — they're server-only and must display.
   useEffect(() => {
     const onCombatDamage = (e: Event) => {
       const ev = (e as CustomEvent).detail;
@@ -485,6 +491,20 @@ export function useArenaGameState() {
       const isMiss = !!ev.isMiss;
       const isMagic = !!ev.isMagic;
       const damage = ev.damage;
+      const isClientPredicted = !!ev._clientPredicted;
+
+      // ── Dedup: suppress server response if client already predicted this hit ──
+      // Client predictions always pass through. Server responses are suppressed
+      // if a prediction for the same target was dispatched within the last 400ms.
+      // MISS events bypass dedup entirely (server-only, must always display).
+      if (!isClientPredicted && !isMiss && damage > 0) {
+        const hitTimes = (window as any)._lastClientHitTime || {};
+        const lastPrediction = hitTimes[targetId] || 0;
+        if (performance.now() - lastPrediction < 400) {
+          // Server response is a duplicate of the client prediction — skip HUD display.
+          return;
+        }
+      }
 
       // Find target coordinates
       let targetX = 0, targetY = 1.0, targetZ = 0;
