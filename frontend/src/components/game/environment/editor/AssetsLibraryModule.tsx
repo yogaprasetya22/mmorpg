@@ -63,19 +63,24 @@ const AssetCard = React.memo(({ asset, isActive, onClick }: { asset: any, isActi
       );
     }
     
-    // Foliage
-    if (asset.category === 'tree' || nameLower.includes('tree') || nameLower.includes('foliage') || nameLower.includes('pine') || nameLower.includes('log') || nameLower.includes('wood')) {
+    // Foliage (Trees)
+    if (asset.category === 'trees' || asset.category === 'tree' || nameLower.includes('tree') || nameLower.includes('pine')) {
       return <span className="text-base filter drop-shadow-[0_2px_4px_rgba(16,185,129,0.3)]">🌲</span>;
+    }
+
+    // Vegetation
+    if (asset.category === 'vegetation' || nameLower.includes('foliage') || nameLower.includes('flower') || nameLower.includes('bush') || nameLower.includes('clover') || nameLower.includes('grass') || nameLower.includes('fern') || nameLower.includes('mushroom') || nameLower.includes('plant')) {
+      return <span className="text-base filter drop-shadow-[0_2px_4px_rgba(34,197,94,0.3)]">🌿</span>;
+    }
+
+    // Rocks
+    if (asset.category === 'rocks' || nameLower.includes('rock') || nameLower.includes('pebble')) {
+      return <span className="text-base filter drop-shadow-[0_2px_4px_rgba(156,163,175,0.3)]">🪨</span>;
     }
 
     // Loot / Gold
     if (nameLower.includes('coin') || nameLower.includes('jewel') || nameLower.includes('key') || nameLower.includes('gold') || nameLower.includes('star') || nameLower.includes('chest') || nameLower.includes('loot')) {
       return <span className="text-base filter drop-shadow-[0_2px_4px_rgba(234,179,8,0.3)]">{nameLower.includes('chest') ? '📦' : '💎'}</span>;
-    }
-
-    // Architecture
-    if (asset.category === 'kingdom' || nameLower.includes('wall') || nameLower.includes('gate') || nameLower.includes('bridge') || nameLower.includes('stairs') || nameLower.includes('tower') || nameLower.includes('door')) {
-      return <span className="text-base filter drop-shadow-[0_2px_4px_rgba(99,102,241,0.3)]">🏰</span>;
     }
 
     // Combat traps
@@ -157,7 +162,7 @@ export const AssetsLibraryModule = () => {
       
       {/* Category selector */}
       <div className="grid grid-cols-3 gap-1 p-0.5 bg-zinc-950 border border-zinc-850 rounded">
-        {['all', 'kingdom', 'env', 'tree', 'materials'].map((cat) => (
+        {['all', 'trees', 'vegetation', 'rocks', 'characters', 'materials'].map((cat) => (
           <button
             key={cat}
             onClick={() => setSelectedCategory(cat)}

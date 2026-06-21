@@ -101,8 +101,12 @@ const GhostPreview = ({ path, position, scale, rotation }: { path: string, posit
         node.material.opacity = 0.45;
         node.material.depthWrite = false;
         node.material.color.set('#818cf8'); // High-tech neon indigo glow!
-        node.material.emissive = new THREE.Color('#4f46e5');
-        node.material.emissiveIntensity = 0.6;
+        if ('emissive' in node.material) {
+          node.material.emissive = new THREE.Color('#4f46e5');
+        }
+        if ('emissiveIntensity' in node.material) {
+          (node.material as any).emissiveIntensity = 0.6;
+        }
       }
     });
     return clone;

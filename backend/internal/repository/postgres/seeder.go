@@ -332,22 +332,22 @@ func SeedConfigurations(db *gorm.DB) error {
 }
 
 func SeedAssets(db *gorm.DB) error {
-	fmt.Println("🌱 Scanning and seeding dynamic environment assets...")
+	fmt.Println("🌱 Clearing old assets and scanning new dynamic environment assets...")
+
+	// Hapus asset lama agar sinkron dengan aset fisik baru
+	if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&domain.Asset{}).Error; err != nil {
+		return fmt.Errorf("failed to clear old assets: %w", err)
+	}
 
 	// Target folders and their categories
 	targets := []struct {
 		dir      string
 		category string
 	}{
-		{"environment/nature/trees", "env"},
-		{"environment/nature/vegetation", "env"},
-		{"environment/nature/terrain", "env"},
-		{"environment/structures/kingdom", "kingdom"},
-		{"environment/structures/platforms", "env"},
-		{"environment/props/interactive", "env"},
-		{"environment/props/obstacles", "env"},
-		{"environment/props/decor", "env"},
-		{"environment/props/siege", "kingdom"},
+		{"environment/trees", "trees"},
+		{"environment/vegetation", "vegetation"},
+		{"environment/rocks", "rocks"},
+		{"environment/characters", "characters"},
 	}
 
 	// Find the correct base path (handling running from root or from cmd/server or cmd/seeder)

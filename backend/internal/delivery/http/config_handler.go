@@ -240,8 +240,9 @@ func (h *ConfigHandler) DeleteMonsterConfig(c *gin.Context) {
 
 // AssetInfo describes a 3D asset file served over the static URL pathway
 type AssetInfo struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	Category string `json:"category"`
 }
 
 // GetAssetList queries all dynamic assets stored in the database Asset table
@@ -255,8 +256,9 @@ func (h *ConfigHandler) GetAssetList(c *gin.Context) {
 	var assets []AssetInfo
 	for _, asset := range dbAssets {
 		assets = append(assets, AssetInfo{
-			Name: asset.Name,
-			Path: asset.Path,
+			Name:     asset.Name,
+			Path:     asset.Path,
+			Category: asset.Category,
 		})
 	}
 

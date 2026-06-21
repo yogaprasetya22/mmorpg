@@ -222,10 +222,18 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
         scene.environmentIntensity = resolvedSkyboxIntensity;
 
         const time = state.clock.elapsedTime;
-        PainterlyWaterMaterial.uniforms.time.value = time;
-        PainterlyTerrainMaterial.uniforms.time.value = time;
-        PainterlyTerrainMaterial.uniforms.baseDist.value = baseDistance;
-        PainterlyGrassMaterial.uniforms.time.value = time;
+        if (PainterlyWaterMaterial.uniforms?.time) {
+            PainterlyWaterMaterial.uniforms.time.value = time;
+        }
+        if (PainterlyTerrainMaterial.uniforms?.time) {
+            PainterlyTerrainMaterial.uniforms.time.value = time;
+        }
+        if (PainterlyTerrainMaterial.uniforms?.baseDist) {
+            PainterlyTerrainMaterial.uniforms.baseDist.value = baseDistance;
+        }
+        if (PainterlyGrassMaterial.uniforms?.time) {
+            PainterlyGrassMaterial.uniforms.time.value = time;
+        }
     });
 
     const { lightIntensity, ambientIntensity, sunAngle, fogDensity, skyboxIntensity } = useEditorStore();

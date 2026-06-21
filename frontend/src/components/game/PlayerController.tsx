@@ -1062,8 +1062,6 @@ export const PlayerController = (props: PlayerProps) => {
       const modelGroup = ecctrlRef.current?.model;
       if (modelGroup && !isDead &&
           currentDebuff !== "stun" && currentDebuff !== "freeze") {
-        const idleSpeed = Math.sqrt(linvel.x * linvel.x + linvel.z * linvel.z);
-
         // ── Reset child group Y rotation accumulated during attack/chase ──
         // usePlayerTargeting adds to characterRef.rotation.y when attacking.
         // Smoothly lerp it back to 0 when NOT in attack or chase state.
@@ -1075,26 +1073,7 @@ export const PlayerController = (props: PlayerProps) => {
           }
         }
 
-        // ── Parent model group: slerp to camera-facing when idle ──
-        if (charState[0] !== 1 && idleSpeed < 0.5) {
-          // Get camera forward direction projected onto XZ plane
-          camera.getWorldDirection(_camDir);
-          _camDir.y = 0;
-          if (_camDir.lengthSq() > 0.001) {
-            _camDir.normalize();
-            // Target angle where +X (character forward) faces camDir
-            const targetAngle = Math.atan2(-_camDir.z, _camDir.x);
-            // Build a pure Y-axis rotation quaternion (no X/Z tilt)
-            _idleTargetQuat.setFromAxisAngle(
-              _lookAt.set(0, 1, 0),
-              targetAngle
-            );
-            // Smooth exponential slerp — converges in ~300ms
-            const idleRotSpeed = 8.0;
-            const slerpFactor = 1 - Math.exp(-idleRotSpeed * delta);
-            modelGroup.quaternion.slerp(_idleTargetQuat, slerpFactor);
-          }
-        }
+        // Parent model group: Kept at last movement rotation (removed camera-facing slerp)
       }
     }
   }, 1);
@@ -1120,7 +1099,7 @@ export const PlayerController = (props: PlayerProps) => {
         floatSensorRadius={0.32}
         floatSpringK={220}
         floatDampingC={40}
-        maxWalkSpeed={currentSpeed}
+        maxWalkSpeed={currentSpeed * 0.45}
         maxRunSpeed={currentSpeed}
         acceleration={65}
         deceleration={55}

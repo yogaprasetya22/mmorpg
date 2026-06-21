@@ -596,20 +596,34 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
   // Update uniforms when textures or colors load
   useEffect(() => {
     const tex = textures as any;
-    if (tex.map) {
-      TerrainMaterial.uniforms.uMap.value = tex.map;
-      TerrainMaterial.uniforms.uUseMap.value = matInfo ? 1.0 : 0.0;
-    } else {
-      TerrainMaterial.uniforms.uUseMap.value = 0.0;
+    if (TerrainMaterial.uniforms) {
+      if (tex && tex.map && TerrainMaterial.uniforms.uMap) {
+        TerrainMaterial.uniforms.uMap.value = tex.map;
+        if (TerrainMaterial.uniforms.uUseMap) {
+          TerrainMaterial.uniforms.uUseMap.value = matInfo ? 1.0 : 0.0;
+        }
+      } else if (TerrainMaterial.uniforms.uUseMap) {
+        TerrainMaterial.uniforms.uUseMap.value = 0.0;
+      }
+      
+      if (TerrainMaterial.uniforms.baseColor && TerrainMaterial.uniforms.baseColor.value) {
+        TerrainMaterial.uniforms.baseColor.value.set(terrainColor);
+      }
+      if (TerrainMaterial.uniforms.uPaintMap) {
+        TerrainMaterial.uniforms.uPaintMap.value = paintTexture;
+      }
+      if (TerrainMaterial.uniforms.uUsePaint) {
+        TerrainMaterial.uniforms.uUsePaint.value = 1.0;
+      }
+      
+      // Update brush texture uniforms
+      if (TerrainMaterial.uniforms.uBrushTex) {
+        TerrainMaterial.uniforms.uBrushTex.value = brushTex;
+      }
+      if (TerrainMaterial.uniforms.uUseBrushTex) {
+        TerrainMaterial.uniforms.uUseBrushTex.value = brushInfo ? 1.0 : 0.0;
+      }
     }
-    
-    TerrainMaterial.uniforms.baseColor.value.set(terrainColor);
-    TerrainMaterial.uniforms.uPaintMap.value = paintTexture;
-    TerrainMaterial.uniforms.uUsePaint.value = 1.0;
-    
-    // Update brush texture uniforms
-    TerrainMaterial.uniforms.uBrushTex.value = brushTex;
-    TerrainMaterial.uniforms.uUseBrushTex.value = brushInfo ? 1.0 : 0.0;
   }, [textures, matInfo, terrainColor, paintTexture, brushTex, brushInfo]);
 
   const terrainGeo = useMemo(() => {
@@ -805,7 +819,9 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
     scene.backgroundIntensity = resolvedBgIntensity;
     scene.environmentIntensity = resolvedBgIntensity;
 
-    PainterlyWaterMaterial.uniforms.time.value = state.clock.elapsedTime;
+    if (PainterlyWaterMaterial.uniforms?.time) {
+      PainterlyWaterMaterial.uniforms.time.value = state.clock.elapsedTime;
+    }
 
     if (lightRef.current) {
       if (lightRef.current.target.parent !== scene) {

@@ -410,15 +410,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const sanitized = parsed.map(item => {
           let path = item.path;
 
-          // Fix legacy broken path prefixes
-          // e.g. "assets-model/asset-enverement/BirchTree_1.glb" → correct environment path
           if (path.includes('asset-enverement/') || path.includes('assets-model/asset-')) {
             const fileName = path.split('/').pop() || '';
             const nameLower = fileName.toLowerCase();
             if (nameLower.includes('tree') || nameLower.includes('birch') || nameLower.includes('pine') || nameLower.includes('oak')) {
-              return { ...item, path: `/assets/environment/nature/trees/${fileName}` };
+              return { ...item, path: `/assets/environment/trees/${fileName}` };
             }
-            return { ...item, path: `/assets/environment/nature/vegetation/${fileName}` };
+            return { ...item, path: `/assets/environment/vegetation/${fileName}` };
+          }
+
+          if (path.includes('nature/trees/')) {
+            path = path.replace('nature/trees/', 'trees/');
+          }
+          if (path.includes('nature/vegetation/')) {
+            path = path.replace('nature/vegetation/', 'vegetation/');
           }
 
           // Fix "assets-model/assets-env/" prefix → proper environment path
@@ -453,7 +458,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             }
           }
 
-          return item;
+          // Prepend API base URL for valid server-relative paths
+          if (path.startsWith('/assets/') || path.startsWith('/assets-model/') || path.startsWith('/assets/environment/structures/kingdom/') || path.startsWith('/assets-tree/')) {
+            path = `${API_BASE_URL}${path}`;
+          }
+
+          return { ...item, path };
         });
 
         set({ items: sanitized, history: [sanitized], historyIndex: 0 });
@@ -604,16 +614,24 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     try {
       const res = await fetch(`${API_BASE_URL}/api/config/assets`);
       if (res.ok) {
-        const assets: { name: string; path: string }[] = await res.json();
+        const assets: { name: string; path: string; category?: string }[] = await res.json();
         const mapped: AssetInfo[] = assets.map(item => {
-          let category: 'kingdom' | 'env' | 'tree' = 'env';
-          const lowerPath = item.path.toLowerCase();
-          const lowerName = item.name.toLowerCase();
+          let category: any = 'rocks';
           
-          if (lowerPath.includes('/assets/environment/structures/kingdom/') || lowerPath.includes('/assets/environment/props/siege/') || lowerName.includes('wall') || lowerName.includes('tower') || lowerName.includes('gate') || lowerName.includes('stairs') || lowerName.includes('castle') || lowerName.includes('fortress') || lowerName.includes('bridge')) {
-            category = 'kingdom';
-          } else if (lowerPath.includes('/assets/environment/nature/trees/') || lowerPath.includes('/assets/environment/nature/vegetation/') || lowerPath.includes('/assets-tree/') || lowerPath.includes('/asset-enverement/') || lowerName.includes('tree') || lowerName.includes('pine') || lowerName.includes('birch') || lowerName.includes('oak') || lowerName.includes('grass') || lowerName.includes('flora')) {
-            category = 'tree';
+          if (item.category) {
+            category = item.category;
+          } else {
+            // Fallback heuristics for custom or empty backend categories
+            const lowerPath = item.path.toLowerCase();
+            if (lowerPath.includes('/environment/trees/')) {
+              category = 'trees';
+            } else if (lowerPath.includes('/environment/vegetation/')) {
+              category = 'vegetation';
+            } else if (lowerPath.includes('/environment/rocks/')) {
+              category = 'rocks';
+            } else if (lowerPath.includes('/environment/characters/')) {
+              category = 'characters';
+            }
           }
           
           const path = `${API_BASE_URL}${item.path}`;
@@ -731,13 +749,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             const fileName = path.split('/').pop() || '';
             const nameLower = fileName.toLowerCase();
             if (nameLower.includes('tree') || nameLower.includes('birch') || nameLower.includes('pine') || nameLower.includes('oak')) {
-              path = `/assets/environment/nature/trees/${fileName}`;
+              path = `/assets/environment/trees/${fileName}`;
             } else {
-              path = `/assets/environment/nature/vegetation/${fileName}`;
+              path = `/assets/environment/vegetation/${fileName}`;
             }
           } else if (path.includes('assets-model/assets-env')) {
             const fileName = path.split('/').pop() || '';
             path = `/assets/environment/props/decor/${fileName}`;
+          }
+
+          if (path.includes('nature/trees/')) {
+            path = path.replace('nature/trees/', 'trees/');
+          }
+          if (path.includes('nature/vegetation/')) {
+            path = path.replace('nature/vegetation/', 'vegetation/');
           }
 
           // Prepend API base URL for valid server-relative paths
@@ -980,49 +1005,55 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const themeAssets: Record<string, { paths: string[], colors?: string[] }> = {
       pine: {
         paths: [
-          "/assets-tree/converted/Tree Type0 01.glb",
-          "/assets-tree/converted/Tree Type0 02.glb",
-          "/assets-tree/converted/Tree Type0 03.glb",
-          "/assets-tree/converted/Tree Type1 01.glb",
-          "/assets-tree/converted/Tree Type1 02.glb",
-          "/assets/environment/structures/kingdom/rocks-large.glb",
-          "/assets/environment/structures/kingdom/rocks-small.glb"
+          "/assets/environment/trees/BirchTree_1.glb",
+          "/assets/environment/trees/BirchTree_2.glb",
+          "/assets/environment/trees/BirchTree_3.glb",
+          "/assets/environment/trees/BirchTree_4.glb",
+          "/assets/environment/trees/BirchTree_5.glb",
+          "/assets/environment/vegetation/Grass_Small.glb"
         ]
       },
       cherry: {
         paths: [
-          "/assets-tree/converted/Tree Type2 01.glb",
-          "/assets-tree/converted/Tree Type2 02.glb",
-          "/assets-tree/converted/Tree Type2 03.glb",
-          "/assets-tree/converted/Tree Type3 01.glb",
-          "/assets-tree/converted/Tree Type3 02.glb"
+          "/assets/environment/trees/MapleTree_1.glb",
+          "/assets/environment/trees/MapleTree_2.glb",
+          "/assets/environment/trees/MapleTree_3.glb",
+          "/assets/environment/trees/MapleTree_4.glb",
+          "/assets/environment/trees/MapleTree_5.glb"
         ],
         colors: ["#fda4af", "#f472b6", "#ec4899", "#db2777"]
       },
       autumn: {
         paths: [
-          "/assets-tree/converted/Tree Type4 01.glb",
-          "/assets-tree/converted/Tree Type4 02.glb",
-          "/assets-tree/converted/Tree Type5 01.glb",
-          "/assets-tree/converted/Tree Type5 02.glb"
+          "/assets/environment/trees/MapleTree_1.glb",
+          "/assets/environment/trees/MapleTree_2.glb",
+          "/assets/environment/trees/MapleTree_3.glb"
         ],
         colors: ["#f59e0b", "#d97706", "#b45309", "#ea580c", "#ca8a04"]
       },
       desert: {
         paths: [
-          "/assets/environment/structures/kingdom/tree-log.glb",
-          "/assets/environment/structures/kingdom/tree-trunk.glb",
-          "/assets/environment/structures/kingdom/rocks-large.glb",
-          "/assets/environment/structures/kingdom/rocks-small.glb"
+          "/assets/environment/trees/DeadTree_1.glb",
+          "/assets/environment/trees/DeadTree_2.glb",
+          "/assets/environment/trees/DeadTree_3.glb",
+          "/assets/environment/trees/DeadTree_4.glb",
+          "/assets/environment/trees/DeadTree_5.glb",
+          "/assets/environment/trees/DeadTree_6.glb",
+          "/assets/environment/trees/DeadTree_7.glb",
+          "/assets/environment/trees/DeadTree_8.glb",
+          "/assets/environment/trees/DeadTree_9.glb",
+          "/assets/environment/trees/DeadTree_10.glb"
         ],
         colors: ["#a1a1aa", "#71717a", "#b45309", "#78350f"]
       },
       clover: {
         paths: [
-          "/assets/environment/structures/kingdom/tree-large.glb",
-          "/assets/environment/structures/kingdom/tree-small.glb",
-          "/assets-tree/converted/Tree Type6 01.glb",
-          "/assets-tree/converted/Tree Type6 02.glb"
+          "/assets/environment/vegetation/Bush.glb",
+          "/assets/environment/vegetation/Bush_Large.glb",
+          "/assets/environment/vegetation/Bush_Small.glb",
+          "/assets/environment/vegetation/Flower_1_Clump.glb",
+          "/assets/environment/vegetation/Flower_2_Clump.glb",
+          "/assets/environment/vegetation/Flower_3_Clump.glb"
         ],
         colors: ["#34d399", "#059669", "#10b981", "#047857"]
       }

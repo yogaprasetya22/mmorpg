@@ -27,12 +27,11 @@ export const CameraOcclusionManager = () => {
   const hologramGroupRef = useRef<THREE.Group>(new THREE.Group());
   const ghostedTracker = useRef<Map<string, GhostedObject>>(new Map());
 
-  // Memori Cache yang dioptimalkan
-  const edgesCache = useRef<Map<string, THREE.EdgesGeometry | null>>(new Map());
+  // Memori Cache yang dioptimalkan (EdgesCache dihapus total)
   const hologramMeshCache = useRef<Map<string, THREE.Mesh>>(new Map());
   const holoMaterialCache = useRef<Map<string, THREE.Material | THREE.Material[]>>(new Map());
 
-  // 1. ZERO-GARBAGE COLLECTION: Semua alokasi objek dikeluarkan dari useFrame!
+  // ZERO-GARBAGE COLLECTION: Semua alokasi objek dikeluarkan dari useFrame
   const activeFrameKeys = useRef<Set<string>>(new Set());
   const meshesToUpdateBatch = useRef<Set<THREE.InstancedMesh>>(new Set());
   const frameCounter = useRef(0);
@@ -50,22 +49,28 @@ export const CameraOcclusionManager = () => {
     mat.opacity = 1.0;
     mat.depthWrite = false;
 
-    mat.onBeforeCompile = (shader) => {
+    const originalOnBeforeCompile = sourceMat.onBeforeCompile;
+    mat.onBeforeCompile = (shader, renderer) => {
+      if (originalOnBeforeCompile) {
+        originalOnBeforeCompile(shader, renderer);
+      }
+      
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <dithering_fragment>',
         `
         #include <dithering_fragment>
-        vec2 pos = gl_FragCoord.xy / 3.0; 
+        // Dibagi 2.0 (sebelumnya 3.0) agar pola checkerboard lebih rapat, 
+        // sehingga bentuk 3D lebih tajam walau tanpa garis pinggir.
+        vec2 pos = gl_FragCoord.xy / 2.0; 
         if (mod(floor(pos.x) + floor(pos.y), 2.0) == 0.0) discard;
         `
       );
     };
-    // Mengunci shader berdasarkan type material asli agar Three.js me-reuse shader WebGLProgram yang sudah di-compile!
-    mat.customProgramCacheKey = () => 'holo_dither_' + sourceMat.type;
+    mat.customProgramCacheKey = () => 'holo_dither_' + sourceMat.uuid;
     return mat;
   };
 
-  // Variabel Matematika Statis
+  // Variabel Matematika Statis (Pre-allocated)
   const _tempMatrix = useMemo(() => new THREE.Matrix4(), []);
   const _tempPos = useMemo(() => new THREE.Vector3(), []);
   const _playerPos = useMemo(() => new THREE.Vector3(), []);
@@ -83,7 +88,6 @@ export const CameraOcclusionManager = () => {
   ) => {
     if (hologramMeshCache.current.has(key)) return hologramMeshCache.current.get(key)!;
 
-    // Cache material kloningan berdasarkan original material UUID untuk mencegah redundansi kloning
     const matKey = Array.isArray(originalMaterial)
       ? originalMaterial.map(m => m.uuid).join(',')
       : originalMaterial.uuid;
@@ -99,35 +103,9 @@ export const CameraOcclusionManager = () => {
     }
 
     const mesh = new THREE.Mesh(geometry, holoMaterial);
-    mesh.visible = false; // default invisible
+    mesh.visible = false;
 
-    // 2. PERLINDUNGAN DARI FREEZE MAUT (High-Poly Bypass)
-    if (!edgesCache.current.has(geometry.uuid)) {
-      const vertexCount = geometry.attributes.position ? geometry.attributes.position.count : 0;
-
-      // Jika objek terlalu rumit (> 200 titik seperti daun pohon), lewati pembuatan garis tepi!
-      // Pembuatan EdgesGeometry sinkron di CPU sangat lambat untuk vertex banyak.
-      if (vertexCount > 200) {
-        edgesCache.current.set(geometry.uuid, null);
-      } else {
-        const edgesGeo = new THREE.EdgesGeometry(geometry, 15);
-        edgesCache.current.set(geometry.uuid, edgesGeo);
-      }
-    }
-
-    const cachedEdge = edgesCache.current.get(geometry.uuid);
-    if (cachedEdge) {
-      const uniqueEdgesMat = new THREE.LineBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.15,
-        depthWrite: false,
-      });
-      const edges = new THREE.LineSegments(cachedEdge, uniqueEdgesMat);
-      mesh.add(edges);
-    }
-
-    hologramGroupRef.current.add(mesh); // Tambah ke scene graph sekali di awal
+    hologramGroupRef.current.add(mesh);
     hologramMeshCache.current.set(key, mesh);
     return mesh;
   };
@@ -146,10 +124,10 @@ export const CameraOcclusionManager = () => {
     const colliders = (window as any).globalColliders || [];
     if (colliders.length === 0) return;
 
-    meshesToUpdateBatch.current.clear(); // Bersihkan batch GPU
+    meshesToUpdateBatch.current.clear();
 
     if (shouldRaycast) {
-      // KEMBALIKAN KE CPU (Tanpa beban GPU)
+      // 1. KEMBALIKAN KE CPU
       ghostedTracker.current.forEach((ghost) => {
         if (ghost.instanceId !== undefined) {
           const instMesh = ghost.parentMesh as THREE.InstancedMesh;
@@ -159,12 +137,12 @@ export const CameraOcclusionManager = () => {
         }
       });
 
-      // RAYCAST
+      // 2. RAYCAST
       _raycaster.set(camPos, direction);
       _raycaster.far = camPos.distanceTo(_playerPos) - 0.2;
       const intersects = _raycaster.intersectObjects(colliders, true);
 
-      activeFrameKeys.current.clear(); // Gunakan ulang set, jangan buat baru!
+      activeFrameKeys.current.clear();
 
       intersects.forEach((hit) => {
         if (hit.object.name === 'terrain') return;
@@ -216,7 +194,7 @@ export const CameraOcclusionManager = () => {
         }
       });
 
-      // SEMBUNYIKAN KEMBALI DI CPU
+      // 3. SEMBUNYIKAN KEMBALI DI CPU
       ghostedTracker.current.forEach((ghost) => {
         if (ghost.instanceId !== undefined) {
           const instMesh = ghost.parentMesh as THREE.InstancedMesh;
@@ -229,7 +207,7 @@ export const CameraOcclusionManager = () => {
     }
 
     // ==========================================
-    // 3. ANIMASI SUPER MULUS & BATCHING GPU (ANTI-LAG)
+    // ANIMASI MULUS & BATCHING GPU (ANTI-LAG)
     // ==========================================
     const transitionSpeed = delta * 5;
 
@@ -246,7 +224,7 @@ export const CameraOcclusionManager = () => {
         if (ghost.instanceId !== undefined) {
           const instMesh = ghost.parentMesh as THREE.InstancedMesh;
           instMesh.setMatrixAt(ghost.instanceId, ghost.matrix);
-          meshesToUpdateBatch.current.add(instMesh); // Daftarkan ke Batch
+          meshesToUpdateBatch.current.add(instMesh);
         } else {
           ghost.parentMesh.visible = true;
         }
@@ -258,14 +236,14 @@ export const CameraOcclusionManager = () => {
             const instMesh = ghost.parentMesh as THREE.InstancedMesh;
             _tempMatrix.compose(ghost.position, ghost.quaternion, _zeroVector);
             instMesh.setMatrixAt(ghost.instanceId, _tempMatrix);
-            meshesToUpdateBatch.current.add(instMesh); // Daftarkan ke Batch
+            meshesToUpdateBatch.current.add(instMesh);
           } else {
             ghost.parentMesh.visible = false;
           }
           ghost.gpuHidden = true;
         }
 
-        // Lerp Opacity - Ringan di GPU
+        // Fading Opacity
         const targetOpacity = 1.0 - (ghost.progress * 0.5);
 
         if (Array.isArray(ghost.holoMesh.material)) {
@@ -275,23 +253,18 @@ export const CameraOcclusionManager = () => {
         } else {
           (ghost.holoMesh.material as THREE.Material).opacity = targetOpacity;
         }
-
-        const edges = ghost.holoMesh.children[0] as THREE.LineSegments | undefined;
-        if (edges) {
-          (edges.material as THREE.Material).opacity = ghost.progress * 0.15;
-        }
       }
     });
 
-    // 4. EKSEKUSI BATCH GPU SECARA SERENTAK (Ratusan pohon = 1x Unggah)
+    // EKSEKUSI BATCH GPU
     meshesToUpdateBatch.current.forEach(mesh => {
       mesh.instanceMatrix.needsUpdate = true;
     });
   });
 
+  // Cleanup Cache
   useEffect(() => {
     return () => {
-      edgesCache.current.forEach(geo => geo && geo.dispose());
       hologramMeshCache.current.forEach(mesh => {
         mesh.geometry.dispose();
       });
@@ -299,7 +272,6 @@ export const CameraOcclusionManager = () => {
         if (Array.isArray(mat)) mat.forEach(m => m.dispose());
         else mat.dispose();
       });
-      edgesCache.current.clear();
       hologramMeshCache.current.clear();
       holoMaterialCache.current.clear();
     };
