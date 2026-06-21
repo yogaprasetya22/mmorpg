@@ -218,6 +218,7 @@ export const RemotePlayerInstance = ({
   // object allocation or array operations per frame.
   const smoothPos = useRef<{ x: number, y: number, z: number } | null>(null);
   const smoothRot = useRef(0);
+  const pendingArrowsRef = useRef<any[]>([]);
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
@@ -418,7 +419,8 @@ export const RemotePlayerInstance = ({
       nextTimeScale = 0.8;
     } else if (isAttacking) {
       const remoteAspd = data.aspd ?? 150;
-      const remoteHPS = 1 + (remoteAspd / 125); // Synced with local hitsPerSecond formula
+      const remoteRoASPD = 130 + (Math.min(1000, Math.max(0, remoteAspd)) / 1000) * 63;
+      const remoteHPS = 50 / (200 - remoteRoASPD);
       nextTimeScale = remoteHPS * 1.2; // Sync with attack duration multiplier
     }
     if (Math.abs(nextTimeScale - timeScaleRef.current) > 0.05) {
@@ -683,33 +685,28 @@ export const RemotePlayerInstance = ({
       
       // Fetch and setup next spell in the global pool ONLY for Beginner/Marksman class (prevents leaking MM bullets to melee classes!)
       if (pClass === "Beginner") {
-        const pool = mmSpellsRef.current;
-        if (typeof (window as any).globalRemoteSpellPtr === 'undefined') {
-          (window as any).globalRemoteSpellPtr = 0;
-        }
-        let ptr = (window as any).globalRemoteSpellPtr;
-        
-        const s = pool[ptr];
-        if (s) {
-          s.active = true;
-          s.isBullet = true;
-          s.fromX = fromX;
-          s.fromY = fromY;
-          s.fromZ = fromZ;
-          s.toX = toX;
-          s.toY = toY;
-          s.toZ = toZ;
-          s.startTime = performance.now();
-          s.color = color;
-          s.targetId = targetId;
-          (s as any).targetPoolIdx = targetPoolIdx;
-          (s as any).isSniper = false;
-          (s as any).isFinisher = isFinisher;
-          (s as any).bulletSpeed = bulletSpeed;
-          (s as any).playerClass = pClass;
-          
-          (window as any).globalRemoteSpellPtr = (ptr + 1) % pool.length;
-        }
+        const remoteAspd = data.aspd ?? 150;
+        const remoteRoASPD = 130 + (Math.min(1000, Math.max(0, remoteAspd)) / 1000) * 63;
+        const remoteHPSVal = 50 / (200 - remoteRoASPD);
+        const remoteAttackDuration = 1000 / remoteHPSVal;
+        const remoteReleaseDelay = remoteAttackDuration * 0.48; // Release at 48% (when hand releases the bow string)
+
+        pendingArrowsRef.current.push({
+          startTime: performance.now(),
+          releaseDelay: remoteReleaseDelay,
+          fromX,
+          fromY,
+          fromZ,
+          toX,
+          toY,
+          toZ,
+          color,
+          targetId,
+          targetPoolIdx,
+          isFinisher,
+          bulletSpeed,
+          pClass,
+        });
       }
 
       // Trigger premium class-specific visual layers
@@ -779,6 +776,46 @@ export const RemotePlayerInstance = ({
           (window as any).globalRemoteMagePtr = (mPtr + 1) % mPool.length;
         }
       }
+    }
+
+    if (pendingArrowsRef.current.length > 0) {
+      const now = performance.now();
+      pendingArrowsRef.current = pendingArrowsRef.current.filter((arrow: any) => {
+        const elapsed = now - arrow.startTime;
+        if (elapsed >= arrow.releaseDelay) {
+          const pool = mmSpellsRef?.current;
+          if (pool) {
+            if (typeof (window as any).globalRemoteSpellPtr === 'undefined') {
+              (window as any).globalRemoteSpellPtr = 0;
+            }
+            let ptr = (window as any).globalRemoteSpellPtr;
+            
+            const s = pool[ptr];
+            if (s) {
+              s.active = true;
+              s.isBullet = true;
+              s.fromX = arrow.fromX;
+              s.fromY = arrow.fromY;
+              s.fromZ = arrow.fromZ;
+              s.toX = arrow.toX;
+              s.toY = arrow.toY;
+              s.toZ = arrow.toZ;
+              s.startTime = performance.now();
+              s.color = arrow.color;
+              s.targetId = arrow.targetId;
+              (s as any).targetPoolIdx = arrow.targetPoolIdx;
+              (s as any).isSniper = false;
+              (s as any).isFinisher = arrow.isFinisher;
+              (s as any).bulletSpeed = arrow.bulletSpeed;
+              (s as any).playerClass = arrow.pClass;
+              
+              (window as any).globalRemoteSpellPtr = (ptr + 1) % pool.length;
+            }
+          }
+          return false;
+        }
+        return true;
+      });
     }
   });
 

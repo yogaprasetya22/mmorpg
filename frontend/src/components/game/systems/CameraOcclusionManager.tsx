@@ -30,6 +30,7 @@ export const CameraOcclusionManager = () => {
   // Memori Cache yang dioptimalkan
   const edgesCache = useRef<Map<string, THREE.EdgesGeometry | null>>(new Map());
   const hologramMeshCache = useRef<Map<string, THREE.Mesh>>(new Map());
+  const holoMaterialCache = useRef<Map<string, THREE.Material | THREE.Material[]>>(new Map());
 
   // 1. ZERO-GARBAGE COLLECTION: Semua alokasi objek dikeluarkan dari useFrame!
   const activeFrameKeys = useRef<Set<string>>(new Set());
@@ -59,8 +60,8 @@ export const CameraOcclusionManager = () => {
         `
       );
     };
-    // Mengunci shader spesifik berdasarkan ID material asli untuk mencegah crash/glitch
-    mat.customProgramCacheKey = () => 'holo_' + sourceMat.uuid;
+    // Mengunci shader berdasarkan type material asli agar Three.js me-reuse shader WebGLProgram yang sudah di-compile!
+    mat.customProgramCacheKey = () => 'holo_dither_' + sourceMat.type;
     return mat;
   };
 
@@ -82,21 +83,31 @@ export const CameraOcclusionManager = () => {
   ) => {
     if (hologramMeshCache.current.has(key)) return hologramMeshCache.current.get(key)!;
 
-    let holoMaterial;
-    if (Array.isArray(originalMaterial)) {
-      holoMaterial = originalMaterial.map(mat => createHoloMaterialFromOriginal(mat));
-    } else {
-      holoMaterial = createHoloMaterialFromOriginal(originalMaterial);
+    // Cache material kloningan berdasarkan original material UUID untuk mencegah redundansi kloning
+    const matKey = Array.isArray(originalMaterial)
+      ? originalMaterial.map(m => m.uuid).join(',')
+      : originalMaterial.uuid;
+
+    let holoMaterial = holoMaterialCache.current.get(matKey);
+    if (!holoMaterial) {
+      if (Array.isArray(originalMaterial)) {
+        holoMaterial = originalMaterial.map(mat => createHoloMaterialFromOriginal(mat));
+      } else {
+        holoMaterial = createHoloMaterialFromOriginal(originalMaterial);
+      }
+      holoMaterialCache.current.set(matKey, holoMaterial);
     }
 
     const mesh = new THREE.Mesh(geometry, holoMaterial);
+    mesh.visible = false; // default invisible
 
     // 2. PERLINDUNGAN DARI FREEZE MAUT (High-Poly Bypass)
     if (!edgesCache.current.has(geometry.uuid)) {
       const vertexCount = geometry.attributes.position ? geometry.attributes.position.count : 0;
 
-      // Jika objek terlalu rumit (> 3000 titik seperti daun pohon), lewati pembuatan garis tepi!
-      if (vertexCount > 3000) {
+      // Jika objek terlalu rumit (> 200 titik seperti daun pohon), lewati pembuatan garis tepi!
+      // Pembuatan EdgesGeometry sinkron di CPU sangat lambat untuk vertex banyak.
+      if (vertexCount > 200) {
         edgesCache.current.set(geometry.uuid, null);
       } else {
         const edgesGeo = new THREE.EdgesGeometry(geometry, 15);
@@ -116,6 +127,7 @@ export const CameraOcclusionManager = () => {
       mesh.add(edges);
     }
 
+    hologramGroupRef.current.add(mesh); // Tambah ke scene graph sekali di awal
     hologramMeshCache.current.set(key, mesh);
     return mesh;
   };
@@ -184,7 +196,7 @@ export const CameraOcclusionManager = () => {
           holoMesh.quaternion.copy(quat);
           holoMesh.scale.copy(originalScale);
           holoMesh.updateMatrixWorld();
-          hologramGroupRef.current.add(holoMesh);
+          holoMesh.visible = true;
 
           ghostedTracker.current.set(key, {
             id: key,
@@ -229,7 +241,7 @@ export const CameraOcclusionManager = () => {
         : Math.max(0.0, ghost.progress - transitionSpeed);
 
       if (ghost.progress === 0.0 && !isBlocked) {
-        hologramGroupRef.current.remove(ghost.holoMesh);
+        ghost.holoMesh.visible = false;
 
         if (ghost.instanceId !== undefined) {
           const instMesh = ghost.parentMesh as THREE.InstancedMesh;
@@ -282,11 +294,14 @@ export const CameraOcclusionManager = () => {
       edgesCache.current.forEach(geo => geo && geo.dispose());
       hologramMeshCache.current.forEach(mesh => {
         mesh.geometry.dispose();
-        if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose());
-        else (mesh.material as THREE.Material).dispose();
+      });
+      holoMaterialCache.current.forEach(mat => {
+        if (Array.isArray(mat)) mat.forEach(m => m.dispose());
+        else mat.dispose();
       });
       edgesCache.current.clear();
       hologramMeshCache.current.clear();
+      holoMaterialCache.current.clear();
     };
   }, []);
 

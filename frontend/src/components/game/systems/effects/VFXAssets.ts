@@ -80,4 +80,7 @@ export const VFX_TEXTURES = {
     twirl: loadTex('/kenney_particle-pack/PNG (Transparent)/twirl_01.png'),
     star: loadTex('/kenney_particle-pack/PNG (Transparent)/star_01.png'),
     shield: loadTex('/kenney_particle-pack/PNG (Transparent)/circle_05.png'),
+
+    // Archer — Muzzle Flash Sprite (custom particle)
+    archerMuzzle: loadTex('/assets/textures/muzzle_flash_6.png'),
 };

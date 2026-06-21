@@ -44,8 +44,9 @@ export const executeClassAttack = (
 export const executeClassSkill = (
   playerClass: string,
   target: UnitRuntimeData | null,
-  ctx: CombatExecutionContext
+  ctx: CombatExecutionContext,
+  skillId?: string
 ) => {
   const strategy = getStrategyForClass(playerClass);
-  strategy.executeSkill(target, ctx);
+  strategy.executeSkill(target, ctx, skillId);
 };

@@ -270,21 +270,10 @@ export function usePlayerCombat({
       }, 0);
     }
 
-    // ── Dynamic Ragnarok X / New World ASPD Calculation ──
-    const baseLevel = playerStats?.level ?? (playerStats?.Level ?? 1);
-    const agi = playerStats?.agi ?? (playerStats?.AGI ?? 10);
-    const dex = playerStats?.dex ?? (playerStats?.DEX ?? 10);
-    const bonusEquipmentPercent = playerStats?.bonusEquipmentPercent ?? (playerStats?.bonus_equipment_percent ?? 0);
-    const bonusBuffPercent = playerStats?.bonusBuffPercent ?? (playerStats?.bonus_buff_percent ?? 0);
-
-    const rawASPD = (agi * 4) + (dex * 1);
-    const levelFactor = 50 + (baseLevel * 2);
-    const statPercent = (rawASPD / levelFactor) * 100;
-    let finalASPDPercent = statPercent + bonusEquipmentPercent + bonusBuffPercent;
-    if (finalASPDPercent > 1000) {
-      finalASPDPercent = 1000;
-    }
-    const hitsPerSecond = 1 + (finalASPDPercent / 25);
+    // ── Ragnarok Official ASPD Calculation ──
+    const finalASPDPercent = playerStats?.aspd ?? playerStats?.ASPD ?? 150;
+    const roASPD = 130 + (Math.min(1000, Math.max(0, finalASPDPercent)) / 1000) * 63;
+    const hitsPerSecond = 50 / (200 - roASPD);
     const dynamicAttackInterval = 1000 / hitsPerSecond;
 
     // ── Input attack handler ──

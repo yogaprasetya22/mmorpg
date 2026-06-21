@@ -62,7 +62,7 @@ const ThiefStrategy: ClassCombatStrategy = {
     }
   },
 
-  executeSkill(target, ctx) {
+  executeSkill(target, ctx, _skillId) {
     // --- SKILL: Lompatan Bayang (Shadow Step Teleport Backstab) ---
     const originalX = ctx.charPos.x;
     const originalY = ctx.charPos.y;

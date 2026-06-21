@@ -26,7 +26,6 @@
 
 import type { ClassCombatStrategy } from "../types";
 import { BaseAttackCalculator } from "../DamageCalculator";
-import { getProjectileSpawnConfig } from "@/src/components/game/avatar/weaponConfigs";
 import * as THREE from "three";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -218,142 +217,128 @@ const BeginnerStrategy: ClassCombatStrategy = {
             EAGLE_EYE_DURATION_MS;
 
         // ── Draw VFX: fires immediately when the archer begins drawing ──
-        // This is intentional — the "magic charge" glow appears as the hand
-        // pulls the string back (frame 0 of the clip).
         ctx.spawnVFX(
             [ctx.originVec.x, ctx.originVec.y, ctx.originVec.z],
             "magic",
             comboColor,
         );
 
-        // ── Queue arrow for event-driven release ──
-        // The arrow snapshot is stored here. It fires the moment AvatarModel's
-        // AnimationMixer fires its 'loop' event (clip completes one full cycle).
-        // No timing computation needed — the engine is the clock.
-        const queueTime = performance.now();
-        pendingLocalArrows.push({
-            startTime: queueTime,
-            target,
-            ctx: {
-                combo: ctx.combo,
-                spawnVFX: ctx.spawnVFX,
-                mmSpellsRef: ctx.mmSpellsRef,
-                mmSpellPtr: ctx.mmSpellPtr,
-                cameraShake: ctx.cameraShake,
-                poolRef: ctx.poolRef,
-                dealPlayerDamage: ctx.dealPlayerDamage,
-                playerStats: ctx.playerStats,
-            },
-            isFinisher,
-            comboColor,
-            isEagleEyeActive,
-            originX: ctx.originVec.x,
-            originY: ctx.originVec.y,
-            originZ: ctx.originVec.z,
-            dirX: ctx.camDir.x,
-            dirY: ctx.camDir.y,
-            dirZ: ctx.camDir.z,
-        });
+        // ── 1. Calculate & send damage IMMEDIATELY ────────────────────────────
+        // Damage goes to the server + client-side HUD prediction right away.
+        // This does NOT depend on the animation loop event.
+        if (target && target.isActive && !target.isDying) {
+            const comboMult = isFinisher ? 1.5 : ctx.combo === 1 ? 1.25 : 1.0;
+            BaseAttackCalculator(
+                target,
+                ctx as any,
+                comboMult,
+                isFinisher,
+                isEagleEyeActive,
+            );
+        } else if (ctx.poolRef?.current) {
+            // No valid target — fire dummy projectile into world space
+            ctx.poolRef.current.fire(ctx.originVec, ctx.camDir);
+        }
 
-        // ── Safety net: force-release if AnimationMixer loop event doesn't fire ──
-        // The loop event SHOULD fire when the "Standing Draw Arrow" clip completes
-        // one cycle. But edge cases (action weight near zero during crossfade,
-        // mixer update skipped, etc.) can prevent it. This setTimeout acts as a
-        // watchdog: if the arrow hasn't been released by the loop event within
-        // the expected attack interval, force-release it now.
+        // ── 2. Schedule arrow projectile with DIRECT delayed release ──────────
+        // Instead of relying on the AnimationMixer 'loop' event (which can
+        // silently fail to fire for certain attacks — e.g. hit 9/10), we
+        // directly schedule the arrow spawn via setTimeout. The delay matches
+        // the animation's "string release" point (~70% through the clip).
         const stats = ctx.playerStats || {};
         const aspd = stats.aspd ?? stats.ASPD ?? 150;
         const roASPD = 130 + (Math.min(1000, Math.max(0, aspd)) / 1000) * 63;
         const hps = 50 / (200 - roASPD);
         const attackIntervalMs = 1000 / hps;
+        const releaseDelay = attackIntervalMs * 0.7;
+
+        // Capture all arrow data NOW (target position, origin, etc.)
+        // since these module-level vectors will be overwritten by the next attack.
+        const originX = ctx.originVec.x;
+        const originY = ctx.originVec.y;
+        const originZ = ctx.originVec.z;
+        const snapTarget = target;
+        const snapMmSpellsRef = ctx.mmSpellsRef;
+        const snapMmSpellPtr = ctx.mmSpellPtr;
+        const snapSpawnVFX = ctx.spawnVFX;
+        const snapCameraShake = ctx.cameraShake;
+        const snapPoolRef = ctx.poolRef;
+        const camDirX = ctx.camDir.x;
+        const camDirY = ctx.camDir.y;
+        const camDirZ = ctx.camDir.z;
+
         setTimeout(() => {
-            // Search by startTime instead of fixed index — the array shifts
-            // when arrows are released via the loop event (FIFO splice).
-            const idx = pendingLocalArrows.findIndex(a => a.startTime === queueTime);
-            if (idx !== -1) {
-                // Loop event didn't fire for this arrow — force release now
-                pendingLocalArrows.splice(idx, 1);
-                releaseNextPendingArrow(performance.now());
+            // Release VFX at bow hand position
+            snapSpawnVFX(
+                [originX, originY, originZ],
+                isFinisher ? "shockwave" : "magic",
+                comboColor,
+            );
+
+            if (snapTarget && snapTarget.isActive && !snapTarget.isDying) {
+                const toX = snapTarget.position[0];
+                const toY = snapTarget.position[1] + 0.2;
+                const toZ = snapTarget.position[2];
+
+                if (snapMmSpellsRef?.current) {
+                    const pool = snapMmSpellsRef.current;
+                    const s = pool[snapMmSpellPtr.current];
+                    if (s) {
+                        s.active = true;
+                        s.isBullet = true;
+                        s.fromX = originX;
+                        s.fromY = originY;
+                        s.fromZ = originZ;
+                        s.toX = toX;
+                        s.toY = toY;
+                        s.toZ = toZ;
+                        s.startTime = performance.now();
+                        s.color = isEagleEyeActive ? "#ffd700" : comboColor;
+                        s.targetId = snapTarget.id;
+                        s.targetPoolIdx = snapTarget.poolIdx;
+                        s.isSniper = isEagleEyeActive;
+                        s.isFinisher = isEagleEyeActive ? true : isFinisher;
+                        s.bulletSpeed = isEagleEyeActive
+                            ? 160.0
+                            : isFinisher
+                              ? 80.0
+                              : 100.0;
+                        s.playerClass = "Beginner";
+
+                        snapMmSpellPtr.current =
+                            (snapMmSpellPtr.current + 1) % pool.length;
+                    }
+                }
+
+                if (isFinisher) {
+                    snapSpawnVFX([toX, toY - 1.2, toZ], "shockwave", comboColor);
+                }
+
+                if ((isFinisher || isEagleEyeActive) && snapCameraShake) {
+                    snapCameraShake(0.55);
+                }
+            } else {
+                // No valid target — fire into world space along camera direction
+                if (snapPoolRef?.current) {
+                    _originVec.set(originX, originY, originZ);
+                    _camDirVec.set(camDirX, camDirY, camDirZ);
+                    snapPoolRef.current.fire(_originVec, _camDirVec);
+                }
             }
-            // If idx === -1, the loop event already released this arrow — no-op
-        }, attackIntervalMs);
+        }, releaseDelay);
     },
 
-    executeSkill(target, ctx) {
-        // ── SKILL: Double Strafe (Tembakan Ganda) ──
-        const now = performance.now();
-        (window as any).lastEagleEyeTime = now;
-
-        const spawnConfig = getProjectileSpawnConfig("Beginner");
-
-        const fireArrow = (isSecond: boolean): void => {
-            if (!ctx.mmSpellsRef?.current) return;
-            const pool = ctx.mmSpellsRef.current;
-            const s = pool[ctx.mmSpellPtr.current];
-            if (!s) return;
-
-            s.active = true;
-            s.isBullet = true;
-            s.fromX = ctx.charPos.x;
-            s.fromY = ctx.charPos.y + spawnConfig.launchY;
-            s.fromZ = ctx.charPos.z;
-
-            if (target) {
-                s.toX = target.position[0];
-                s.toY = target.position[1] + 1.2;
-                s.toZ = target.position[2];
-                s.targetId = target.id;
-                s.targetPoolIdx = target.poolIdx;
-            } else {
-                ctx.camera.getWorldDirection(ctx.camDir);
-                ctx.camDir.y = 0;
-                ctx.camDir.normalize();
-                s.toX = ctx.charPos.x + ctx.camDir.x * 25.0;
-                s.toY = ctx.charPos.y + spawnConfig.launchY;
-                s.toZ = ctx.charPos.z + ctx.camDir.z * 25.0;
-                s.targetId = "";
-                s.targetPoolIdx = undefined;
-            }
-
-            s.startTime = performance.now();
-            s.color = "#ffd700";
-            s.isSniper = true;
-            s.isFinisher = isSecond;
-            s.bulletSpeed = 150.0;
-            s.playerClass = "Beginner";
-
-            ctx.mmSpellPtr.current = (ctx.mmSpellPtr.current + 1) % pool.length;
-
-            // Damage: dealt at arrow FIRE time (server-side authoritative games
-            // use hit-scan on the server; for a client-authoritative setup this
-            // is equivalent to lag-compensated hit detection).
-            if (target && ctx.dealPlayerDamage) {
-                const damage = 14000 + Math.random() * 1500;
-                ctx.dealPlayerDamage(target.id, damage, isSecond);
-            }
-        };
-
-        // 1st arrow — immediate
-        fireArrow(false);
-        ctx.spawnVFX(
-            [ctx.charPos.x, ctx.charPos.y + 1.2, ctx.charPos.z],
-            "magic",
-            "#ffd700",
-        );
-
-        // 2nd arrow — 120 ms later (RO Double Strafe cadence)
-        setTimeout(() => {
-            fireArrow(true);
-            ctx.spawnVFX(
-                [ctx.charPos.x, ctx.charPos.y + 1.2, ctx.charPos.z],
-                "magic",
-                "#ffd700",
-            );
-        }, 120);
-
-        if (ctx.cameraShake) {
-            ctx.cameraShake(0.35);
+    executeSkill(target, ctx, skillId) {
+        // Route to the correct Archer skill
+        if (skillId) {
+            const { executeArcherSkill } = require('../archerSkills');
+            executeArcherSkill(skillId, target, ctx);
+            return;
         }
+
+        // Fallback: Double Strafe (legacy behavior when no skillId provided)
+        const { executeArcherSkill } = require('../archerSkills');
+        executeArcherSkill('double_strafe', target, ctx);
     },
 };
 

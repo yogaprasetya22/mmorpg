@@ -30,4 +30,6 @@ export interface CastState {
   vctTime: number;
   target: any;
   context: any;
+  /** Skill ID for multi-skill routing (archer system) */
+  skillId?: string;
 }

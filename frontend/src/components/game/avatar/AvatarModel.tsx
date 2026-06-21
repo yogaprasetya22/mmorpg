@@ -359,11 +359,12 @@ const AvatarModelAnimated = ({
   controlRef,
   skipAnimControl,
   isConfigurator = false,
+  onAttackLoop,
   ...props
 }: any) => {
   const group = useRef<THREE.Group>(null);
   const gltf = useGLTF(`${API_BASE_URL}/assets/characters/base/Armature.glb`) as any;
-  const { actions } = useAnimations(animations, group);
+  const { actions, mixer } = useAnimations(animations, group);
   const setDownload = useAvatarConfiguratorStore((state) => state.setDownload);
   const equippedWeaponAsset = customization["Weapon"]?.asset;
   const [currentHand, setCurrentHand] = useState<"left" | "right">("right");
@@ -445,6 +446,27 @@ const AvatarModelAnimated = ({
     activeActionRef.current = nextAction;
     prevPoseRef.current = pose;
   }, [actions, pose, skipAnimControl]);
+
+  // ── Arrow Release via AnimationMixer 'loop' event ────────────────────────────
+  // This is the ground-truth sync mechanism.  Three.js fires the 'loop' event
+  // INSIDE mixer.update() at the exact moment the attack clip finishes one full
+  // cycle.  No timing math needed — the engine IS the clock.
+  useEffect(() => {
+    if (typeof onAttackLoop !== 'function') return;
+    const attackAction = actions?.["Standing Draw Arrow"];
+    if (!attackAction || !mixer) return;
+
+    const handleLoop = (e: any): void => {
+      // Guard: only fire for the attack action, not any other looping clip.
+      if (e.action !== attackAction) return;
+      onAttackLoop(performance.now());
+    };
+
+    mixer.addEventListener('loop', handleLoop);
+    return () => {
+      mixer.removeEventListener('loop', handleLoop);
+    };
+  }, [actions, mixer, onAttackLoop]);
 
   // ── Imperative handle for external animation control ──
   // Allows parent components (e.g. RemotePlayerInstance) to drive

@@ -44,7 +44,7 @@ const ATLAS_ROWS = 4; // Expanded to support alphabetic characters cleanly
 
 // Perspective stack tuning — optimized for max ASPD (9 hits/sec)
 const CLUSTER_RADIUS = 1.8;   // world units: hits within this radius join one cluster
-const LIFE_DURATION  = 1.2;   // fast turnover — numbers disappear quickly making room for new hits
+const LIFE_DURATION  = 1.6;   // base duration — long enough to read at any ASPD
 
 // ─── ZERO-ALLOC HELPERS ──────────────────────────────────────────────────────
 const _dummy = new THREE.Object3D();
@@ -399,7 +399,10 @@ export function DamageHUDBatcher({
 
             while (damageQueue.current.length > 0) {
                 const ev = damageQueue.current.shift()!;
-                if (!ev.isCrit && damageQueue.current.length > 80) continue;
+
+                // Guard: skip events with missing or invalid position.
+                // (Never silently drop by index — every valid event must render.)
+                if (!ev || !Array.isArray(ev.position) || !Number.isFinite(ev.position[0])) continue;
 
                 const isMiss   = !!ev.isMiss;
                 const isCrit   = !isMiss && !!ev.isCrit;
@@ -423,7 +426,9 @@ export function DamageHUDBatcher({
                         clusterX = e.clusterX;
                         clusterY = e.clusterY;
                         clusterZ = e.clusterZ;
-                        e.depthIdx++;
+                        // Clamp depthIdx: prevents events being pushed too far
+                        // behind geometry and becoming occluded by terrain.
+                        e.depthIdx = Math.min(e.depthIdx + 1, 6);
                     }
                 }
 
@@ -453,7 +458,11 @@ export function DamageHUDBatcher({
                     SW = 0.58;
                     GAP = 0.38;
                 } else {
-                    let val = Math.abs(Math.round(ev.value));
+                    // Guard against NaN/undefined damage values — would produce
+                    // numChars=0 (alive event with no visible digits).
+                    let rawVal = ev.value;
+                    if (!Number.isFinite(rawVal)) rawVal = 0;
+                    let val = Math.abs(Math.round(rawVal));
                     let dc  = 0;
                     if (val === 0) { _dbuf[0] = 0; dc = 1; }
                     else { while (val > 0 && dc < 8) { _dbuf[dc++] = val % 10; val = (val / 10) | 0; } }
@@ -495,11 +504,11 @@ export function DamageHUDBatcher({
                 const direction = (evtPtr.current % 2 === 0) ? 1 : -1;
 
                 if (isCrit) {
-                    // Critical hit: snappy vertical jump, moderate horizontal spray, optimized for high ASPD (7+ hits/sec)
+                    // Critical hit: snappy vertical jump, moderate horizontal spray
                     e.vx = direction * (2.0 + Math.random() * 2.5) + (Math.random() - 0.5) * 0.8;
                     e.vy = 12.0 + Math.random() * 4.0;
-                    e.grav = 32.0;
-                    e.duration = 0.45; // faster fade out to prevent screen clutter at high frequencies
+                    e.grav = 24.0;
+                    e.duration = 0.85;
 
                     if (typeof (window as any).cameraShake === 'function') {
                         (window as any).cameraShake(0.18);
@@ -509,19 +518,19 @@ export function DamageHUDBatcher({
                     e.vx = direction * (1.2 + Math.random() * 0.8);
                     e.vy = 4.0 + Math.random() * 1.0;
                     e.grav = 14.0;
-                    e.duration = 0.55;
+                    e.duration = 0.90;
                 } else if (isHeal) {
                     // Heal: floats straight up, gentle drift
                     e.vx = (Math.random() - 0.5) * 1.5;
                     e.vy = 5.0 + Math.random() * 1.5;
                     e.grav = 10.0;
-                    e.duration = 0.60;
+                    e.duration = 0.95;
                 } else {
                     // Normal hit / Magic: spray wide in a fountain
                     e.vx = direction * (3.2 + Math.random() * 2.2) + (Math.random() - 0.5) * 1.0;
                     e.vy = 9.0 + Math.random() * 4.0;
-                    e.grav = 34.0;
-                    e.duration = 0.35; // clean and fast turnover
+                    e.grav = 24.0;
+                    e.duration = 0.70;
                 }
 
                 (e as any)._totalW = totalW;
@@ -610,10 +619,16 @@ export function DamageHUDBatcher({
             const wy = e.spawnY + _camDir.y * di * 0.18;
             const wz = e.spawnZ + _camDir.z * di * 0.18;
 
-            // Opacity: stays full opacity until 50% life, then fades out in the last 50%
-            const opacity = tn > 0.5 ? (1.0 - tn) / 0.5 : 1.0;
+            // Opacity: full opacity for 65% of life, then fades out in the last 35%
+            const opacity = tn > 0.65 ? (1.0 - tn) / 0.35 : 1.0;
 
-            if (opacity < 0.02) continue;
+            if (opacity < 0.02) {
+                // Zero out opacity buffer explicitly — without this, the GPU
+                // still renders with the stale non-zero value from the previous frame.
+                for (let c = 0; c < e.numChars; c++) aOpacity[base + c] = 0;
+                if (sm) sOpacity[ei] = 0;
+                continue;
+            }
 
             // Crit jitter on newest digit only (first ~0.10s) — punchier shake
             let jx = 0.0, jy = 0.0;

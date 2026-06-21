@@ -2,270 +2,478 @@ import React, { useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useVFX } from './VFXManager';
+import { VFX_TEXTURES } from './effects/VFXAssets';
+import { UnitRuntimeData } from '@/src/core/domain/unit.types';
 
 const MAX_BULLETS = 100;
-const BULLET_SPEED = 2.2; // Increased speed for better feel
+const BULLET_SPEED = 2.2;
 const BULLET_LIFETIME = 2.5;
 
-function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
-  const merged = new THREE.BufferGeometry();
-  
-  let totalVertices = 0;
-  let totalIndices = 0;
-  for (const g of geometries) {
-    totalVertices += g.attributes.position.count;
-    if (g.index) totalIndices += g.index.count;
-  }
-  
-  const positions = new Float32Array(totalVertices * 3);
-  const normals = new Float32Array(totalVertices * 3);
-  const uvs = new Float32Array(totalVertices * 2);
-  const partIds = new Float32Array(totalVertices);
-  const indices: number[] = [];
-  
-  let vertexOffset = 0;
-  for (const g of geometries) {
-    const posAttr = g.attributes.position;
-    const normAttr = g.attributes.normal;
-    const uvAttr = g.attributes.uv;
-    const partAttr = g.attributes.partId;
-    
-    positions.set(posAttr.array, vertexOffset * 3);
-    if (normAttr) normals.set(normAttr.array, vertexOffset * 3);
-    if (uvAttr) uvs.set(uvAttr.array, vertexOffset * 2);
-    if (partAttr) partIds.set(partAttr.array, vertexOffset);
-    
-    if (g.index) {
-      const indexArray = g.index.array;
-      for (let i = 0; i < indexArray.length; i++) {
-        indices.push(indexArray[i] + vertexOffset);
-      }
-    } else {
-      for (let i = 0; i < posAttr.count; i++) {
-        indices.push(i + vertexOffset);
-      }
-    }
-    
-    vertexOffset += posAttr.count;
-  }
-  
-  merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-  merged.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-  merged.setAttribute('partId', new THREE.BufferAttribute(partIds, 1));
-  merged.setIndex(indices);
-  
-  return merged;
+const MAX_PARTICLES = 300;
+
+// Travel-aligned orientation helpers for arrow sprites
+const _ppWorldUp = new THREE.Vector3(0, 1, 0);
+const _ppFwd = new THREE.Vector3();
+const _ppRight = new THREE.Vector3();
+const _ppUp = new THREE.Vector3();
+
+function setArrowTravelPool(
+  obj: THREE.Object3D,
+  px: number, py: number, pz: number,
+  dx: number, dy: number, dz: number,
+  scaleX: number, scaleY: number
+): void {
+  _ppFwd.set(dx, dy, dz).normalize();
+  _ppRight.crossVectors(_ppFwd, _ppWorldUp);
+  if (_ppRight.lengthSq() < 0.0001) _ppRight.set(1, 0, 0);
+  _ppRight.normalize();
+  _ppUp.crossVectors(_ppRight, _ppFwd).normalize();
+
+  const m = obj.matrix.elements;
+  m[0] = _ppFwd.x * scaleX; m[1] = _ppFwd.y * scaleX; m[2] = _ppFwd.z * scaleX; m[3] = 0;
+  m[4] = _ppUp.x * scaleY; m[5] = _ppUp.y * scaleY; m[6] = _ppUp.z * scaleY; m[7] = 0;
+  m[8] = _ppRight.x; m[9] = _ppRight.y; m[10] = _ppRight.z; m[11] = 0;
+  m[12] = px; m[13] = py; m[14] = pz; m[15] = 1;
+  obj.matrixAutoUpdate = false;
+  obj.matrixWorldNeedsUpdate = true;
 }
 
-function createArrowGeometry(): THREE.BufferGeometry {
-  const shaftGeo = new THREE.CylinderGeometry(0.015, 0.015, 1.4, 4);
-  shaftGeo.rotateX(Math.PI / 2);
-  shaftGeo.translate(0, 0, -0.05);
-  const shaftPart = new Float32Array(shaftGeo.attributes.position.count).fill(0.0);
-  shaftGeo.setAttribute('partId', new THREE.BufferAttribute(shaftPart, 1));
+// ─── Custom Shaders for Premium VFX ──────────────────────────────────────────
 
-  const tipGeo = new THREE.ConeGeometry(0.045, 0.25, 4);
-  tipGeo.rotateX(Math.PI / 2);
-  tipGeo.translate(0, 0, 0.775);
-  const tipPart = new Float32Array(tipGeo.attributes.position.count).fill(1.0);
-  tipGeo.setAttribute('partId', new THREE.BufferAttribute(tipPart, 1));
-
-  const feather1 = new THREE.BoxGeometry(0.004, 0.08, 0.25);
-  feather1.translate(0, 0, -0.625);
-  const f1Part = new Float32Array(feather1.attributes.position.count).fill(2.0);
-  feather1.setAttribute('partId', new THREE.BufferAttribute(f1Part, 1));
-
-  const feather2 = new THREE.BoxGeometry(0.08, 0.004, 0.25);
-  feather2.translate(0, 0, -0.625);
-  const f2Part = new Float32Array(feather2.attributes.position.count).fill(2.0);
-  feather2.setAttribute('partId', new THREE.BufferAttribute(f2Part, 1));
-
-  return mergeGeometries([shaftGeo, tipGeo, feather1, feather2]);
-}
-
-const ArrowShaderMat = () => new THREE.ShaderMaterial({
+const CoreShaderMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
+  uniforms: {
+    tDiffuse: { value: tex },
+    uTime: { value: 0 }
+  },
   vertexShader: `
-    attribute float partId;
-    varying float vPartId;
     varying vec2 vUv;
     varying vec3 vColor;
     #ifndef USE_INSTANCING_COLOR
       attribute vec3 instanceColor;
     #endif
     void main() {
-      vPartId = partId;
+      vUv = uv;
+      vColor = instanceColor;
+      // Billboard behavior: make it face the camera
+      vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+      float sx = length(vec3(instanceMatrix[0][0], instanceMatrix[0][1], instanceMatrix[0][2]));
+      float sy = length(vec3(instanceMatrix[1][0], instanceMatrix[1][1], instanceMatrix[1][2]));
+      mvPosition.xy += position.xy * vec2(sx, sy);
+      gl_Position = projectionMatrix * mvPosition;
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    varying vec2 vUv;
+    varying vec3 vColor;
+    void main() {
+      vec4 tex = texture2D(tDiffuse, vUv);
+      vec3 col = vColor * tex.rgb * 3.5; // Over-exposed center glow
+      gl_FragColor = vec4(col, tex.a);
+      if (gl_FragColor.a < 0.02) discard;
+    }
+  `,
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  side: THREE.DoubleSide
+});
+
+const TrailShaderMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
+  uniforms: {
+    tDiffuse: { value: tex },
+    uTime: { value: 0 }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    varying vec3 vColor;
+    #ifndef USE_INSTANCING_COLOR
+      attribute vec3 instanceColor;
+    #endif
+    void main() {
       vUv = uv;
       vColor = instanceColor;
       gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
     }
   `,
   fragmentShader: `
-    varying float vPartId;
+    uniform sampler2D tDiffuse;
+    uniform float uTime;
     varying vec2 vUv;
     varying vec3 vColor;
     void main() {
-      vec3 finalColor;
-      float alpha = 1.0;
-      if (vPartId < 0.5) {
-        // Shaft: wood brown
-        vec3 woodColor = vec3(0.40, 0.25, 0.12);
-        finalColor = mix(woodColor, vColor, 0.25);
-      } else if (vPartId < 1.5) {
-        // Tip: steel metal
-        vec3 metalColor = vec3(0.75, 0.78, 0.82);
-        finalColor = mix(metalColor, vColor * 2.0, 0.65);
-      } else {
-        // Feathers: off-white fletching
-        vec3 featherColor = vec3(0.92, 0.92, 0.95);
-        finalColor = mix(featherColor, vColor, 0.45);
-      }
-      gl_FragColor = vec4(finalColor, alpha);
+      // Scroll texture horizontally for energy motion
+      vec2 uvScroll = vec2(vUv.x - uTime * 4.0, vUv.y);
+      vec4 tex = texture2D(tDiffuse, uvScroll);
+      // Fade out tail (vUv.x is 0 at the tail, 1 at the head)
+      float fade = vUv.x * vUv.x;
+      vec3 col = vColor * tex.rgb * (1.5 + fade * 1.5);
+      gl_FragColor = vec4(col, tex.a * fade * 0.95);
+      if (gl_FragColor.a < 0.02) discard;
     }
   `,
   transparent: true,
-  side: THREE.DoubleSide,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  side: THREE.DoubleSide
 });
 
+const ParticleShaderMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
+  uniforms: {
+    tDiffuse: { value: tex }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    varying vec3 vColor;
+    #ifndef USE_INSTANCING_COLOR
+      attribute vec3 instanceColor;
+    #endif
+    void main() {
+      vUv = uv;
+      vColor = instanceColor;
+      // Billboard behavior
+      vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+      float sc = length(vec3(instanceMatrix[0][0], instanceMatrix[0][1], instanceMatrix[0][2]));
+      mvPosition.xy += position.xy * sc;
+      gl_Position = projectionMatrix * mvPosition;
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    varying vec2 vUv;
+    varying vec3 vColor;
+    void main() {
+      vec4 tex = texture2D(tDiffuse, vUv);
+      gl_FragColor = vec4(vColor * tex.rgb * 2.5, tex.a);
+      if (gl_FragColor.a < 0.02) discard;
+    }
+  `,
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending
+});
+
+// ─── Projectile Types Config ────────────────────────────────────────────────
+
+interface ProjectileConfig {
+  color: string;
+  coreSize: [number, number]; // [width, height]
+  trailSize: [number, number]; // [length, width]
+  sparkColor: string;
+  sparkCount: number;
+}
+
+const PROJECTILE_CONFIGS: Record<string, ProjectileConfig> = {
+  arrow: {
+    color: '#ffd700',
+    coreSize: [0.5, 0.25],
+    trailSize: [2.5, 0.25],
+    sparkColor: '#ffea55',
+    sparkCount: 1,
+  },
+  fire: {
+    color: '#ff4500',
+    coreSize: [0.45, 0.45],
+    trailSize: [2.0, 0.45],
+    sparkColor: '#ffa500',
+    sparkCount: 2,
+  },
+  ice: {
+    color: '#00ffff',
+    coreSize: [0.35, 0.35],
+    trailSize: [1.8, 0.3],
+    sparkColor: '#b0ffff',
+    sparkCount: 1,
+  },
+  magic: {
+    color: '#d100d1',
+    coreSize: [0.4, 0.4],
+    trailSize: [2.2, 0.35],
+    sparkColor: '#ff66ff',
+    sparkCount: 2,
+  },
+  holy: {
+    color: '#ffffcc',
+    coreSize: [0.45, 0.45],
+    trailSize: [2.4, 0.3],
+    sparkColor: '#ffffff',
+    sparkCount: 1,
+  }
+};
+
 export interface ProjectilePoolHandle {
-  fire: (origin: THREE.Vector3, direction: THREE.Vector3) => void;
+  fire: (origin: THREE.Vector3, direction: THREE.Vector3, options?: {
+    color?: string;
+    speed?: number;
+    type?: 'arrow' | 'fire' | 'ice' | 'magic' | 'holy';
+    targetId?: string;
+  }) => void;
 }
 
 interface ProjectilePoolProps {
   damageQueue?: React.RefObject<any[]>;
   dealPlayerDamage?: (targetId: string, damage: number, isCrit?: boolean) => void;
   playerClass?: string;
+  unitRegistry?: React.RefObject<UnitRuntimeData[]>;
 }
 
 const ProjectilePool = forwardRef<ProjectilePoolHandle, ProjectilePoolProps>((props, ref) => {
-  const meshRef = useRef<THREE.InstancedMesh>(null!);
+  const coreMeshRef = useRef<THREE.InstancedMesh>(null!);
+  const trailMeshRef = useRef<THREE.InstancedMesh>(null!);
+  const particleMeshRef = useRef<THREE.InstancedMesh>(null!);
+
   const { scene } = useThree();
   const { spawnVFX } = useVFX();
   
-  // High-performance static array pool
+  // High-performance static array pool for projectiles
   const pool = useMemo(() => Array.from({ length: MAX_BULLETS }, () => ({
     active: false,
     position: new THREE.Vector3(),
     direction: new THREE.Vector3(),
-    life: 0
+    life: 0,
+    type: 'arrow' as 'arrow' | 'fire' | 'ice' | 'magic' | 'holy',
+    color: '#ffd700',
+    speed: BULLET_SPEED,
+    targetId: null as string | null
   })), []);
 
-  // Pre-allocated objects for zero-allocation frame updates
+  // Pre-allocated static pool for spark particles
+  const particles = useMemo(() => Array.from({ length: MAX_PARTICLES }, () => ({
+    active: false,
+    position: new THREE.Vector3(),
+    velocity: new THREE.Vector3(),
+    color: new THREE.Color(),
+    life: 0.0,
+    scale: 0.0
+  })), []);
+
+  const particlePtr = useRef(0);
+
+  // Pre-allocated temp variables to satisfy the Zero Allocation Rule
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
   const _vMove = useMemo(() => new THREE.Vector3(), []);
   const _target = useMemo(() => new THREE.Vector3(), []);
+  const _ppColor = useMemo(() => new THREE.Color(), []);
+  const _ppTrPos = useMemo(() => new THREE.Vector3(), []);
+
+  // Spawn a spark helper (O(1) with zero GC allocation)
+  const spawnSpark = (pos: THREE.Vector3, dir: THREE.Vector3, colorStr: string) => {
+    const p = particles[particlePtr.current];
+    p.active = true;
+    p.position.copy(pos);
+    p.velocity.copy(dir).multiplyScalar(-1.5 - Math.random() * 2.0);
+    p.velocity.x += (Math.random() - 0.5) * 1.5;
+    p.velocity.y += (Math.random() - 0.5) * 1.5;
+    p.velocity.z += (Math.random() - 0.5) * 1.5;
+    p.color.set(colorStr);
+    p.life = 1.0;
+    p.scale = 0.08 + Math.random() * 0.12;
+    particlePtr.current = (particlePtr.current + 1) % MAX_PARTICLES;
+  };
 
   useImperativeHandle(ref, () => ({
-    fire: (origin, direction) => {
+    fire: (origin, direction, options) => {
       const b = pool.find(bullet => !bullet.active);
       if (b) {
         b.active = true;
         b.position.copy(origin);
         b.direction.copy(direction).normalize();
         b.life = BULLET_LIFETIME;
+
+        let type: 'arrow' | 'fire' | 'ice' | 'magic' | 'holy' = 'arrow';
+        if (options?.type) {
+          type = options.type;
+        } else {
+          const pClass = props.playerClass || 'Beginner';
+          if (pClass === 'Beginner') type = 'arrow';
+          else if (pClass === 'Mage') type = 'magic';
+          else if (pClass === 'Priest') type = 'holy';
+          else if (pClass === 'Warrior') type = 'fire';
+          else if (pClass === 'Thief') type = 'magic';
+        }
+
+        b.type = type;
+        const config = PROJECTILE_CONFIGS[type];
+        b.color = options?.color || config.color;
+        b.speed = options?.speed || BULLET_SPEED;
+        b.targetId = options?.targetId || null;
       }
     }
   }));
 
-  useFrame((_, delta) => {
-    if (!meshRef.current) return;
+  useFrame((state, delta) => {
+    if (!coreMeshRef.current || !trailMeshRef.current || !particleMeshRef.current) return;
 
+    const time = state.clock.elapsedTime;
+
+    // ─── 1. Update Projectiles ───
     for (let i = 0; i < MAX_BULLETS; i++) {
       const b = pool[i];
       if (!b.active) {
-        // Hide inactive bullets efficiently
         dummy.position.set(0, -1000, 0);
         dummy.updateMatrix();
-        meshRef.current.setMatrixAt(i, dummy.matrix);
+        coreMeshRef.current.setMatrixAt(i, dummy.matrix);
+        trailMeshRef.current.setMatrixAt(i, dummy.matrix);
         continue;
       }
 
-      // 1. Calculate next movement vector
-      _vMove.copy(b.direction).multiplyScalar(BULLET_SPEED);
+      // Homing target behavior
+      if (b.targetId && props.unitRegistry?.current) {
+        const target = props.unitRegistry.current.find(u => u.id === b.targetId);
+        if (target && target.isActive && !target.isDying) {
+          _target.set(target.position[0], target.position[1] + 1.2, target.position[2]);
+          b.direction.subVectors(_target, b.position).normalize();
+        }
+      }
+
+      // Frame rate independent speed scaling
+      const stepDist = b.speed * (delta * 60);
+      _vMove.copy(b.direction).multiplyScalar(stepDist);
       
-      // 2. High-Precision Raycast Hit Detection (via BVH)
+      // Raycast Hit Detection
       raycaster.set(b.position, b.direction);
-      raycaster.far = _vMove.length() * 1.5; // Slightly more for safety
+      raycaster.far = _vMove.length() * 1.5;
       
       const intersects = raycaster.intersectObjects(scene.children, true);
-      
+      let hitDetected = false;
+      let hitPoint = b.position;
+      let targetId: string | null = null;
+
       if (intersects.length > 0) {
         const hit = intersects[0];
-        
-        // Find onHit in the hierarchy (traverse up)
-        let targetId: string | null = null;
         let curr: THREE.Object3D | null = hit.object;
         while (curr) {
           if (curr.userData?.onHit && curr.userData?.unitId) {
             targetId = curr.userData.unitId;
-            curr.userData.onHit(); // Triggers aggro
+            curr.userData.onHit();
             break;
           }
           curr = curr.parent;
         }
 
         if (targetId) {
-          spawnVFX([hit.point.x, hit.point.y, hit.point.z], 'spark', '#ff0000');
-          
-          const damage = 1200 + Math.random() * 2500;
-          const isCrit = Math.random() > 0.8;
-          
-          if (props.dealPlayerDamage) {
-            props.dealPlayerDamage(targetId, damage, isCrit);
-          } else if (props.damageQueue?.current) {
-            props.damageQueue.current.push({
-                value: damage,
-                position: [hit.point.x, hit.point.y, hit.point.z],
-                isCrit,
-                isMagic: false,
-                color: isCrit ? '#ff4400' : '#ffaa00'
-            });
-          }
-          b.active = false;
-        } else {
-          // Hit world or something else
-          b.position.add(_vMove);
-          b.life -= delta;
-          if (b.life <= 0) b.active = false;
+          hitDetected = true;
+          hitPoint = hit.point;
         }
+      }
+
+      if (hitDetected && targetId) {
+        const config = PROJECTILE_CONFIGS[b.type];
+        spawnVFX([hitPoint.x, hitPoint.y, hitPoint.z], 'spark', config.color);
+        
+        const damage = 1200 + Math.random() * 2500;
+        const isCrit = Math.random() > 0.8;
+        
+        if (props.dealPlayerDamage) {
+          props.dealPlayerDamage(targetId, damage, isCrit);
+        } else if (props.damageQueue?.current) {
+          props.damageQueue.current.push({
+            value: damage,
+            position: [hitPoint.x, hitPoint.y, hitPoint.z],
+            isCrit,
+            isMagic: b.type !== 'arrow',
+            color: isCrit ? '#ff4400' : '#ffaa00'
+          });
+        }
+        b.active = false;
       } else {
-        // 3. Update Position & Life
         b.position.add(_vMove);
         b.life -= delta;
         if (b.life <= 0) b.active = false;
       }
 
-      // 4. Update Visuals
-      dummy.position.copy(b.position);
-      _target.copy(b.position).add(b.direction);
-      dummy.lookAt(_target);
-      dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, dummy.matrix);
+      // Render Visuals if still active
+      if (b.active) {
+        const config = PROJECTILE_CONFIGS[b.type];
+        
+        // Spawn sparks trailing behind
+        for (let s = 0; s < config.sparkCount; s++) {
+          spawnSpark(b.position, b.direction, config.sparkColor);
+        }
+
+        dummy.matrixAutoUpdate = true;
+
+        // Core Billboard
+        dummy.position.copy(b.position);
+        dummy.scale.set(config.coreSize[0], config.coreSize[1], 1.0);
+        dummy.updateMatrix();
+        coreMeshRef.current.setMatrixAt(i, dummy.matrix);
+        _ppColor.set(b.color).multiplyScalar(3.0);
+        coreMeshRef.current.setColorAt(i, _ppColor);
+
+        // Trail Stretched Plane
+        const trailLen = config.trailSize[0];
+        const trailW = config.trailSize[1];
+        _ppTrPos.copy(b.position).addScaledVector(b.direction, -trailLen * 0.5);
+        setArrowTravelPool(dummy,
+          _ppTrPos.x, _ppTrPos.y, _ppTrPos.z,
+          b.direction.x, b.direction.y, b.direction.z,
+          trailLen, trailW
+        );
+        trailMeshRef.current.setMatrixAt(i, dummy.matrix);
+        _ppColor.set(b.color).multiplyScalar(2.0);
+        trailMeshRef.current.setColorAt(i, _ppColor);
+      }
     }
-    meshRef.current.instanceMatrix.needsUpdate = true;
+
+    coreMeshRef.current.instanceMatrix.needsUpdate = true;
+    if (coreMeshRef.current.instanceColor) coreMeshRef.current.instanceColor.needsUpdate = true;
+
+    trailMeshRef.current.instanceMatrix.needsUpdate = true;
+    if (trailMeshRef.current.instanceColor) trailMeshRef.current.instanceColor.needsUpdate = true;
+
+    (coreMeshRef.current.material as THREE.ShaderMaterial).uniforms.uTime.value = time;
+    (trailMeshRef.current.material as THREE.ShaderMaterial).uniforms.uTime.value = time;
+
+    // ─── 2. Update Spark Particles ───
+    dummy.matrixAutoUpdate = true;
+    for (let i = 0; i < MAX_PARTICLES; i++) {
+      const p = particles[i];
+      if (!p.active) {
+        dummy.position.set(0, -1000, 0);
+        dummy.updateMatrix();
+        particleMeshRef.current.setMatrixAt(i, dummy.matrix);
+        continue;
+      }
+
+      p.position.addScaledVector(p.velocity, delta);
+      p.velocity.y -= 1.5 * delta; // soft gravity
+      p.life -= delta * 3.0; // spark decay lifetime (~330ms)
+
+      if (p.life <= 0) {
+        p.active = false;
+        dummy.position.set(0, -1000, 0);
+        dummy.updateMatrix();
+        particleMeshRef.current.setMatrixAt(i, dummy.matrix);
+        continue;
+      }
+
+      dummy.position.copy(p.position);
+      const sc = p.scale * p.life;
+      dummy.scale.set(sc, sc, sc);
+      dummy.updateMatrix();
+      particleMeshRef.current.setMatrixAt(i, dummy.matrix);
+      
+      _ppColor.copy(p.color).multiplyScalar(p.life * 2.5);
+      particleMeshRef.current.setColorAt(i, _ppColor);
+    }
+
+    particleMeshRef.current.instanceMatrix.needsUpdate = true;
+    if (particleMeshRef.current.instanceColor) particleMeshRef.current.instanceColor.needsUpdate = true;
   });
 
-  // Dynamically memoize geometry and material based on playerClass
-  const [geom, mat] = useMemo(() => {
-    if (props.playerClass === 'Beginner') {
-      return [createArrowGeometry(), ArrowShaderMat()];
-    }
-    const g = new THREE.BoxGeometry(0.02, 0.02, 0.8);
-    const m = new THREE.MeshStandardMaterial({
-      color: "#00f3ff",
-      emissive: "#00f3ff",
-      emissiveIntensity: 1.2,
-      toneMapped: true,
-    });
-    return [g, m];
-  }, [props.playerClass]);
+  const geom = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
+  const coreMat = useMemo(() => CoreShaderMat(VFX_TEXTURES.flare), []);
+  const trailMat = useMemo(() => TrailShaderMat(VFX_TEXTURES.bullet), []);
+  const sparkMat = useMemo(() => ParticleShaderMat(VFX_TEXTURES.star), []);
 
   return (
-    <instancedMesh ref={meshRef} args={[null as any, null as any, MAX_BULLETS]} frustumCulled={false}>
-      <primitive object={geom} attach="geometry" />
-      <primitive object={mat} attach="material" />
-    </instancedMesh>
+    <group>
+      <instancedMesh ref={coreMeshRef} args={[geom, coreMat, MAX_BULLETS]} frustumCulled={false} />
+      <instancedMesh ref={trailMeshRef} args={[geom, trailMat, MAX_BULLETS]} frustumCulled={false} />
+      <instancedMesh ref={particleMeshRef} args={[geom, sparkMat, MAX_PARTICLES]} frustumCulled={false} />
+    </group>
   );
 });
 

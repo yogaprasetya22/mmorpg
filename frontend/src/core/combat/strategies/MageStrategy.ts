@@ -74,7 +74,7 @@ const MageStrategy: ClassCombatStrategy = {
     }
   },
 
-  executeSkill(target, ctx) {
+  executeSkill(target, ctx, _skillId) {
     const castX = target ? target.position[0] : ctx.charPos.x;
     const castY = target ? target.position[1] : ctx.charPos.y;
     const castZ = target ? target.position[2] : ctx.charPos.z;

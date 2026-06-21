@@ -24,7 +24,8 @@ import { ModularMap } from '@/src/components/game/environment/ModularMap';
 import { CameraOcclusionManager } from '@/src/components/game/systems/CameraOcclusionManager';
 import { VFXProvider } from '@/src/components/game/systems/VFXManager';
 import { DamageHUDBatcher } from '@/src/components/game/systems/DamageHUDBatcher';
-import { MMSpellEffect } from '@/src/components/game/systems/effects/MMSpellEffect';
+import { ArcherTrapSystem } from '@/src/components/game/systems/ArcherTrapSystem';
+import { BeginnerSpellEffect } from '@/src/components/game/systems/effects/BeginnerSpellEffect';
 import { FighterSpellEffect } from '@/src/components/game/systems/effects/FighterSpellEffect';
 import { TankSpellEffect } from '@/src/components/game/systems/effects/TankSpellEffect';
 import { AssassinSpellEffect } from '@/src/components/game/systems/effects/AssassinSpellEffect';
@@ -242,7 +243,7 @@ export default function MultiplayerArena() {
               <Suspense fallback={null}><ModularMap debug={false} /></Suspense>
               <CameraOcclusionManager />
 
-              <MMSpellEffect spellsRef={state.mmSpellsRef} unitRegistry={state.unitRegistryRef} simTimeRef={state.simTimeRef} />
+              <BeginnerSpellEffect spellsRef={state.mmSpellsRef} unitRegistry={state.unitRegistryRef} simTimeRef={state.simTimeRef} />
               <FighterSpellEffect fighterSpellsRef={state.fighterSpellsRef} simTimeRef={state.simTimeRef} />
               <TankSpellEffect tankSpellsRef={state.tankSpellsRef} simTimeRef={state.simTimeRef} unitRegistry={state.unitRegistryRef} />
               <AssassinSpellEffect assassinSpellsRef={state.assassinSpellsRef} simTimeRef={state.simTimeRef} />
@@ -251,6 +252,12 @@ export default function MultiplayerArena() {
               <DamageHUDBatcher 
                 damageQueue={state.damageQueue} 
                 playerStatsRef={state.playerStatsRef} 
+              />
+
+              <ArcherTrapSystem
+                unitRegistry={state.unitRegistryRef}
+                dealPlayerDamage={state.handleAuthoritativeAttack}
+                spawnVFX={(state as any).spawnVFX}
               />
 
               <PlayerController

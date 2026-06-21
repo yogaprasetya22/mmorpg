@@ -1,5 +1,6 @@
 // REFACTORED FROM: ClassCombatEngine.ts
 // Shared combat types — CombatExecutionContext, UnitRuntimeData, ClassCombatStrategy interfaces.
+import type React from 'react';
 import * as THREE from 'three';
 
 export interface CombatExecutionContext {
@@ -26,6 +27,14 @@ export interface CombatExecutionContext {
   grid: any;
   ecctrlRef?: { current: any };
   cameraShake?: (intensity: number) => void;
+  /** Skill ID to route to the correct skill execution (archer multi-skill system) */
+  skillId?: string;
+  /** Reference to player stats for buff skills (Improve Concentration etc.) */
+  playerStatsRef?: React.RefObject<any>;
+  /** Damage queue for DamageHUD integration */
+  damageQueue?: React.RefObject<any[]>;
+  /** Unit registry for AoE target queries */
+  unitRegistry?: React.RefObject<any[]>;
 }
 
 export interface UnitRuntimeData {
@@ -49,5 +58,5 @@ export interface ClassCombatStrategy {
   isMelee: boolean;
   
   executeAttack: (target: UnitRuntimeData | null, ctx: CombatExecutionContext) => void;
-  executeSkill: (target: UnitRuntimeData | null, ctx: CombatExecutionContext) => void;
+  executeSkill: (target: UnitRuntimeData | null, ctx: CombatExecutionContext, skillId?: string) => void;
 }

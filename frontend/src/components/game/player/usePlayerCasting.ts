@@ -44,9 +44,9 @@ export function updatePlayerCasting(
     castState.current.isCasting = false;
     if (container) container.classList.add('hidden');
 
-    // Execute skill
+    // Execute skill with skillId routing
     (window as any).lastSkillTime = now;
-    executeClassSkill(playerClass, castState.current.target, castState.current.context);
+    executeClassSkill(playerClass, castState.current.target, castState.current.context, castState.current.skillId);
   } else {
     // Lock player movement during casting
     const vel = characterStatus.linvel;

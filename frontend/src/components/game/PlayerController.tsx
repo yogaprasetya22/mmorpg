@@ -23,6 +23,10 @@ import { useEditorStore } from '@/src/state/useEditorStore';
 import { getTerrainElevation } from '@/src/core/utils/terrainHeight';
 import { AvatarModel } from './avatar/AvatarModel';
 import { classToWeaponCategory, classWeaponMap } from './avatar/weaponConfigs';
+import {
+  releaseNextPendingArrow,
+  flushStaleArrows,
+} from '@/src/core/combat/strategies/BeginnerStrategy';
 
 const getDefaultCustomization = (_gender: string, playerClass: string, hairStyle = 1, hairColor = "#5A3E2D") => {
   let weaponId = "asset_weapon_sword";
@@ -160,6 +164,15 @@ import { updatePlayerCamera } from './player/usePlayerCamera';
 import { updatePlayerCasting } from './player/usePlayerCasting';
 import { updatePlayerTargeting } from './player/usePlayerTargeting';
 import {
+  attachArcherSkillListener,
+  detachArcherSkillListener,
+  executeAoEArcherSkill,
+  pickAutoArcherSkill,
+  consumePendingArcherSkill,
+  clearAllPendingArcherSkills,
+} from '@/src/core/combat/archerSkillInput';
+import { executeArcherSkill, setArcherSkillOnCooldown, isArcherSkillReady } from '@/src/core/combat/archerSkills';
+import {
   handlePlayerResurrectionAndFailsafe,
   handlePlayerPhysicsJump
 } from './player/usePlayerPhysics';
@@ -176,9 +189,14 @@ import {
   aimTargetX,
   charState,
   animationSet,
-  ecctrlAnimationSet
+  ecctrlAnimationSet,
+  AUTO_AIM_RADIUS,
+  AUTO_AIM_RSQ,
 } from './player/buffers';
 
+// NOTE: Archer skill keys (Digit1-6, F1, KeyQ) are NOT listed here.
+// They are captured by a dedicated window keydown listener in archerSkillInput.ts
+// so they work regardless of canvas focus state.
 export const keyboardMap = [
   { name: 'forward',   keys: ['ArrowUp',    'KeyW'] },
   { name: 'backward',  keys: ['ArrowDown',  'KeyS'] },
@@ -187,7 +205,6 @@ export const keyboardMap = [
   { name: 'jump',      keys: ['Space'] },
   { name: 'run',       keys: ['Shift'] },
   { name: 'action1',   keys: ['KeyF', 'KeyE'] },
-  { name: 'skill',     keys: ['KeyQ', 'Digit1'] },
 ];
 
 export const PlayerController = (props: PlayerProps) => {
@@ -227,6 +244,7 @@ export const PlayerController = (props: PlayerProps) => {
   const [isTargetingAoE, setIsTargetingAoE] = useState(false);
   const aoeTargetPos = useRef(new THREE.Vector3());
   const [isSpawning, setIsSpawning] = useState(true);
+  
   const [currentSpeed, setCurrentSpeed] = useState(6.5);
 
   const castState = useRef<CastState>({
@@ -257,6 +275,25 @@ export const PlayerController = (props: PlayerProps) => {
       setIsSpawning(true);
     }
   }, [paused]);
+
+  // ─── Archer Skill System: attach keyboard listener ───
+  useEffect(() => {
+    (window as any).__playerClass = playerClass;
+    if (playerClass === 'Beginner') {
+      attachArcherSkillListener(); // uses AbortController — safe to re-call
+      console.log('🏹 Archer skill system initialized! Keys 1-6 + F1 for skills.');
+    } else {
+      detachArcherSkillListener();
+      clearAllPendingArcherSkills();
+    }
+    return () => {
+      // Cleanup on unmount / class change
+      if (playerClass === 'Beginner') {
+        detachArcherSkillListener();
+        clearAllPendingArcherSkills();
+      }
+    };
+  }, [playerClass]);
 
   // ─── AoE Targeting Mouse Handler ───
   useEffect(() => {
@@ -308,6 +345,14 @@ export const PlayerController = (props: PlayerProps) => {
     );
   }, [selectedCharacter, playerStats, playerClass]);
 
+  /**
+   * Stable callback for AvatarModel's onAttackLoop prop.
+   * useRef ensures the function reference never changes across renders,
+   * so AvatarModel's useEffect (which deps on onAttackLoop) only runs once.
+   * releaseNextPendingArrow is module-level — no stale closure risk.
+   */
+  const _attackLoopRef = useRef((now: number) => releaseNextPendingArrow(now));
+
   // --- RESET CAMERA ON GAME START ---
   const gameState = useStore(s => s.gameState);
   useEffect(() => {
@@ -344,7 +389,8 @@ export const PlayerController = (props: PlayerProps) => {
 
   useFrame((state, delta) => {
     const finalASPDPercent = playerStatsRef?.current?.aspd ?? (playerStats?.aspd ?? 150);
-    const hitsPerSecond = 1 + (finalASPDPercent / 25);
+    const roASPD = 130 + (Math.min(1000, Math.max(0, finalASPDPercent)) / 1000) * 63;
+    const hitsPerSecond = 50 / (200 - roASPD);
     const attackDuration = 1000 / hitsPerSecond;
 
     if (isTargetingAoE) {
@@ -466,7 +512,11 @@ export const PlayerController = (props: PlayerProps) => {
         dummyActions,
         dummyActiveAction
       );
-      if (debuffed) return;
+      if (debuffed) {
+        // Drain skill queue so stale skills don't fire after debuff lifts
+        clearAllPendingArcherSkills();
+        return;
+      }
 
       // Process Casting
       const casting = updatePlayerCasting(
@@ -478,7 +528,14 @@ export const PlayerController = (props: PlayerProps) => {
         dummyActions,
         dummyActiveAction
       );
-      if (casting) return;
+      // NOTE: We do NOT return here for Beginner — skill queue is checked
+      // below regardless of casting state (so mid-cast key presses are queued
+      // and executed on the frame casting finishes).
+      if (casting && playerClass !== 'Beginner') return;
+      if (casting && playerClass === 'Beginner') {
+        // Still casting: drain excess queue to avoid pileup, then skip to targeting
+        // (skill will execute naturally when casting is false next frame)
+      }
 
       const isChatFocus = !!(document.activeElement && 
         (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA'));
@@ -489,50 +546,40 @@ export const PlayerController = (props: PlayerProps) => {
         (window as any).hasAttackIntent = false;
       }
 
-      // Skill Trigger System
-      const isSkillInput = keys.skill;
-      const SKILL_COOLDOWN = 8000;
-      if (typeof (window as any).lastSkillTime === 'undefined') {
-        (window as any).lastSkillTime = 0;
-      }
-      const lastSkillTime = (window as any).lastSkillTime;
 
-      let triggerAutoSkill = false;
-      if (isAutoMode && now - lastSkillTime > SKILL_COOLDOWN && !castState.current.isCasting && currentDebuff !== "silence" && !isMovingInput) {
-        // Find nearest target position to cast AoE skill
-        const targetId = lastNearestTargetId.current;
-        const targetMonster = targetId ? unitRegistry?.current?.find((m: any) => m.id === targetId && m.isActive && !m.isDying) : null;
-        if (targetMonster) {
-          const tx = targetMonster.position[0];
-          const ty = targetMonster.position[1];
-          const tz = targetMonster.position[2];
-          const dx = tx - _charPos.x;
-          const dz = tz - _charPos.z;
-          const distSq = dx * dx + dz * dz;
-          // Only cast if within range
-          let activeRangeSq = 81.0; // Default Marksman / MM (9.0m)
-          if (playerClass === "Warrior") {
-            activeRangeSq = 12.25;    // Fighter (Melee 3.5 meters)
-          } else if (playerClass === "Thief") {
-            activeRangeSq = 10.89;    // Assassin (Melee 3.3 meters)
-          } else if (playerClass === "Priest") {
-            activeRangeSq = 14.44;    // Tank (Melee 3.8 meters)
-          } else if (playerClass === "Mage") {
-            activeRangeSq = 64.0;    // Mage (Ranged 8.0 meters)
-          } else if (playerClass === "Beginner") {
-            activeRangeSq = 81.0;    // Marksman / MM (Ranged 9.0 meters)
-          }
-          if (distSq <= activeRangeSq) {
-            aoeTargetPos.current.set(tx, ty, tz);
-            triggerAutoSkill = true;
+      // ─── AoE Ground Skill (non-Beginner classes only) ───
+      // For Beginner / Archer, all skills (incl. KeyQ) go through archerSkillInput.ts.
+      // This block is for Warrior/Mage/Priest/Thief using their class AoE skills.
+      if (playerClass !== 'Beginner') {
+        const SKILL_COOLDOWN = 8000;
+        if (typeof (window as any).lastSkillTime === 'undefined') {
+          (window as any).lastSkillTime = 0;
+        }
+
+        let triggerAutoSkill = false;
+        if (isAutoMode && now - (window as any).lastSkillTime > SKILL_COOLDOWN && !castState.current.isCasting && currentDebuff !== "silence" && !isMovingInput) {
+          const targetId = lastNearestTargetId.current;
+          const targetMonster = targetId ? unitRegistry?.current?.find((m: any) => m.id === targetId && m.isActive && !m.isDying) : null;
+          if (targetMonster) {
+            const tx = targetMonster.position[0];
+            const ty = targetMonster.position[1];
+            const tz = targetMonster.position[2];
+            const dx = tx - _charPos.x;
+            const dz = tz - _charPos.z;
+            const distSq = dx * dx + dz * dz;
+            let activeRangeSqLocal = 81.0;
+            if (playerClass === "Warrior") activeRangeSqLocal = 12.25;
+            else if (playerClass === "Thief") activeRangeSqLocal = 10.89;
+            else if (playerClass === "Priest") activeRangeSqLocal = 14.44;
+            else if (playerClass === "Mage") activeRangeSqLocal = 64.0;
+            if (distSq <= activeRangeSqLocal) {
+              aoeTargetPos.current.set(tx, ty, tz);
+              triggerAutoSkill = true;
+            }
           }
         }
-      }
 
-      if ((isSkillInput && now - lastSkillTime > SKILL_COOLDOWN && currentDebuff !== "silence") || triggerAutoSkill) {
-        if (currentDebuff === "silence") {
-          console.log("🤫 You are silenced and cannot cast spells!");
-        } else if (triggerAutoSkill) {
+        if (triggerAutoSkill && currentDebuff !== "silence") {
           (window as any).lastSkillTime = now;
           const mockTarget: any = {
             id: "ground_target",
@@ -571,17 +618,14 @@ export const PlayerController = (props: PlayerProps) => {
             ecctrlRef,
             cameraShake: (window as any).cameraShake,
           };
-
           const stats = playerStatsRef?.current || playerStats || {};
           const dex = stats.base_dex ?? stats.baseDEX ?? 10;
           const int = stats.base_int ?? stats.baseINT ?? 10;
-
           const fct = 0.4;
           const vctBase = 1.2;
           const vctRatio = Math.min(1.0, (dex + int / 2.0) / 265.0);
           const vctActual = vctBase * (1.0 - vctRatio);
           const totalCastTime = fct + vctActual;
-
           castState.current = {
             isCasting: true,
             startTime: now,
@@ -591,15 +635,245 @@ export const PlayerController = (props: PlayerProps) => {
             target: mockTarget,
             context: ctx,
           };
-        } else if (!isTargetingAoE) {
+        } else if (!triggerAutoSkill && !isTargetingAoE && (window as any).__pendingNonArcherSkill) {
+          (window as any).__pendingNonArcherSkill = false;
           setIsTargetingAoE(true);
-          console.log("🎯 Entered AoE Ground Targeting Mode. Left click to cast, right click to cancel.");
+          console.log("🎯 AoE Targeting Mode. Left click to cast, right click to cancel.");
         }
       }
 
+
+      // ─── Shared skill context builder (used by both manual & auto dispatch) ───
+      // Wraps dealPlayerDamage to also push instantly to local damageQueue
+      // so DamageHUDBatcher shows numbers immediately (before server round-trip).
+      const localDealDamage = (
+        targetId: string,
+        damage: number,
+        isCrit?: boolean,
+        isMagic?: boolean,
+        customColor?: string
+      ) => {
+        // Send to server (authoritative)
+        if (dealPlayerDamage) dealPlayerDamage(targetId, damage, isCrit);
+
+        // Push locally for instant DamageHUD feedback with skill color
+        if (damageQueue?.current) {
+          let tx = _charPos.x, ty = _charPos.y + 1.2, tz = _charPos.z;
+          // Try to find target position from unitRegistry
+          if (unitRegistry?.current) {
+            const target = unitRegistry.current.find((m: any) => m.id === targetId);
+            if (target) {
+              tx = target.position[0];
+              ty = target.position[1] + 1.2;
+              tz = target.position[2];
+            }
+          }
+          damageQueue.current.push({
+            value: Math.round(damage),
+            position: [tx, ty, tz],
+            isCrit: !!isCrit,
+            isMagic: !!isMagic,
+            isMiss: false,
+            color: customColor || (isCrit ? '#ff3b30' : '#ffcc00'),
+            timestamp: performance.now(),
+          });
+        }
+      };
+
+      const buildSkillCtx = () => ({
+        charPos: _charPos.clone(),
+        originVec: _originVec.clone(),
+        camDir: _camDir.clone(),
+        combo: 0,
+        playerStats,
+        dealPlayerDamage: localDealDamage,
+        spawnVFX,
+        camera,
+        simTimeRef,
+        mmSpellsRef,
+        mmSpellPtr,
+        fighterSpellsRef,
+        fighterSpellPtr,
+        assassinSpellsRef,
+        assassinSpellPtr,
+        tankSpellsRef,
+        tankSpellPtr,
+        spellsRef,
+        spellsPtr,
+        poolRef,
+        grid: (window as any).battleGrid,
+        ecctrlRef,
+        cameraShake: (window as any).cameraShake,
+        playerStatsRef,
+        damageQueue,
+        unitRegistry,
+      });
+
+      // ─── Resolve nearest target for skill use (same as basic attack targeting) ───
+      // Uses battleGrid spatial query — identical to usePlayerTargeting's auto-aim.
+      const resolveSkillTarget = (_maxRangeSq?: number): any => {
+        // 1) Prefer the same locked target the basic attack is tracking
+        if (lastNearestTargetId.current && unitRegistry?.current) {
+          const locked = unitRegistry.current.find(
+            (m: any) => m.id === lastNearestTargetId.current && m.isActive && !m.isDying
+          );
+          if (locked) return locked;
+        }
+        // 2) Fallback: battleGrid query with AUTO_AIM_RADIUS (40m) — same as basic attack
+        const grid = (window as any).battleGrid;
+        if (!grid) return null;
+        const nearby = grid.queryRadius(_charPos.x, _charPos.z, AUTO_AIM_RADIUS);
+        let best: any = null;
+        let bestDistSq = AUTO_AIM_RSQ;
+        for (let i = 0; i < nearby.length; i++) {
+          const u = nearby[i];
+          if (u.type !== 'enemy' || !u.isActive || u.isDying) continue;
+          const dx = _charPos.x - u.position[0];
+          const dz = _charPos.z - u.position[2];
+          const dSq = dx * dx + dz * dz;
+          if (dSq < bestDistSq) {
+            bestDistSq = dSq;
+            best = u;
+          }
+        }
+        return best;
+      };
+
+      // Skills that don't need a target (buffs / traps at player position)
+      const NO_TARGET_SKILLS = new Set(['ankle_snare', 'improve_concentration']);
+
+      // ─── Archer Auto-Mode Skill Rotation ───
+      if (typeof (window as any).__lastAutoSkillAttempt === 'undefined') {
+        (window as any).__lastAutoSkillAttempt = 0;
+      }
+      const AUTO_SKILL_ATTEMPT_INTERVAL = 1500;
+      if (
+        playerClass === 'Beginner' &&
+        isAutoMode &&
+        !isMovingInput &&
+        !castState.current.isCasting &&
+        currentDebuff !== 'silence' &&
+        now - (window as any).__lastAutoSkillAttempt >= AUTO_SKILL_ATTEMPT_INTERVAL
+      ) {
+        (window as any).__lastAutoSkillAttempt = now;
+        const autoSkillId = pickAutoArcherSkill();
+        if (autoSkillId) {
+          const isNoTarget = NO_TARGET_SKILLS.has(autoSkillId);
+          const autoTarget = isNoTarget ? null : resolveSkillTarget();
+          const canExecute = isNoTarget || !!autoTarget;
+          if (canExecute) {
+            let inRange = isNoTarget;
+            if (!isNoTarget && autoTarget) {
+              const dx = autoTarget.position[0] - _charPos.x;
+              const dz = autoTarget.position[2] - _charPos.z;
+              inRange = (dx * dx + dz * dz) <= AUTO_AIM_RSQ;
+            }
+            if (inRange) {
+              setArcherSkillOnCooldown(autoSkillId);
+              (window as any).lastSkillTime = now;
+              console.log(`🤖 AUTO SKILL: ${autoSkillId}${autoTarget ? ` → ${autoTarget.id}` : ' (buff)'}`);
+              executeArcherSkill(autoSkillId, autoTarget as any, buildSkillCtx() as any);
+            }
+          }
+        }
+      }
+
+      // ─── Archer Manual Skill Dispatch (Keys 1-6, F1 + SkillBar click) ───
+      // Keys are captured by window keydown listener (works regardless of canvas focus).
+      // Skills execute even during basic attack (charState === 1) — not blocked.
+      // Note: castState.current.isCasting guard is intentionally removed;
+      // skills queued mid-cast fire on the very next frame when casting ends.
+      if (playerClass === 'Beginner' && currentDebuff !== 'silence') {
+        // PRIMARY: consume from keydown queue
+        let triggeredSkill: string | null = consumePendingArcherSkill();
+
+        // SECONDARY: SkillBar click dispatch (window.__pendingSkillKey)
+        if (!triggeredSkill && (window as any).__pendingSkillKey) {
+          const pendingKey = (window as any).__pendingSkillKey as string;
+          (window as any).__pendingSkillKey = null;
+          const CODE_TO_SKILL: Record<string, string> = {
+            Digit1: 'double_strafe', Digit2: 'double_strafe',
+            Digit3: 'arrow_shower',  Digit4: 'arrow_repel',
+            Digit5: 'ankle_snare',   Digit6: 'improve_concentration',
+            F1: 'rain_of_arrows',
+          };
+          const fromBar = CODE_TO_SKILL[pendingKey];
+          if (fromBar && isArcherSkillReady(fromBar)) {
+            triggeredSkill = fromBar;
+          }
+        }
+
+        // Re-verify cooldown (may have changed between keydown and this frame)
+        if (triggeredSkill && !isArcherSkillReady(triggeredSkill)) {
+          console.log(`⏳ ${triggeredSkill} still on cooldown — skipping`);
+          triggeredSkill = null;
+        }
+
+        if (triggeredSkill) {
+          setArcherSkillOnCooldown(triggeredSkill);
+          (window as any).lastSkillTime = now;
+
+          const isNoTarget = NO_TARGET_SKILLS.has(triggeredSkill);
+          const skillTarget = isNoTarget ? null : resolveSkillTarget();
+
+          try {
+            if (isNoTarget) {
+              console.log(`🏹 SKILL: ${triggeredSkill} (buff/trap)`);
+              executeArcherSkill(triggeredSkill, null, buildSkillCtx() as any);
+            } else if (skillTarget) {
+              console.log(`🏹 SKILL: ${triggeredSkill} → ${skillTarget.id}`);
+              executeArcherSkill(triggeredSkill, skillTarget, buildSkillCtx() as any);
+            } else {
+              // No target found — still fire skill along camera direction for visual feedback
+              console.log(`⚠️ ${triggeredSkill}: no enemy in auto-aim range — firing along camera`);
+              executeArcherSkill(triggeredSkill, null, buildSkillCtx() as any);
+            }
+          } catch (err) {
+            console.error(`❌ Archer skill '${triggeredSkill}' CRASHED:`, err);
+          }
+        }
+      }
+
+      // ─── AoE Archer Skill Confirmation ───
       if (isTargetingAoE && (window as any).triggerAoECast) {
         (window as any).triggerAoECast = false;
         setIsTargetingAoE(false);
+
+        // Check if this is an Archer AoE skill (arrow_shower or rain_of_arrows)
+        const pendingAoESkillId = (window as any).__pendingAoESkillId;
+        if (pendingAoESkillId && playerClass === 'Beginner') {
+          (window as any).__pendingAoESkillId = null;
+          const skillCtx = {
+            charPos: _charPos.clone(),
+            originVec: _originVec.clone(),
+            camDir: _camDir.clone(),
+            combo: 0,
+            playerStats,
+            dealPlayerDamage,
+            spawnVFX,
+            camera,
+            simTimeRef,
+            mmSpellsRef,
+            mmSpellPtr,
+            fighterSpellsRef,
+            fighterSpellPtr,
+            assassinSpellsRef,
+            assassinSpellPtr,
+            tankSpellsRef,
+            tankSpellPtr,
+            spellsRef,
+            spellsPtr,
+            poolRef,
+            grid: (window as any).battleGrid,
+            ecctrlRef,
+            cameraShake: (window as any).cameraShake,
+            playerStatsRef,
+            damageQueue,
+            unitRegistry,
+          };
+          executeAoEArcherSkill(pendingAoESkillId, aoeTargetPos.current, skillCtx as any);
+          // Skip the generic AoE cast below — handled
+        } else {
 
         const mockTarget: any = {
           id: "ground_target",
@@ -661,20 +935,22 @@ export const PlayerController = (props: PlayerProps) => {
           target: mockTarget,
           context: ctx,
         };
+        } // end else (non-archer AoE)
       }
 
       // Cooldown HUD updating
       const overlay = document.getElementById("skill-cooldown-overlay");
       if (overlay) {
         const elapsed = now - (window as any).lastSkillTime;
-        if (elapsed < SKILL_COOLDOWN) {
-          const remaining = ((SKILL_COOLDOWN - elapsed) / 1000).toFixed(1);
+        if (elapsed < 8000) {
+          const remaining = ((8000 - elapsed) / 1000).toFixed(1);
           overlay.innerText = `${remaining}S`;
           overlay.style.transform = "translateY(0%)";
         } else {
           overlay.style.transform = "translateY(100%)";
         }
       }
+
 
       // Passive System Ticks
       if (typeof (window as any).lastPassiveTick === 'undefined') {
@@ -692,6 +968,11 @@ export const PlayerController = (props: PlayerProps) => {
             spawnVFX(snapPos, "magic", "#f97316");
           }
         }, 0);
+      }
+
+      if (playerClass === "Beginner") {
+        // Safety net: flush arrows that are too old (loop event never fired).
+        flushStaleArrows(now);
       }
 
       // Process Targeting/Attacking
@@ -824,6 +1105,8 @@ export const PlayerController = (props: PlayerProps) => {
         ref={poolRef} 
         damageQueue={damageQueue} 
         dealPlayerDamage={dealPlayerDamage}
+        playerClass={playerClass}
+        unitRegistry={unitRegistry}
       />
 
       <BVHEcctrl
@@ -855,7 +1138,7 @@ export const PlayerController = (props: PlayerProps) => {
       >
         <group ref={characterRef} dispose={null} position={[0, -1.18, 0]}>
           <Suspense fallback={null}>
-            <AvatarModel customization={localCustomization} pose={currentPose} timeScale={currentTimeScale} />
+            <AvatarModel customization={localCustomization} pose={currentPose} timeScale={currentTimeScale} onAttackLoop={_attackLoopRef.current} />
           </Suspense>
 
           <group ref={stunVFXRef} position={[0, 2.3, 0]} visible={false}>

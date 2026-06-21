@@ -88,11 +88,19 @@ export function usePlayerControls(settingsRef: React.RefObject<any>) {
     };
 
     // Capture phase keyboard interceptors to block Drei's useKeyboardControls
+    // when chat/UI is focused. We only stopPropagation for movement/action keys
+    // so that the archer skill listener (window keydown) still fires normally.
+    const MOVEMENT_KEYS = new Set([
+      'KeyW', 'KeyA', 'KeyS', 'KeyD',
+      'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+      'KeyF', 'KeyE', 'KeyQ', 'Space', 'ShiftLeft', 'ShiftRight',
+    ]);
     const captureKeyboard = (e: KeyboardEvent) => {
-      if (isUIActive()) {
+      if (isUIActive() && MOVEMENT_KEYS.has(e.code)) {
         e.stopPropagation();
       }
     };
+
 
     window.addEventListener('keydown', captureKeyboard, true);
     window.addEventListener('keyup', captureKeyboard, true);

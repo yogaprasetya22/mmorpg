@@ -238,7 +238,7 @@ export function CharacterStatsModal({
           {activeTab === 'combat' && (() => {
             const rawASPD = playerStats.aspd ?? 150;
             const roASPD = 130 + (Math.min(1000, Math.max(0, rawASPD)) / 1000) * 63;
-            const hitsPerSec = 1 + (rawASPD / 125);
+            const hitsPerSec = 50 / (200 - roASPD);
             const isMaxASPD = rawASPD >= 1000;
 
             return (

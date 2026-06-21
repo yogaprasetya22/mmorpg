@@ -302,10 +302,17 @@ func buildClassSkills(playerID string, class string) []domain.PlayerSkill {
 			domain.PlayerSkill{ID: playerID + "-skill-2", PlayerID: playerID, SkillID: "poison_strike", Name: "Poison Strike", Level: 1, Type: "active", ManaCost: 25, MaxCD: 5.0, Damage: 1.5, IsUnlocked: true},
 			domain.PlayerSkill{ID: playerID + "-skill-3", PlayerID: playerID, SkillID: "stealth", Name: "Stealth", Level: 1, Type: "active", ManaCost: 35, MaxCD: 20.0, Damage: 0, IsUnlocked: true},
 		)
-	default: // Beginner
+	case "Beginner": // Archer / Marksman
 		return append(base,
-			domain.PlayerSkill{ID: playerID + "-skill-1", PlayerID: playerID, SkillID: "strike", Name: "Heavy Strike", Level: 1, Type: "active", ManaCost: 15, MaxCD: 3.0, Damage: 1.5, IsUnlocked: true},
+			domain.PlayerSkill{ID: playerID + "-skill-1", PlayerID: playerID, SkillID: "double_strafe", Name: "Double Strafe", Level: 1, Type: "active", ManaCost: 12, MaxCD: 1.5, Damage: 2.0, IsUnlocked: true},
+			domain.PlayerSkill{ID: playerID + "-skill-2", PlayerID: playerID, SkillID: "arrow_shower", Name: "Arrow Shower", Level: 1, Type: "active", ManaCost: 25, MaxCD: 4.0, Damage: 1.2, IsUnlocked: true},
+			domain.PlayerSkill{ID: playerID + "-skill-3", PlayerID: playerID, SkillID: "arrow_repel", Name: "Arrow Repel", Level: 1, Type: "active", ManaCost: 18, MaxCD: 6.0, Damage: 1.8, IsUnlocked: true},
+			domain.PlayerSkill{ID: playerID + "-skill-4", PlayerID: playerID, SkillID: "ankle_snare", Name: "Ankle Snare", Level: 1, Type: "active", ManaCost: 15, MaxCD: 10.0, Damage: 0, IsUnlocked: true},
+			domain.PlayerSkill{ID: playerID + "-skill-5", PlayerID: playerID, SkillID: "improve_concentration", Name: "Improve Concentration", Level: 1, Type: "active", ManaCost: 20, MaxCD: 30.0, Damage: 0, IsUnlocked: true},
+			domain.PlayerSkill{ID: playerID + "-skill-6", PlayerID: playerID, SkillID: "rain_of_arrows", Name: "Rain of Arrows", Level: 1, Type: "active", ManaCost: 60, MaxCD: 45.0, Damage: 3.5, IsUnlocked: true},
 		)
+	default: // Fallback: return base skills only
+		return base
 	}
 }
 
