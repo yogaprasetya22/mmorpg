@@ -66,7 +66,21 @@ export const CameraOcclusionManager = () => {
         `
       );
     };
-    mat.customProgramCacheKey = () => 'holo_dither_' + sourceMat.uuid;
+    const hasMap = !!(sourceMat as any).map;
+    const hasAlphaTest = (sourceMat.alphaTest || 0) > 0;
+    const hasVertexColors = !!(sourceMat as any).vertexColors;
+    const hasOnBeforeCompile = !!originalOnBeforeCompile;
+
+    let cacheKey = 'holo_dither_' + sourceMat.type + 
+      '_m' + (hasMap ? '1' : '0') + 
+      '_at' + (hasAlphaTest ? '1' : '0') + 
+      '_vc' + (hasVertexColors ? '1' : '0');
+
+    if (hasOnBeforeCompile) {
+      cacheKey += '_obc_' + sourceMat.uuid;
+    }
+
+    mat.customProgramCacheKey = () => cacheKey;
     return mat;
   };
 
