@@ -285,4 +285,22 @@ Updated by `FPSCounterUpdater` component via custom DOM events at 1Hz.
 
 ---
 
+---
+
+## 🎨 13. Dynamic Terrain & Vegetation Optimizations
+
+### Splat Texture Painting (GPU Throttling)
+* **Problem**: Uploading canvas texture to GPU every pointer event triggers heavy pipeline stutters (micro-lags).
+* **Solution**: `dirtyPaintRef` flag restricts texture updates (`paintTexture.needsUpdate = true`) to a maximum of 1 time per frame in `useFrame`, decoupling upload latency from mouse/pointer event rates.
+
+### 512x512 Sculpt Terrain (Async BVH Refit)
+* **Problem**: Sculpting a 512x512 mesh requires massive vertex transformations and BVH Tree reconstruction, freezing the UI thread if done synchronously in `onPointerMove`.
+* **Solution**: `boundsTree.refit()` is scheduled asynchronously using requestIdleCallback/setTimeout wrappers, and pointer events are throttled to 60Hz.
+
+### Instanced Vegetation Rendering
+* **Problem**: Rendering hundreds of individual trees, grass clumps, and pebbles as primitive meshes generates excessive draw calls.
+* **Solution**: Grouping models by path name using `THREE.InstancedMesh` within `InstancedVegetationRenderer.tsx` cuts overhead down to 1 draw call per asset type. Vegetation deletion is computed dynamically by modifying matrix indexes.
+
+---
+
 🏆 **Wiki Index**: [README.md](README.md) · [09. Animation System](09_animation_system.md)

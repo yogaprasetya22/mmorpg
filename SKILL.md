@@ -10,7 +10,7 @@ This document defines the strict, high-fidelity engineering directives that **ev
 ## 🎯 1. Core Engineering Philosophies
 
 * **authoritative Server Architecture**: All gameplay mechanics (health pools, coordinate calculations, monster combat state-machines, movement updates) must remain authoritatively controlled on the Go backend server. The React/Three Fiber frontend serves solely as an interpolating visualization shell.
-* **Pragmatic Persistence**: Do not store hardcoded paths, absolute local assets directory strings, or redundant network prefixes in GORM/PostgreSQL records. Save path strings in database columns as clean, portable relative formats (e.g., `/assets-model/kingdom/wall.glb`) and let the runtime load layers prepend absolute remote origins (`http://localhost:8080`) dynamically.
+* **Pragmatic Persistence**: Do not store hardcoded paths, absolute local assets directory strings, or redundant network prefixes in GORM/PostgreSQL records. Save path strings in database columns as clean, portable relative formats (e.g., `/assets/environment/trees/Pine_1.glb`) and let the runtime load layers prepend absolute remote origins (`http://localhost:8080`) dynamically.
 * **Zero Regression Standard**: Codebase modifications must not introduce compilation warnings, linting failures, or runtime crashes in either the Go server or the Next.js frontend app.
 
 ---
@@ -177,3 +177,19 @@ Untuk menjaga kestabilan 60 FPS dan latensi sub-milidetik yang sudah dicapai, ar
 * **Pantangan:** **Jangan pernah menaikkan frekuensi pengiriman ke 60Hz atau mematikan deduplikasi!**
   * Melakukan hal tersebut akan membanjiri buffer jaringan WebSocket, meningkatkan latensi ping secara drastis, dan menyebabkan karakter bergetar (*rubberbanding*) di layar pemain lain.
 * **Rujukan Arsitektur:** Dijabarkan lengkap pada **[Stage 7: Network Sync Protocol](wiki/architecture/07_network_sync_protocol.md)**.
+
+### 6. Multi-Layer Splat Texture — Dirty Flag
+* **Status Saat Ini:** Perubahan splat texture canvas di-upload ke GPU hanya 1 kali per frame di dalam hook `useFrame` menggunakan flag `dirtyPaintRef`.
+* **Pantangan:** **Jangan memanggil `paintTexture.needsUpdate = true` di dalam pointer event handlers langsung!**
+  * Hal tersebut akan memicu drop FPS parah karena memory upload overhead pada event loop berkecepatan tinggi.
+
+### 7. Resolusi Sculpt 512x512 & Async BVH
+* **Status Saat Ini:** Resolusi sculpt canvas menggunakan 512x512. Rekonstruksi BVH Tree `boundsTree.refit()` didefer secara asinkronus (tidak langsung memblokir event loop utama pointer).
+* **Pantangan:** **Jangan jalankan `boundsTree.refit()` atau `computeVertexNormals()` secara sinkron dalam thread `onPointerMove` event handler!**
+  * Mesh resolusi tinggi memiliki vertex yang besar. Sinkronisasi refit BVH/hitung normal pada thread pointer move langsung akan membekukan UI thread.
+
+### 8. Instanced Vegetation Rendering
+* **Status Saat Ini:** Seluruh pohon, rumput, dan bebatuan kecil prosedural dikelompokkan berdasarkan model path dan dirender menggunakan `THREE.InstancedMesh` dengan 1 draw call per model path.
+* **Pantangan:** **Jangan mengubah kembali vegetasi menjadi mesh tunggal individual!**
+  * Ratusan pohon individu akan menghasilkan ratusan draw calls yang menghancurkan performa GPU. Sistem instancing meminimalkan overhead rendering hingga 60 FPS stabil.
+

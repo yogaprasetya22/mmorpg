@@ -89,6 +89,7 @@ export const VegetationModule = () => {
         <span>
           <strong className="text-zinc-400 text-[7.5px] uppercase tracking-wide block mb-0.5">Vegetation Brush Instruction:</strong>
           Aktifkan tombol <strong className="text-emerald-400 font-bold">Kuas Vegetasi</strong> di atas, lalu tahan <kbd className="bg-zinc-900 px-1 py-0.2 rounded border border-zinc-850 font-mono text-[8px]">Klik Kiri + Geser</kbd> di atas tanah untuk menyemprot pohon secara lokal di daerah tersebut.
+          <span className="block mt-1 font-bold text-rose-400">Tahan <kbd className="bg-zinc-900 px-1 py-0.2 rounded border border-zinc-850 font-mono text-rose-300 text-[8px]">Shift</kbd> saat menggeser untuk menghapus vegetasi.</span>
         </span>
       </div>
 

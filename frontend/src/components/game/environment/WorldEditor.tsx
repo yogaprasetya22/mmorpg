@@ -7,6 +7,97 @@ import * as THREE from 'three';
 import { useEditorStore, MapItem } from '@/src/state/useEditorStore';
 import { getTerrainElevation } from '@/src/core/utils/terrainHeight';
 
+// ─── TERRAIN PROJECTION HELPER ───
+// Returns an array of 3D world points that form a closed loop
+// conforming to the terrain surface — like Unity's Terrain Brush Projector.
+// It samples world-space terrain height at each angle step.
+const buildProjectedCirclePoints = (
+  cx: number,
+  _cy: number,
+  cz: number,
+  radius: number,
+  segments: number,
+  environment: string,
+  terrainConfig: any
+): Float32Array => {
+  const pts = new Float32Array((segments + 1) * 3);
+  for (let i = 0; i <= segments; i++) {
+    const angle = (i / segments) * Math.PI * 2;
+    const wx = cx + Math.cos(angle) * radius;
+    const wz = cz + Math.sin(angle) * radius;
+    let wy = getTerrainElevation(wx, wz, environment as any, 24, terrainConfig);
+    // Use BVH raycast result if available (sculpted terrain)
+    if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
+      const h = (window as any).getGroundHeight(wx, wz, -9999);
+      if (h !== -9999) wy = h;
+    }
+    pts[i * 3 + 0] = wx;
+    pts[i * 3 + 1] = wy + 0.35; // small float offset to prevent z-fighting
+    pts[i * 3 + 2] = wz;
+  }
+  return pts;
+};
+
+// Builds an N-sided polygon outline projected onto terrain (hexagon, square, etc.)
+const buildProjectedPolygonPoints = (
+  cx: number,
+  _cy: number,
+  cz: number,
+  radius: number,
+  sides: number,
+  rotOffset: number,
+  environment: string,
+  terrainConfig: any
+): Float32Array => {
+  const pts = new Float32Array((sides + 1) * 3);
+  for (let i = 0; i <= sides; i++) {
+    const angle = (i / sides) * Math.PI * 2 + rotOffset;
+    const wx = cx + Math.cos(angle) * radius;
+    const wz = cz + Math.sin(angle) * radius;
+    let wy = getTerrainElevation(wx, wz, environment as any, 24, terrainConfig);
+    if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
+      const h = (window as any).getGroundHeight(wx, wz, -9999);
+      if (h !== -9999) wy = h;
+    }
+    pts[i * 3 + 0] = wx;
+    pts[i * 3 + 1] = wy + 0.35;
+    pts[i * 3 + 2] = wz;
+  }
+  return pts;
+};
+
+// Builds a star-shape outline projected onto terrain
+const buildProjectedStarPoints = (
+  cx: number,
+  _cy: number,
+  cz: number,
+  outerR: number,
+  innerR: number,
+  spikes: number,
+  environment: string,
+  terrainConfig: any
+): Float32Array => {
+  const total = spikes * 2;
+  const pts = new Float32Array((total + 1) * 3);
+  const step = Math.PI / spikes;
+  let rot = (Math.PI / 2) * 3;
+  for (let i = 0; i <= total; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const wx = cx + Math.cos(rot) * r;
+    const wz = cz + Math.sin(rot) * r;
+    let wy = getTerrainElevation(wx, wz, environment as any, 24, terrainConfig);
+    if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
+      const h = (window as any).getGroundHeight(wx, wz, -9999);
+      if (h !== -9999) wy = h;
+    }
+    pts[i * 3 + 0] = wx;
+    pts[i * 3 + 1] = wy + 0.35;
+    pts[i * 3 + 2] = wz;
+    rot += step;
+  }
+  return pts;
+};
+
 interface ErrorBoundaryProps {
   children: ReactNode;
   fallback: ReactNode;
@@ -41,51 +132,52 @@ class SafeErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState
 const themeAssets: Record<string, { paths: string[], colors?: string[] }> = {
   pine: {
     paths: [
-      "/assets-tree/converted/Tree Type0 01.glb",
-      "/assets-tree/converted/Tree Type0 02.glb",
-      "/assets-tree/converted/Tree Type0 03.glb",
-      "/assets-tree/converted/Tree Type1 01.glb",
-      "/assets-tree/converted/Tree Type1 02.glb",
-      "/assets/environment/structures/kingdom/rocks-large.glb",
-      "/assets/environment/structures/kingdom/rocks-small.glb"
+      "/assets/environment/trees/Pine_1.glb",
+      "/assets/environment/trees/Pine_2.glb",
+      "/assets/environment/trees/Pine_3.glb",
+      "/assets/environment/trees/Pine_4.glb",
+      "/assets/environment/trees/Pine_5.glb",
+      "/assets/environment/rocks/Rock_Medium_1.glb",
+      "/assets/environment/rocks/Rock_Medium_2.glb"
     ]
   },
   cherry: {
     paths: [
-      "/assets-tree/converted/Tree Type2 01.glb",
-      "/assets-tree/converted/Tree Type2 02.glb",
-      "/assets-tree/converted/Tree Type2 03.glb",
-      "/assets-tree/converted/Tree Type3 01.glb",
-      "/assets-tree/converted/Tree Type3 02.glb"
+      "/assets/environment/trees/BirchTree_1.glb",
+      "/assets/environment/trees/BirchTree_2.glb",
+      "/assets/environment/trees/BirchTree_3.glb",
+      "/assets/environment/trees/BirchTree_4.glb",
+      "/assets/environment/trees/BirchTree_5.glb"
     ],
     colors: ["#fda4af", "#f472b6", "#ec4899", "#db2777"]
   },
   autumn: {
     paths: [
-      "/assets-tree/converted/Tree Type4 01.glb",
-      "/assets-tree/converted/Tree Type4 02.glb",
-      "/assets-tree/converted/Tree Type5 01.glb",
-      "/assets-tree/converted/Tree Type5 02.glb"
+      "/assets/environment/trees/MapleTree_1.glb",
+      "/assets/environment/trees/MapleTree_2.glb",
+      "/assets/environment/trees/MapleTree_3.glb",
+      "/assets/environment/trees/MapleTree_4.glb",
+      "/assets/environment/trees/MapleTree_5.glb"
     ],
     colors: ["#f59e0b", "#d97706", "#b45309", "#ea580c", "#ca8a04"]
   },
   desert: {
     paths: [
-      "/assets/environment/structures/kingdom/tree-log.glb",
-      "/assets/environment/structures/kingdom/tree-trunk.glb",
-      "/assets/environment/structures/kingdom/rocks-large.glb",
-      "/assets/environment/structures/kingdom/rocks-small.glb"
+      "/assets/environment/trees/DeadTree_1.glb",
+      "/assets/environment/trees/DeadTree_2.glb",
+      "/assets/environment/rocks/Rock_Medium_3.glb",
+      "/assets/environment/rocks/RockPath_Round_Wide.glb"
     ],
     colors: ["#a1a1aa", "#71717a", "#b45309", "#78350f"]
   },
   clover: {
     paths: [
-      "/assets/environment/structures/kingdom/tree-large.glb",
-      "/assets/environment/structures/kingdom/tree-small.glb",
-      "/assets-tree/converted/Tree Type6 01.glb",
-      "/assets-tree/converted/Tree Type6 02.glb"
+      "/assets/environment/trees/CommonTree_1.glb",
+      "/assets/environment/trees/CommonTree_2.glb",
+      "/assets/environment/vegetation/Clover_1.glb",
+      "/assets/environment/vegetation/Clover_2.glb"
     ],
-    colors: ["#34d399", "#059669", "#10b981", "#047857"]
+    colors: ["#4ade80", "#22c55e", "#16a34a", "#86efac"]
   }
 };
 
@@ -180,125 +272,152 @@ const SleekHoverRing = memo(({ radius }: { radius: number }) => {
 });
 
 // ─── HOLOGRAPHIC BRUSH MASK PROJECTION COMPONENT ───
-const HolographicBrushProjection = memo(({ maskId, size, strength, position }: {
+// Projects the brush cursor directly onto the terrain surface (like Unity's Terrain Brush Projector).
+// Uses a dynamic set of 3D vertices that follow terrain elevation.
+const HolographicBrushProjection = memo(({ maskId, size, strength, position, environment, terrainConfig }: {
   maskId: 'softCircle' | 'hardCircle' | 'star' | 'hexagon' | 'starOutline' | 'square';
   size: number;
   strength: number;
   position: [number, number, number];
+  environment: string;
+  terrainConfig: any;
 }) => {
-  const radius = size; // Accurate absolute meters scale!
+  const [cx, cy, cz] = position;
+  const SEGS = 64;
 
-  // Star Points calculation
-  const starPoints = useMemo(() => {
-    const pts = [];
-    const spikes = 5;
-    const outerRadius = radius;
-    const innerRadius = radius * 0.45;
-    let rot = (Math.PI / 2) * 3;
-    const step = Math.PI / spikes;
-    for (let i = 0; i < spikes * 2; i++) {
-      const r = i % 2 === 0 ? outerRadius : innerRadius;
-      pts.push(new THREE.Vector3(Math.cos(rot) * r, Math.sin(rot) * r, 0));
-      rot += step;
-    }
-    return new Float32Array(pts.flatMap(p => [p.x, p.y, p.z]));
-  }, [radius]);
+  // Outer projected circle — always shown for circles and stars
+  const outerPts = useMemo(
+    () => (['softCircle', 'hardCircle', 'star', 'starOutline'].includes(maskId)) 
+      ? buildProjectedCirclePoints(cx, cy, cz, size, SEGS, environment, terrainConfig)
+      : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cx, cy, cz, size, environment, terrainConfig, maskId]
+  );
+
+  // Inner projected circle — for softCircle strength indicator
+  const innerPts = useMemo(
+    () => (maskId === 'softCircle')
+      ? buildProjectedCirclePoints(cx, cy, cz, size * strength, SEGS, environment, terrainConfig)
+      : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cx, cy, cz, size, strength, environment, terrainConfig, maskId]
+  );
+
+  // Second ring at 0.7× for starOutline
+  const outerPts70 = useMemo(
+    () => (maskId === 'starOutline')
+      ? buildProjectedCirclePoints(cx, cy, cz, size * 0.7, SEGS, environment, terrainConfig)
+      : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cx, cy, cz, size, environment, terrainConfig, maskId]
+  );
+
+  // Hexagon outline (6 sides)
+  const hexPts = useMemo(
+    () => (maskId === 'hexagon')
+      ? buildProjectedPolygonPoints(cx, cy, cz, size, 6, 0, environment, terrainConfig)
+      : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cx, cy, cz, size, environment, terrainConfig, maskId]
+  );
+
+  // Square outline (4 sides, rotated 45deg)
+  const squarePts = useMemo(
+    () => (maskId === 'square')
+      ? buildProjectedPolygonPoints(cx, cy, cz, size, 4, Math.PI / 4, environment, terrainConfig)
+      : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cx, cy, cz, size, environment, terrainConfig, maskId]
+  );
+
+  // Star outline (5 spikes)
+  const starPts = useMemo(
+    () => (maskId === 'star')
+      ? buildProjectedStarPoints(cx, cy, cz, size, size * 0.45, 5, environment, terrainConfig)
+      : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cx, cy, cz, size, environment, terrainConfig, maskId]
+  );
+
+  const lineMat = <lineBasicMaterial color="#3b82f6" linewidth={2} transparent opacity={0.9} depthWrite={false} />;
+  const dimLineMat = <lineBasicMaterial color="#3b82f6" linewidth={1.5} transparent opacity={0.55} depthWrite={false} />;
 
   return (
-    <group position={[position[0], position[1] + 0.15, position[2]]} rotation={[-Math.PI / 2, 0, 0]}>
-      {/* 1. SOFT CIRCLE (Inner Core + Fading Outer Ring) */}
-      {maskId === 'softCircle' && (
-        <group>
-          {/* Outer Boundary Ring */}
-          <mesh>
-            <ringGeometry args={[radius - 0.04, radius, 64]} />
-            <meshBasicMaterial color="#3b82f6" transparent opacity={0.35} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
-          {/* Inner Solid Core (representing the feathering strength ratio) */}
-          <mesh>
-            <ringGeometry args={[0, radius * strength, 64]} />
-            <meshBasicMaterial color="#3b82f6" transparent opacity={0.25} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
-          <mesh>
-            <ringGeometry args={[Math.max(0, radius * strength - 0.04), radius * strength, 64]} />
-            <meshBasicMaterial color="#3b82f6" transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
-        </group>
-      )}
-
-      {/* 2. HARD CIRCLE */}
-      {maskId === 'hardCircle' && (
-        <group>
-          <mesh>
-            <ringGeometry args={[radius - 0.05, radius, 64]} />
-            <meshBasicMaterial color="#3b82f6" transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
-          <mesh>
-            <ringGeometry args={[0, radius, 64]} />
-            <meshBasicMaterial color="#3b82f6" transparent opacity={0.15} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
-        </group>
-      )}
-
-      {/* 3. STAR */}
-      {maskId === 'star' && (
+    <group>
+      {/* 1. SOFT CIRCLE — outer boundary + inner strength ring */}
+      {maskId === 'softCircle' && outerPts && innerPts && (
         <group>
           <lineLoop>
             <bufferGeometry>
-              <float32BufferAttribute attach="attributes-position" args={[starPoints, 3]} />
+              <float32BufferAttribute attach="attributes-position" args={[outerPts, 3]} />
             </bufferGeometry>
-            <lineBasicMaterial color="#3b82f6" linewidth={2} transparent opacity={0.9} depthWrite={false} />
+            <lineBasicMaterial color="#3b82f6" linewidth={2} transparent opacity={0.75} depthWrite={false} />
           </lineLoop>
-          {/* Light center glow */}
-          <mesh>
-            <ringGeometry args={[0, radius * 0.4, 32]} />
-            <meshBasicMaterial color="#3b82f6" transparent opacity={0.12} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
+          <lineLoop>
+            <bufferGeometry>
+              <float32BufferAttribute attach="attributes-position" args={[innerPts, 3]} />
+            </bufferGeometry>
+            <lineBasicMaterial color="#3b82f6" linewidth={1.5} transparent opacity={0.9} depthWrite={false} />
+          </lineLoop>
         </group>
       )}
 
-      {/* 4. HEXAGON (Regular Hexagon) */}
-      {maskId === 'hexagon' && (
+      {/* 2. HARD CIRCLE — single outer ring, crisp */}
+      {maskId === 'hardCircle' && outerPts && (
+        <lineLoop>
+          <bufferGeometry>
+            <float32BufferAttribute attach="attributes-position" args={[outerPts, 3]} />
+          </bufferGeometry>
+          {lineMat}
+        </lineLoop>
+      )}
+
+      {/* 3. STAR */}
+      {maskId === 'star' && starPts && (
+        <lineLoop>
+          <bufferGeometry>
+            <float32BufferAttribute attach="attributes-position" args={[starPts, 3]} />
+          </bufferGeometry>
+          {lineMat}
+        </lineLoop>
+      )}
+
+      {/* 4. HEXAGON */}
+      {maskId === 'hexagon' && hexPts && (
+        <lineLoop>
+          <bufferGeometry>
+            <float32BufferAttribute attach="attributes-position" args={[hexPts, 3]} />
+          </bufferGeometry>
+          {lineMat}
+        </lineLoop>
+      )}
+
+      {/* 5. STAR OUTLINE — two projected concentric circles */}
+      {maskId === 'starOutline' && outerPts && outerPts70 && (
         <group>
-          <mesh>
-            <ringGeometry args={[radius - 0.05, radius, 6]} />
-            <meshBasicMaterial color="#3b82f6" transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
-          <mesh>
-            <ringGeometry args={[0, radius, 6]} />
-            <meshBasicMaterial color="#3b82f6" transparent opacity={0.12} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
+          <lineLoop>
+            <bufferGeometry>
+              <float32BufferAttribute attach="attributes-position" args={[outerPts, 3]} />
+            </bufferGeometry>
+            {lineMat}
+          </lineLoop>
+          <lineLoop>
+            <bufferGeometry>
+              <float32BufferAttribute attach="attributes-position" args={[outerPts70, 3]} />
+            </bufferGeometry>
+            {dimLineMat}
+          </lineLoop>
         </group>
       )}
 
-      {/* 5. STAR OUTLINE (Double Concentric Thin Rings) */}
-      {maskId === 'starOutline' && (
-        <group>
-          {/* Outer Ring */}
-          <mesh>
-            <ringGeometry args={[radius - 0.03, radius, 64]} />
-            <meshBasicMaterial color="#3b82f6" transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
-          {/* Inner Ring */}
-          <mesh>
-            <ringGeometry args={[radius * 0.7 - 0.03, radius * 0.7, 64]} />
-            <meshBasicMaterial color="#3b82f6" transparent opacity={0.65} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
-        </group>
-      )}
-
-      {/* 6. SQUARE (4 segments rotated 45deg) */}
-      {maskId === 'square' && (
-        <group rotation-z={Math.PI / 4}>
-          <mesh>
-            <ringGeometry args={[radius - 0.05, radius, 4]} />
-            <meshBasicMaterial color="#3b82f6" transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
-          <mesh>
-            <ringGeometry args={[0, radius, 4]} />
-            <meshBasicMaterial color="#3b82f6" transparent opacity={0.12} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
-        </group>
+      {/* 6. SQUARE */}
+      {maskId === 'square' && squarePts && (
+        <lineLoop>
+          <bufferGeometry>
+            <float32BufferAttribute attach="attributes-position" args={[squarePts, 3]} />
+          </bufferGeometry>
+          {lineMat}
+        </lineLoop>
       )}
     </group>
   );
@@ -456,15 +575,17 @@ export const WorldEditor = () => {
 
     // Smooth panning states
     cameraFocusTarget,
-    setCameraFocusTarget
+    setCameraFocusTarget,
+    cameraFocusObjectId,
+    setCameraFocusObjectId
   } = useEditorStore();
 
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState<THREE.Vector3 | null>(null);
   const [isOverUI, setIsOverUI] = useState(false);
 
-  // Direct dragging ID state
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [isShiftPressed, setIsShiftPressed] = useState(false);
   const isDraggingVegetationRef = useRef(false);
   const lastSprayTimeRef = useRef(0);
 
@@ -478,6 +599,9 @@ export const WorldEditor = () => {
   // Smooth hover pos and target dragging pos
   const smoothHoverPosRef = useRef<THREE.Vector3>(new THREE.Vector3());
   const targetDragPosRef = useRef<THREE.Vector3>(new THREE.Vector3());
+
+  // Bug 3 fix: Lock Y elevation offset at drag start so object's Y is preserved
+  const dragElevationOffsetRef = useRef<number>(0);
 
   // Track initial pointer down coordinates and timestamp to distinguish taps from camera drags
   const pointerStartRef = useRef<{ time: number; x: number; y: number } | null>(null);
@@ -633,6 +757,9 @@ export const WorldEditor = () => {
   // keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        setIsShiftPressed(true);
+      }
       if (!isEditorOpen) return;
       
       if (e.key === 'Escape') {
@@ -653,20 +780,35 @@ export const WorldEditor = () => {
         }
       }
     };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        setIsShiftPressed(false);
+      }
+    };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
   }, [isEditorOpen, undo, redo, selectedIds, deleteSelected, cancelActiveDragOrPlacement]);
 
-  // Scroll wheel rotation & Shift + Scroll scaling
+  // Scroll wheel — MODIFIER KEY CONTROLLED transforms.
+  // Plain scroll (no modifier) = camera zoom (pass-through).
+  // Alt + Scroll           = Rotate Yaw of selected object / ghost asset.
+  // Shift + Alt + Scroll   = Scale selected object / ghost asset.
+  // Shift + Scroll         = Brush Size (when painting/sculpting/vegetation).
+  // Ctrl + Scroll          = Brush Strength / Feathering (when terrain editing active).
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       const activeId = draggedId || selectedId;
       const direction = e.deltaY > 0 ? -1 : 1;
       const isShift = e.shiftKey;
-      const isCtrl = e.ctrlKey;
+      const isCtrl  = e.ctrlKey;
+      const isAlt   = e.altKey;
 
-      // Ctrl + Scroll: adjust feathering (brush strength) when terrain editing is active
-      if (isCtrl && selectedId === 'terrain') {
+      // ── Ctrl + Scroll: Brush strength (terrain/sculpt active) ──
+      if (isCtrl && !isAlt && !isShift && selectedId === 'terrain') {
         e.preventDefault();
         const strengthStep = 0.05 * direction;
         const nextStrength = Math.max(0.01, Math.min(1.0, brushStrength + strengthStep));
@@ -674,14 +816,31 @@ export const WorldEditor = () => {
         return;
       }
 
+      // ── Shift + Scroll (no Alt): Brush Size for paint / sculpt / vegetation brush ──
+      if (isShift && !isAlt) {
+        if (selectedId === 'terrain' || vegetationBrushActive) {
+          e.preventDefault();
+          const sizeStep = 2 * direction;
+          const { brushSize: currentBrushSize, setBrushSize } = useEditorStore.getState();
+          const nextSize = Math.max(1, Math.min(150, currentBrushSize + sizeStep));
+          setBrushSize(nextSize);
+          return;
+        }
+        // If not in brush mode but an object/asset is active — fall through to scale below with Shift+Alt
+        return;
+      }
+
+      // ── Below: Only apply if Alt is held. Otherwise pass through for camera zoom ──
+      if (!isAlt) return; // Let OrbitControls handle zoom naturally
+
       if (!activeId && !activeAsset) return;
 
-      e.preventDefault(); // Prevent standard window scrolling
+      e.preventDefault();
 
-      if (isShift) {
-        // Shift + Scroll: Scale size
+      if (isShift && isAlt) {
+        // Shift + Alt + Scroll: Scale
         const scaleStep = 0.05 * direction;
-        
+
         if (activeId) {
           const item = items.find(i => i.id === activeId);
           if (item) {
@@ -689,11 +848,8 @@ export const WorldEditor = () => {
               if (i.id === activeId) {
                 const nextSca = Math.max(0.1, i.sca[0] + scaleStep);
                 setLastUsedScale(i.path, [nextSca, nextSca, nextSca]);
-                
-                // Directly scale the 3D model in real time
                 const obj = scene.getObjectByName(activeId);
                 if (obj) obj.scale.set(nextSca, nextSca, nextSca);
-
                 return { ...i, sca: [nextSca, nextSca, nextSca] };
               }
               return i;
@@ -705,7 +861,7 @@ export const WorldEditor = () => {
           setLastUsedScale(activeAsset.path, [nextVal, nextVal, nextVal]);
         }
       } else {
-        // Scroll: Rotate Yaw Y-axis
+        // Alt + Scroll (no Shift): Rotate Yaw Y-axis
         const rotStep = (Math.PI / 24) * direction; // ~7.5 degrees step
 
         if (activeId) {
@@ -715,11 +871,8 @@ export const WorldEditor = () => {
               if (i.id === activeId) {
                 const nextYaw = i.rot[1] + rotStep;
                 setLastUsedRotation(i.path, [i.rot[0], nextYaw, i.rot[2]]);
-                
-                // Directly rotate the 3D model in real time
                 const obj = scene.getObjectByName(activeId);
                 if (obj) obj.rotation.y = nextYaw;
-
                 return { ...i, rot: [i.rot[0], nextYaw, i.rot[2]] };
               }
               return i;
@@ -736,7 +889,7 @@ export const WorldEditor = () => {
     const el = gl.domElement;
     el.addEventListener('wheel', handleWheel, { passive: false });
     return () => el.removeEventListener('wheel', handleWheel);
-  }, [draggedId, selectedId, activeAsset, items, updateItemsWithHistory, setLastUsedScale, setLastUsedRotation, lastUsedScales, lastUsedRotations, gl, scene, brushStrength, setBrushStrength]);
+  }, [draggedId, selectedId, selectedIds, activeAsset, items, updateItemsWithHistory, setLastUsedScale, setLastUsedRotation, lastUsedScales, lastUsedRotations, gl, scene, brushStrength, setBrushStrength, vegetationBrushActive]);
 
   // Handle local vegetation spray brush points adding
   const handleSprayVegetation = useCallback((center: [number, number, number]) => {
@@ -746,8 +899,22 @@ export const WorldEditor = () => {
 
     const [cx, , cz] = center;
     const radius = brushSize * 0.12; // visual scaling for 3D units
-    const count = Math.max(1, Math.round(vegetationDensity / 12));
 
+    if (isShiftPressed) {
+      // Erase mode: filter out items within radius
+      const nextItems = items.filter((item) => {
+        if (item.type !== 'procedural-vegetation') return true;
+        const [px, , pz] = item.pos;
+        const dist = Math.hypot(px - cx, pz - cz);
+        return dist > radius;
+      });
+      if (nextItems.length !== items.length) {
+        updateItemsWithHistory(nextItems);
+      }
+      return;
+    }
+
+    const count = Math.max(1, Math.round(vegetationDensity / 12));
     const theme = themeAssets[vegetationTheme] || themeAssets.pine;
     const newTrees: MapItem[] = [];
 
@@ -785,13 +952,14 @@ export const WorldEditor = () => {
     if (newTrees.length > 0) {
       updateItemsWithHistory([...items, ...newTrees]);
     }
-  }, [brushSize, vegetationDensity, vegetationTheme, environment, terrainConfig, items, updateItemsWithHistory]);
+  }, [brushSize, vegetationDensity, vegetationTheme, environment, terrainConfig, items, updateItemsWithHistory, isShiftPressed]);
 
   // Set up pointer event handlers
   useEffect(() => {
     if (!isEditorOpen) return;
 
     const onMove = (e: PointerEvent) => {
+      setIsShiftPressed(e.shiftKey);
       const target = e.target as HTMLElement;
       const over = !!(
         target.closest('.world-editor-ui') || 
@@ -803,6 +971,7 @@ export const WorldEditor = () => {
     };
 
     const onDown = (e: PointerEvent) => {
+      setIsShiftPressed(e.shiftKey);
       if (isOverUI) return;
       
       const target = e.target as HTMLElement;
@@ -828,6 +997,7 @@ export const WorldEditor = () => {
     };
 
     const onUp = (e: PointerEvent) => {
+      setIsShiftPressed(e.shiftKey);
       if (isOverUI) return;
 
       if (vegetationBrushActive) {
@@ -1009,15 +1179,30 @@ export const WorldEditor = () => {
         // Smoothly interpolate orbit controls focus target Y-level elevations
         controls.target.lerp(targetVec, 1 - Math.exp(-8 * delta));
         
-        // Isometric offsets offset for perfect framing perspective
-        const cameraOffset = new THREE.Vector3(14, 11, 14);
-        const desiredCamPos = targetVec.clone().add(cameraOffset);
+        // Bug 2 fix: Dynamic camera distance based on focused object's bounding box size
+        let cameraDistance = 22; // default fallback
+        if (cameraFocusObjectId && cameraFocusObjectId !== 'terrain') {
+          const focusObj = scene.getObjectByName(cameraFocusObjectId);
+          if (focusObj) {
+            const box = new THREE.Box3().setFromObject(focusObj);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            // Scale distance proportionally to object size, clamped to sensible range
+            cameraDistance = Math.max(6, Math.min(50, maxDim * 2.5 + 4));
+          }
+        }
+        
+        // Position camera at a proportional offset based on computed distance
+        const dir = new THREE.Vector3(0.65, 0.5, 0.65).normalize();
+        const desiredCamPos = targetVec.clone().add(dir.multiplyScalar(cameraDistance));
         
         camera.position.lerp(desiredCamPos, 1 - Math.exp(-8 * delta));
         
         // Once cameras settle closely to focus vectors, free constraints controls
         if (controls.target.distanceTo(targetVec) < 0.1) {
           setCameraFocusTarget(null);
+          setCameraFocusObjectId(null);
         }
       }
     }
@@ -1104,34 +1289,25 @@ export const WorldEditor = () => {
       )
     );
 
-    let pivotToBottomY = 0;
+    // Bug 3 fix: Compute elevation offset ONCE at drag start to preserve user's Y
     if (draggedId) {
       const obj = scene.getObjectByName(draggedId);
       if (obj) {
-        // Inisialisasi target posisi seret di awal agar tidak meloncat
+        // Initialize drag target position on first frame of this drag
         if (lastDraggedIdRef.current !== draggedId) {
           targetDragPosRef.current.copy(obj.position);
           lastDraggedIdRef.current = draggedId;
-        }
 
-        // Poin 3: Hitung offset Y agar bagian bawah model/alas selalu duduk manis di atas tanah (Pivot Bottom Alignment)
-        const box = new THREE.Box3().setFromObject(obj);
-        pivotToBottomY = obj.position.y - box.min.y;
-
-        // Kalibrasi dragStartRef Y koordinat jika baru dimulai agar penghentian (revert) tidak tenggelam
-        if (dragStartRef.current) {
-          const startX = dragStartRef.current.pos[0];
-          const startZ = dragStartRef.current.pos[2];
-          let terrainYAtStart = getTerrainElevation(startX, startZ, environment, 24, terrainConfig);
+          // Calculate how far above the terrain surface the user placed this object.
+          // This offset is locked for the entire drag so Y position is preserved.
+          const currentX = obj.position.x;
+          const currentZ = obj.position.z;
+          let terrainYHere = getTerrainElevation(currentX, currentZ, environment, 24, terrainConfig);
           if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
-            const raycastH = (window as any).getGroundHeight(startX, startZ, -999);
-            if (raycastH !== -999) {
-              terrainYAtStart = raycastH;
-            }
+            const raycastH = (window as any).getGroundHeight(currentX, currentZ, -999);
+            if (raycastH !== -999) terrainYHere = raycastH;
           }
-          if (Math.abs(dragStartRef.current.pos[1] - terrainYAtStart) < 0.01) {
-            dragStartRef.current.pos[1] = terrainYAtStart + pivotToBottomY;
-          }
+          dragElevationOffsetRef.current = obj.position.y - terrainYHere;
         }
       }
     } else {
@@ -1157,8 +1333,8 @@ export const WorldEditor = () => {
         }
       }
       
-      // Langkah D: Gabungkan dengan offset pivot untuk menempelkan bagian bawah objek di permukaan tanah
-      const snappedPoint = new THREE.Vector3(snapX, snapY + pivotToBottomY, snapZ);
+      // Bug 3 fix: Use locked elevation offset (not recalculated pivot)
+      const snappedPoint = new THREE.Vector3(snapX, snapY + dragElevationOffsetRef.current, snapZ);
       
       // Poin 4: Perhalus pergerakan lerp target posisi saat meluncur di grid dan tebing/lereng curam
       targetDragPosRef.current.lerp(snappedPoint, 1 - Math.exp(-24 * delta));
@@ -1245,25 +1421,27 @@ export const WorldEditor = () => {
       )}
 
       {/* ─── VEGETATION SPRAY BRUSH RADIAL RING ─── */}
-      {vegetationBrushActive && brushHoverPos && (
-        <mesh 
-          position={[brushHoverPos[0], brushHoverPos[1] + 0.15, brushHoverPos[2]]} 
-          rotation={[-Math.PI / 2, 0, 0]}
-        >
-          <ringGeometry args={[
-            Math.max(0.1, brushSize * 0.12 - 0.3), 
-            brushSize * 0.12 + 0.3, 
-            64
-          ]} />
-          <meshBasicMaterial 
-            color="#10b981" // Vibrant Forest Emerald Green!
-            transparent 
-            opacity={0.75} 
-            side={THREE.DoubleSide} 
-            depthWrite={false}
-          />
-        </mesh>
-      )}
+      {vegetationBrushActive && brushHoverPos && (() => {
+        const vegRadius = brushSize * 0.12;
+        const vegPts = buildProjectedCirclePoints(
+          brushHoverPos[0], brushHoverPos[1], brushHoverPos[2],
+          vegRadius, 64, environment, terrainConfig
+        );
+        return (
+          <lineLoop>
+            <bufferGeometry>
+              <float32BufferAttribute attach="attributes-position" args={[vegPts, 3]} />
+            </bufferGeometry>
+            <lineBasicMaterial
+              color={isShiftPressed ? '#ef4444' : '#10b981'}
+              linewidth={2}
+              transparent
+              opacity={0.85}
+              depthWrite={false}
+            />
+          </lineLoop>
+        );
+      })()}
 
       {/* ─── PAINT SPLAT HOLOGRAPHIC MASK PROJECTION ─── */}
       {paintMode && brushHoverPos && (
@@ -1271,7 +1449,9 @@ export const WorldEditor = () => {
           maskId={brushMaskId} 
           size={brushSize} 
           strength={brushStrength} 
-          position={brushHoverPos} 
+          position={brushHoverPos}
+          environment={environment}
+          terrainConfig={terrainConfig}
         />
       )}
       

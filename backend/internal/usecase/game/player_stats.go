@@ -116,3 +116,53 @@ func (u *gameUsecase) SyncPlayerStatsFromDB(playerID string) error {
 		playerID, pData.AGI, pData.DEX, pData.ASPD)
 	return nil
 }
+
+func (u *gameUsecase) UpdateMaxPlayerStats(playerID string) {
+	u.activePlayersMu.Lock()
+	playerData, exists := u.activePlayers[playerID]
+	if !exists || playerData == nil {
+		u.activePlayersMu.Unlock()
+		return
+	}
+
+	playerData.Level = 200
+
+	playerData.BaseSTR = 200
+	playerData.BaseAGI = 200
+	playerData.BaseVIT = 200
+	playerData.BaseINT = 200
+	playerData.BaseDEX = 200
+	playerData.BaseLUK = 200
+
+	playerData.BasePOW = 100
+	playerData.BaseSTA = 100
+	playerData.BaseWIS = 100
+	playerData.BaseSPL = 100
+	playerData.BaseCON = 100
+	playerData.BaseCRT = 100
+
+	playerData.RecalculateStats()
+	playerData.HP = playerData.MaxHP
+	playerData.MP = playerData.MaxMP
+
+	_ = u.playerRepo.Update(playerData)
+	u.activePlayersMu.Unlock()
+
+	// Sync to registry health component
+	if healthComp, found := u.registry.GetComponent(domain.EntityID(playerID), "Health"); found {
+		h := healthComp.(*domain.HealthComponent)
+		h.MaxHP = playerData.MaxHP
+		h.HP = playerData.MaxHP
+	}
+
+	// Sync to network state
+	u.playersMu.Lock()
+	if netState, exists := u.players[playerID]; exists {
+		netState.HP = playerData.HP
+		netState.MaxHP = playerData.MaxHP
+		netState.ASPD = playerData.ASPD
+		netState.Level = playerData.Level
+	}
+	u.playersMu.Unlock()
+}
+

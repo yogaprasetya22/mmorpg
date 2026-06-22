@@ -15,6 +15,164 @@ export interface MapItem {
 
 import { FULL_ASSET_LIBRARY, AssetInfo, setAssetLibrary } from '@/src/core/logic/environment/assetRegistry';
 
+export function sanitizeAssetPath(path: string): string {
+  let cleanPath = path;
+  if (cleanPath.startsWith(API_BASE_URL)) {
+    cleanPath = cleanPath.slice(API_BASE_URL.length);
+  }
+
+  const fileName = cleanPath.split('/').pop() || '';
+  const nameLower = fileName.toLowerCase();
+
+  // 1. Rocks
+  if (
+    nameLower.includes('rock') ||
+    nameLower.includes('pebble') ||
+    nameLower.includes('stone') ||
+    nameLower.includes('boulder') ||
+    nameLower.includes('cliff')
+  ) {
+    const rockFiles = [
+      'RockPath_Square_Thin.glb', 'RockPath_Round_Thin.glb', 'Rock_Medium_3.glb',
+      'Pebble_Square_1.glb', 'Rock_Medium_1.glb', 'Pebble_Round_2.glb', 'Pebble_Round_5.glb',
+      'RockPath_Round_Small_3.glb', 'Pebble_Square_3.glb', 'RockPath_Round_Small_1.glb',
+      'Pebble_Round_4.glb', 'Pebble_Round_3.glb', 'Pebble_Square_2.glb', 'RockPath_Square_Small_3.glb',
+      'Pebble_Square_6.glb', 'Pebble_Square_5.glb', 'RockPath_Round_Wide.glb',
+      'RockPath_Square_Small_1.glb', 'RockPath_Square_Small_2.glb', 'RockPath_Square_Wide.glb',
+      'Pebble_Square_4.glb', 'Rock_Medium_2.glb', 'Pebble_Round_1.glb', 'RockPath_Round_Small_2.glb'
+    ];
+    const matchedFile = rockFiles.find(f => f.toLowerCase() === nameLower || nameLower.startsWith(f.toLowerCase().replace('.glb', '')));
+    if (matchedFile) {
+      return `${API_BASE_URL}/assets/environment/rocks/${matchedFile}`;
+    }
+    return `${API_BASE_URL}/assets/environment/rocks/Rock_Medium_1.glb`;
+  }
+
+  // 2. Trees
+  if (
+    nameLower.includes('tree') ||
+    nameLower.includes('birch') ||
+    nameLower.includes('pine') ||
+    nameLower.includes('maple') ||
+    nameLower.includes('dead') ||
+    nameLower.includes('twisted')
+  ) {
+    const treeFiles = [
+      'Pine_5.glb', 'DeadTree_3.glb', 'BirchTree_4.glb', 'DeadTree_1.glb', 'CommonTree_5.glb',
+      'DeadTree_7.glb', 'CommonTree_1.glb', 'DeadTree_5.glb', 'MapleTree_5.glb', 'Pine_1.glb',
+      'DeadTree_8.glb', 'BirchTree_3.glb', 'DeadTree_9.glb', 'CommonTree_4.glb', 'DeadTree_4.glb',
+      'BirchTree_5.glb', 'TwistedTree_4.glb', 'MapleTree_2.glb', 'MapleTree_1.glb', 'DeadTree_2.glb',
+      'DeadTree_6.glb', 'BirchTree_1.glb', 'TwistedTree_3.glb', 'Pine_4.glb', 'CommonTree_3.glb',
+      'MapleTree_4.glb', 'CommonTree_2.glb', 'DeadTree_10.glb', 'Pine_3.glb', 'BirchTree_2.glb',
+      'MapleTree_3.glb', 'Pine_2.glb', 'TwistedTree_5.glb', 'TwistedTree_2.glb', 'TwistedTree_1.glb'
+    ];
+    const matchedFile = treeFiles.find(f => f.toLowerCase() === nameLower || nameLower.startsWith(f.toLowerCase().replace('.glb', '')));
+    if (matchedFile) {
+      return `${API_BASE_URL}/assets/environment/trees/${matchedFile}`;
+    }
+    return `${API_BASE_URL}/assets/environment/trees/Pine_1.glb`;
+  }
+
+  // 3. Vegetation
+  if (
+    nameLower.includes('bush') ||
+    nameLower.includes('flower') ||
+    nameLower.includes('grass') ||
+    nameLower.includes('fern') ||
+    nameLower.includes('mushroom') ||
+    nameLower.includes('clover') ||
+    nameLower.includes('plant') ||
+    nameLower.includes('petal')
+  ) {
+    const vegFiles = [
+      'Bush_Flowers.glb', 'Petal_3.glb', 'Bush_Common.glb', 'Fern_1.glb', 'Flower_1.glb',
+      'Plant_1.glb', 'Bush_Small.glb', 'Mushroom_Laetiporus.glb', 'Petal_5.glb', 'Petal_1.glb',
+      'Flower_1_Clump.glb', 'Flower_4_Single.glb', 'Flower_3_Single.glb', 'Grass_Large.glb',
+      'Mushroom_Common.glb', 'Flower_2_Clump.glb', 'Plant_1_Big.glb', 'Grass_Wispy_Short.glb',
+      'Plant_7.glb', 'Grass_Common_Short.glb', 'Flower_5_Clump.glb', 'Bush_Small_Flowers.glb',
+      'Clover_2.glb', 'Flower_4_Clump.glb', 'Bush_Common_Flowers.glb', 'Grass_Wispy_Tall.glb',
+      'Clover_1.glb', 'Grass_Common_Tall.glb', 'Bush_Large.glb', 'Petal_4.glb', 'Plant_7_Big.glb',
+      'Grass_Large_Extruded.glb', 'Grass_Small.glb', 'Flower_4_Group.glb', 'Flower_2.glb',
+      'Flower_3_Clump.glb', 'Petal_2.glb', 'Bush_Large_Flowers.glb', 'Flower_3_Group.glb', 'Bush.glb'
+    ];
+    const matchedFile = vegFiles.find(f => f.toLowerCase() === nameLower || nameLower.startsWith(f.toLowerCase().replace('.glb', '')));
+    if (matchedFile) {
+      return `${API_BASE_URL}/assets/environment/vegetation/${matchedFile}`;
+    }
+    return `${API_BASE_URL}/assets/environment/vegetation/Bush.glb`;
+  }
+
+  // 4. Characters
+  if (
+    nameLower.includes('soldier') ||
+    nameLower.includes('npc') ||
+    nameLower.includes('chef') ||
+    nameLower.includes('casual') ||
+    nameLower.includes('cow') ||
+    nameLower.includes('female') ||
+    nameLower.includes('male') ||
+    nameLower.includes('ninja') ||
+    nameLower.includes('viking') ||
+    nameLower.includes('worker') ||
+    nameLower.includes('knight') ||
+    nameLower.includes('wizard') ||
+    nameLower.includes('witch') ||
+    nameLower.includes('elf') ||
+    nameLower.includes('goblin') ||
+    nameLower.includes('pug') ||
+    nameLower.includes('doctor') ||
+    nameLower.includes('pirate') ||
+    nameLower.includes('zombie')
+  ) {
+    const charFiles = [
+      'Cowboy_Female.glb', 'BlueSoldier_Female.glb', 'Suit_Male.glb', 'Ninja_Male_Hair.glb',
+      'Pirate_Female.glb', 'Doctor_Female_Young.glb', 'Soldier_Female.glb', 'BlueSoldier_Male.glb',
+      'Viking_Female.glb', 'Zombie_Female.glb', 'Worker_Female.glb', 'Pirate_Male.glb',
+      'Knight_Golden_Male.glb', 'Casual3_Male.glb', 'Casual_Bald.glb', 'Suit_Female.glb',
+      'Ninja_Sand.glb', 'Casual_Male.glb', 'Viking_Male.glb', 'Casual2_Female.glb',
+      'Casual_Female.glb', 'Wizard.glb', 'Kimono_Male.glb', 'Doctor_Female_Old.glb',
+      'Ninja_Male.glb', 'Cowboy_Male.glb', 'Doctor_Male_Old.glb', 'Soldier_Male.glb',
+      'Elf.glb', 'tower_2.glb', 'Doctor_Male_Young.glb', 'Casual3_Female.glb',
+      'Ninja_Female.glb', 'Worker_Male.glb', 'Zombie_Male.glb', 'Knight_Male.glb',
+      'Cow.glb', 'Casual2_Male.glb', 'Pug.glb', 'Chef_Male.glb', 'Chef_Female.glb',
+      'Chef_Hat.glb', 'Chef_Male-processed.glb', 'OldClassy_Female.glb', 'Goblin_Male.glb',
+      'tower.glb', 'Witch.glb', 'Knight_Golden_Female.glb', 'OldClassy_Male.glb',
+      'Ninja_Sand_Female.glb', 'Kimono_Female.glb'
+    ];
+    const matchedFile = charFiles.find(f => f.toLowerCase() === nameLower || nameLower.startsWith(f.toLowerCase().replace('.glb', '')));
+    if (matchedFile) {
+      return `${API_BASE_URL}/assets/characters/npcs/${matchedFile}`;
+    }
+    return `${API_BASE_URL}/assets/characters/npcs/Soldier_Male.glb`;
+  }
+
+  // 5. Default heuristic for any other paths/structures
+  if (nameLower.includes('tree')) {
+    return `${API_BASE_URL}/assets/environment/trees/Pine_1.glb`;
+  }
+  return `${API_BASE_URL}/assets/environment/rocks/Rock_Medium_1.glb`;
+}
+
+
+// ─── Per-tool brush profile (each sculpt/paint tool remembers its own settings) ───
+export type BrushMaskId = 'softCircle' | 'hardCircle' | 'star' | 'hexagon' | 'starOutline' | 'square';
+
+export interface BrushProfile {
+  size: number;
+  strength: number;
+  maskId: BrushMaskId;
+}
+
+export type ToolBrushProfiles = Record<string, BrushProfile>;
+
+const DEFAULT_BRUSH_PROFILES: ToolBrushProfiles = {
+  raise:   { size: 12, strength: 0.25, maskId: 'softCircle' },
+  lower:   { size: 12, strength: 0.25, maskId: 'softCircle' },
+  smooth:  { size: 20, strength: 0.35, maskId: 'softCircle' },
+  flatten: { size: 25, strength: 0.50, maskId: 'hardCircle' },
+  paint:   { size: 10, strength: 0.25, maskId: 'softCircle' },
+};
+
 export interface EditorState {
   isEditorOpen: boolean;
   setIsEditorOpen: (open: boolean) => void;
@@ -127,8 +285,12 @@ export interface EditorState {
   setBrushStrength: (strength: number) => void;
   brushRotation: number;
   setBrushRotation: (rotation: number) => void;
-  brushMaskId: 'softCircle' | 'hardCircle' | 'star' | 'hexagon' | 'starOutline' | 'square';
-  setBrushMaskId: (maskId: 'softCircle' | 'hardCircle' | 'star' | 'hexagon' | 'starOutline' | 'square') => void;
+  brushMaskId: BrushMaskId;
+  setBrushMaskId: (maskId: BrushMaskId) => void;
+
+  // Per-tool brush profiles: each tool remembers its own size/strength/mask
+  toolBrushProfiles: ToolBrushProfiles;
+  activeToolKey: string;
   
   brushHoverPos: [number, number, number] | null;
   setBrushHoverPos: (pos: [number, number, number] | null) => void;
@@ -148,11 +310,25 @@ export interface EditorState {
 
   cameraFocusTarget: [number, number, number] | null;
   setCameraFocusTarget: (target: [number, number, number] | null) => void;
+  cameraFocusObjectId: string | null;
+  setCameraFocusObjectId: (id: string | null) => void;
   vegetationBrushActive: boolean;
   setVegetationBrushActive: (active: boolean) => void;
 
   isSaving: boolean;
   setIsSaving: (saving: boolean) => void;
+
+  // Multi-layer Splat Paint (4 RGBA channels)
+  activePaintLayer: 0 | 1 | 2 | 3;
+  setActivePaintLayer: (layer: 0 | 1 | 2 | 3) => void;
+  paintLayerMaterials: [string | null, string | null, string | null, string | null];
+  setPaintLayerMaterial: (layer: number, matId: string | null) => void;
+  paintLayerColors: [string, string, string, string];
+  setPaintLayerColor: (layer: number, color: string) => void;
+
+  // Flatten to exact height
+  flattenTargetHeight: number;
+  setFlattenTargetHeight: (h: number) => void;
 
   // Custom Paint Blueprint Library (Paralives Feature)
   savedPaintBlueprints: CustomPaintBlueprint[];
@@ -407,64 +583,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const parsed = JSON.parse(saved) as MapItem[];
         
         // Path Sanitization (Fix legacy paths from local storage)
-        const sanitized = parsed.map(item => {
-          let path = item.path;
-
-          if (path.includes('asset-enverement/') || path.includes('assets-model/asset-')) {
-            const fileName = path.split('/').pop() || '';
-            const nameLower = fileName.toLowerCase();
-            if (nameLower.includes('tree') || nameLower.includes('birch') || nameLower.includes('pine') || nameLower.includes('oak')) {
-              return { ...item, path: `/assets/environment/trees/${fileName}` };
-            }
-            return { ...item, path: `/assets/environment/vegetation/${fileName}` };
-          }
-
-          if (path.includes('nature/trees/')) {
-            path = path.replace('nature/trees/', 'trees/');
-          }
-          if (path.includes('nature/vegetation/')) {
-            path = path.replace('nature/vegetation/', 'vegetation/');
-          }
-
-          // Fix "assets-model/assets-env/" prefix → proper environment path
-          if (path.includes('assets-model/assets-env')) {
-            const fileName = path.split('/').pop() || '';
-            return { ...item, path: `/assets/environment/props/decor/${fileName}` };
-          }
-
-          // Strip any accidental "assets-model/" prefix for non-NPC assets
-          if (path.startsWith('assets-model/') || path.startsWith('/assets-model/')) {
-            const rest = path.replace(/^\/?assets-model\//, '');
-            // If remaining path looks like an environment asset, reroute
-            if (rest.startsWith('assets-env') || rest.startsWith('asset-')) {
-              const fileName = rest.split('/').pop() || '';
-              return { ...item, path: `/assets/environment/props/decor/${fileName}` };
-            }
-          }
-
-          // Fix legacy /models/environment/ paths
-          if (path.includes('/models/environment/')) {
-            const fileName = path.split('/').pop()?.replace(/_/g, '-') || '';
-            const kingdomAssets = [
-              'bridge-straight', 'tower-square', 'wall', 'wall-corner',
-              'wall-pillar', 'tree-large', 'gate', 'stairs-stone',
-              'rocks-large', 'tower-top'
-            ];
-            if (kingdomAssets.some(a => fileName.startsWith(a))) {
-              const finalName = fileName === 'wall-buttress.glb' ? 'wall.glb' : fileName;
-              return { ...item, path: `/assets/environment/structures/kingdom/${finalName}` };
-            } else {
-              return { ...item, path: `/assets/environment/props/decor/${fileName}` };
-            }
-          }
-
-          // Prepend API base URL for valid server-relative paths
-          if (path.startsWith('/assets/') || path.startsWith('/assets-model/') || path.startsWith('/assets/environment/structures/kingdom/') || path.startsWith('/assets-tree/')) {
-            path = `${API_BASE_URL}${path}`;
-          }
-
-          return { ...item, path };
-        });
+        const sanitized = parsed.map(item => ({
+          ...item,
+          path: sanitizeAssetPath(item.path)
+        }));
 
         set({ items: sanitized, history: [sanitized], historyIndex: 0 });
       } catch (e) {
@@ -741,36 +863,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       if (res.ok) {
         const data = await res.json();
         
-        const sanitizedItems = (data.items || []).map((item: any) => {
-          let path = item.path;
-
-          // Fix legacy broken path prefixes from database-saved maps
-          if (path.includes('asset-enverement/') || path.includes('assets-model/asset-')) {
-            const fileName = path.split('/').pop() || '';
-            const nameLower = fileName.toLowerCase();
-            if (nameLower.includes('tree') || nameLower.includes('birch') || nameLower.includes('pine') || nameLower.includes('oak')) {
-              path = `/assets/environment/trees/${fileName}`;
-            } else {
-              path = `/assets/environment/vegetation/${fileName}`;
-            }
-          } else if (path.includes('assets-model/assets-env')) {
-            const fileName = path.split('/').pop() || '';
-            path = `/assets/environment/props/decor/${fileName}`;
-          }
-
-          if (path.includes('nature/trees/')) {
-            path = path.replace('nature/trees/', 'trees/');
-          }
-          if (path.includes('nature/vegetation/')) {
-            path = path.replace('nature/vegetation/', 'vegetation/');
-          }
-
-          // Prepend API base URL for valid server-relative paths
-          if (path.startsWith('/assets/') || path.startsWith('/assets-model/') || path.startsWith('/assets/environment/structures/kingdom/') || path.startsWith('/assets-tree/')) {
-            path = `${API_BASE_URL}${path}`;
-          }
-          return { ...item, path };
-        });
+        const sanitizedItems = (data.items || []).map((item: any) => ({
+          ...item,
+          path: sanitizeAssetPath(item.path)
+        }));
 
         const loadedEnv = data.settings?.environment ?? 'STORM';
         useStore.getState().setEnvironment(loadedEnv as any);
@@ -919,8 +1015,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   paintMode: false,
   setPaintMode: (paintMode) => set({ paintMode }),
-  brushSize: 10,
-  setBrushSize: (brushSize) => set({ brushSize }),
+  brushSize: 12,
+  setBrushSize: (brushSize) => {
+    const state = get();
+    const toolKey = state.activeToolKey;
+    set((s) => ({
+      brushSize,
+      toolBrushProfiles: {
+        ...s.toolBrushProfiles,
+        [toolKey]: { ...(s.toolBrushProfiles[toolKey] || {}), size: brushSize }
+      }
+    }));
+  },
   brushColor: '#5a4d3a',
   setBrushColor: (brushColor) => set({ brushColor }),
   brushTextureId: null,
@@ -932,9 +1038,42 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   terrainMode: 'paint',
-  setTerrainMode: (terrainMode) => set({ terrainMode }),
+  setTerrainMode: (newMode) => {
+    const state = get();
+    // Save current tool's brush profile before switching
+    const oldKey = state.activeToolKey;
+    const newKey = newMode === 'paint' ? 'paint' : state.sculptTool;
+    const newProfile = state.toolBrushProfiles[newKey] || DEFAULT_BRUSH_PROFILES[newKey] || { size: 12, strength: 0.25, maskId: 'softCircle' as BrushMaskId };
+    set((s) => ({
+      terrainMode: newMode,
+      activeToolKey: newKey,
+      toolBrushProfiles: {
+        ...s.toolBrushProfiles,
+        [oldKey]: { size: s.brushSize, strength: s.brushStrength, maskId: s.brushMaskId }
+      },
+      brushSize: newProfile.size,
+      brushStrength: newProfile.strength,
+      brushMaskId: newProfile.maskId
+    }));
+  },
   sculptTool: 'raise',
-  setSculptTool: (sculptTool) => set({ sculptTool }),
+  setSculptTool: (newTool) => {
+    const state = get();
+    const oldKey = state.activeToolKey;
+    const newProfile = state.toolBrushProfiles[newTool] || DEFAULT_BRUSH_PROFILES[newTool] || { size: 12, strength: 0.25, maskId: 'softCircle' as BrushMaskId };
+    set((s) => ({
+      sculptTool: newTool,
+      terrainMode: 'sculpt' as const,
+      activeToolKey: newTool,
+      toolBrushProfiles: {
+        ...s.toolBrushProfiles,
+        [oldKey]: { size: s.brushSize, strength: s.brushStrength, maskId: s.brushMaskId }
+      },
+      brushSize: newProfile.size,
+      brushStrength: newProfile.strength,
+      brushMaskId: newProfile.maskId
+    }));
+  },
   sculptData: null,
   setSculptData: (sculptData) => {
     set({ sculptData });
@@ -942,11 +1081,35 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
   
   brushStrength: 0.25,
-  setBrushStrength: (brushStrength) => set({ brushStrength }),
+  setBrushStrength: (brushStrength) => {
+    const state = get();
+    const toolKey = state.activeToolKey;
+    set((s) => ({
+      brushStrength,
+      toolBrushProfiles: {
+        ...s.toolBrushProfiles,
+        [toolKey]: { ...(s.toolBrushProfiles[toolKey] || {}), strength: brushStrength }
+      }
+    }));
+  },
   brushRotation: 0,
   setBrushRotation: (brushRotation) => set({ brushRotation }),
   brushMaskId: 'softCircle',
-  setBrushMaskId: (brushMaskId) => set({ brushMaskId }),
+  setBrushMaskId: (brushMaskId) => {
+    const state = get();
+    const toolKey = state.activeToolKey;
+    set((s) => ({
+      brushMaskId,
+      toolBrushProfiles: {
+        ...s.toolBrushProfiles,
+        [toolKey]: { ...(s.toolBrushProfiles[toolKey] || {}), maskId: brushMaskId }
+      }
+    }));
+  },
+
+  // Per-tool brush profiles
+  toolBrushProfiles: DEFAULT_BRUSH_PROFILES,
+  activeToolKey: 'paint',
   
   brushHoverPos: null,
   setBrushHoverPos: (brushHoverPos) => set({ brushHoverPos }),
@@ -979,14 +1142,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   applyPaintBlueprint: (id) => {
     const blueprint = get().savedPaintBlueprints.find(b => b.id === id);
     if (blueprint) {
-      set({
+      set((s) => ({
         activePaintBlueprintId: id,
         brushMaskId: blueprint.maskType,
         brushTextureId: blueprint.textureId,
         brushColor: blueprint.brushColor,
         brushSize: blueprint.defaultSize,
-        brushStrength: blueprint.defaultIntensity
-      });
+        brushStrength: blueprint.defaultIntensity,
+        // Also update the paint tool's profile so it remembers this blueprint's settings
+        toolBrushProfiles: {
+          ...s.toolBrushProfiles,
+          paint: { size: blueprint.defaultSize, strength: blueprint.defaultIntensity, maskId: blueprint.maskType }
+        }
+      }));
     }
   },
 
@@ -1116,10 +1284,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   cameraFocusTarget: null,
   setCameraFocusTarget: (target) => set({ cameraFocusTarget: target }),
+  cameraFocusObjectId: null,
+  setCameraFocusObjectId: (id) => set({ cameraFocusObjectId: id }),
   vegetationBrushActive: false,
   setVegetationBrushActive: (active) => set(() => {
     if (active) {
-      // Deactivate normal assets carrying and normal paintMode when activating vegetation brush
       return {
         vegetationBrushActive: true,
         paintMode: false,
@@ -1132,5 +1301,27 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         vegetationBrushActive: false
       };
     }
-  })
+  }),
+
+  // Multi-layer Splat Paint
+  activePaintLayer: 0,
+  setActivePaintLayer: (layer) => set({ activePaintLayer: layer }),
+  paintLayerMaterials: [null, null, null, null],
+  setPaintLayerMaterial: (layer, matId) => set((state) => {
+    const next = [...state.paintLayerMaterials] as [string|null, string|null, string|null, string|null];
+    next[layer] = matId;
+    debouncedSave();
+    return { paintLayerMaterials: next };
+  }),
+  paintLayerColors: ['#3d5c36', '#7c6a4a', '#5a4d3a', '#e8e0d0'],
+  setPaintLayerColor: (layer, color) => set((state) => {
+    const next = [...state.paintLayerColors] as [string, string, string, string];
+    next[layer] = color;
+    debouncedSave();
+    return { paintLayerColors: next };
+  }),
+
+  // Flatten to exact height
+  flattenTargetHeight: 0,
+  setFlattenTargetHeight: (h) => set({ flattenTargetHeight: h }),
 }));

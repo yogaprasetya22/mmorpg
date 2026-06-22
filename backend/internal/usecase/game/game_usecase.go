@@ -44,6 +44,7 @@ type GameUsecase interface {
 	SellItem(playerID string, playerItemID string) error
 	RefineItem(playerID string, playerItemID string) error
 	SyncPlayerStatsFromDB(playerID string) error
+	UpdateMaxPlayerStats(playerID string)
 	GetActivePlayer(playerID string) *domain.Player
 	SetEventCallback(cb func(eventType string, data interface{}))
 

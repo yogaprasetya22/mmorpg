@@ -642,15 +642,15 @@ Current objects already placed on the map:
 The map size is roughly 200m x 200m. The center is at coordinates [0, 0, 0].
 You can place meshes by specifying:
 - path: The exact model path from the library list above.
-- type: The category of the model (usually matching the "category" in the library, e.g. "tree", "env", "kingdom").
-- pos: [X, Y, Z] floats. Place Y at 0 unless it is stacked/floating (e.g. towers or walls on top of each other). X and Z must be between -90 and 90.
+- type: The category of the model (usually matching the "category" in the library, e.g. "trees", "vegetation", "rocks", "characters").
+- pos: [X, Y, Z] floats. Place Y at 0. X and Z must be between -90 and 90.
 - rot: [X, Y, Z] rotation in radians (usually only Y rotation needs randomization: 0 to 6.28). Keep X and Z rot at 0 unless tilted.
-- sca: [X, Y, Z] scale factors (typically 1.0, 1.0, 1.0. Trees can scale from 0.8 to 2.5; castles/towers from 1.5 to 3.5).
+- sca: [X, Y, Z] scale factors (typically 1.0, 1.0, 1.0. Trees can scale from 0.8 to 2.5; rocks from 0.5 to 4.0).
 
 You must support operations like:
 1. "banyak pohon dengan ukuran pas": Choose tree paths from the library and generate scattered, nicely randomized trees (X and Z at least 3m to 15m apart so they do not overlap) with random sizes (e.g. scales between 0.8 to 2.2).
 2. "tambahkan rerumputan": Spawn scattered grass patches or rocks around the map.
-3. "istana yang baik" or "istana megah": Pick kingdom building parts (walls, towers, gates, ruins) and align them logically to create a castle layout (e.g., walls forming a square/rectangle, towers at corners, a gate in the front).
+3. "formasi bebatuan" or "bebatuan besar": Pick rock paths and align them to form scenic rock clusters.
 
 You MUST respond ONLY with a raw JSON object containing these exact fields and matching types:
 {
@@ -667,7 +667,7 @@ You MUST respond ONLY with a raw JSON object containing these exact fields and m
   "items": [
     {
       "id": "unique_string_id" (generate a unique string ID for this item, e.g. "ai_tree_1"),
-      "type": "tree" | "env" | "kingdom",
+      "type": "trees" | "vegetation" | "rocks" | "characters",
       "path": "exact_model_path",
       "pos": [x, y, z],
       "rot": [x, y, z],
@@ -979,11 +979,13 @@ func findClosestAsset(aiPath string, availableAssets []AIAssetInfo) string {
 	}
 
 	// 5. Semantic category fallback
-	aiCategory := "env"
-	if strings.Contains(aiPathClean, "tree") || strings.Contains(aiPathClean, "wood") || strings.Contains(aiPathClean, "pine") || strings.Contains(aiPathClean, "bush") {
-		aiCategory = "tree"
-	} else if strings.Contains(aiPathClean, "wall") || strings.Contains(aiPathClean, "gate") || strings.Contains(aiPathClean, "tower") || strings.Contains(aiPathClean, "castle") || strings.Contains(aiPathClean, "kingdom") {
-		aiCategory = "kingdom"
+	aiCategory := "rocks"
+	if strings.Contains(aiPathClean, "tree") || strings.Contains(aiPathClean, "wood") || strings.Contains(aiPathClean, "pine") || strings.Contains(aiPathClean, "birch") || strings.Contains(aiPathClean, "maple") {
+		aiCategory = "trees"
+	} else if strings.Contains(aiPathClean, "bush") || strings.Contains(aiPathClean, "flower") || strings.Contains(aiPathClean, "grass") || strings.Contains(aiPathClean, "fern") || strings.Contains(aiPathClean, "mushroom") || strings.Contains(aiPathClean, "plant") {
+		aiCategory = "vegetation"
+	} else if strings.Contains(aiPathClean, "soldier") || strings.Contains(aiPathClean, "npc") || strings.Contains(aiPathClean, "chef") || strings.Contains(aiPathClean, "casual") || strings.Contains(aiPathClean, "character") || strings.Contains(aiPathClean, "zombie") || strings.Contains(aiPathClean, "ninja") {
+		aiCategory = "characters"
 	}
 	
 	for _, asset := range availableAssets {

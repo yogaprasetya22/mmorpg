@@ -1,19 +1,38 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Loader2, Package, X, ChevronRight, Menu } from 'lucide-react';
+import { Loader2, Package, Menu, Layers, Sun, Settings } from 'lucide-react';
 import { useEditorStore } from '@/src/state/useEditorStore';
 
-// ─── IMPORT MODULAR SUB-COMPONENTS ───
+// ─── NEW MODULAR COMPONENTS ───
+import { EditorToolbar } from './editor/EditorToolbar';
+import { SceneHierarchy } from './editor/SceneHierarchy';
+
+// ─── EXISTING MODULES (unchanged internals) ───
 import { MapSettingsModule } from './editor/MapSettingsModule';
 import { AssetsLibraryModule } from './editor/AssetsLibraryModule';
 import { TransformsModule } from './editor/TransformsModule';
 import { TerrainEditorModule } from './editor/TerrainEditorModule';
 import { VegetationModule } from './editor/VegetationModule';
-import { SystemModule } from './editor/SystemModule';
 import { LightingSettingsModule } from './editor/LightingSettingsModule';
-import { AIPromptWidget } from './editor/AIPromptWidget';
 
+/**
+ * WorldEditorUI — Unity-inspired layout.
+ *
+ * Structure:
+ *   ┌──────────────────────────────────────┐
+ *   │ EditorToolbar (context + undo/save)  │
+ *   ├──────────┬───────────────────────────┤
+ *   │ Hierarchy│ Inspector (context-based) │
+ *   │ (scene   │  nothing → Assets+Scene   │
+ *   │  tree)   │  terrain → Terrain tools  │
+ *   │          │  mesh    → Transform      │
+ *   ├──────────┴───────────────────────────┤
+ *   │ Status bar (object count + health)   │
+ *   └──────────────────────────────────────┘
+ *
+ * Pure UI refactor — all store mechanisms unchanged.
+ */
 export const WorldEditorUI = () => {
   const {
     isEditorOpen,
@@ -26,12 +45,13 @@ export const WorldEditorUI = () => {
     fetchDynamicAssets,
     loadFromDatabase,
     items,
-    isSaving
+    isSaving,
   } = useEditorStore();
 
   const [mounted, setMounted] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
-  const [activeSection, setActiveSection] = useState<string | null>('elements');
+  const [globalTab, setGlobalTab] = useState<'assets' | 'scene' | 'lighting'>('assets');
+  const [terrainTab, setTerrainTab] = useState<'sculpt' | 'vegetation'>('sculpt');
 
   useEffect(() => {
     setMounted(true);
@@ -42,42 +62,16 @@ export const WorldEditorUI = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // 1. Sync sidebar active section when selectedId changes (from clicking objects in the canvas or hierarchy tree)
+  // Sync paint mode with terrain selection
   useEffect(() => {
-    if (selectedId && selectedId !== 'terrain') {
-      if (activeSection !== 'transforms') {
-        setActiveSection('transforms');
-      }
-      setPaintMode(false);
-    } else if (selectedId === 'terrain') {
-      if (activeSection !== 'terrain') {
-        setActiveSection('terrain');
-      }
+    if (selectedId === 'terrain') {
       setPaintMode(true);
-    } else if (!selectedId) {
-      if (activeSection === 'terrain') {
-        setActiveSection(null);
-      }
+    } else {
       setPaintMode(false);
     }
   }, [selectedId]);
 
-  // 2. Sync editor state when activeSection changes (from clicking manual accordion headers in the sidebar)
-  useEffect(() => {
-    if (activeSection === 'terrain') {
-      if (selectedId !== 'terrain') {
-        setSelectedId('terrain');
-      }
-      setPaintMode(true);
-    } else {
-      if (selectedId === 'terrain') {
-        setSelectedId(null);
-      }
-      setPaintMode(false);
-    }
-  }, [activeSection]);
-
-  // Keyboard Nudge & Shortkeys Listener
+  // Keyboard Nudge & Shortkeys Listener (unchanged mechanism)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isEditorOpen) return;
@@ -95,49 +89,17 @@ export const WorldEditorUI = () => {
 
       const { selectedId, brushSize, setBrushSize, brushStrength, setBrushStrength, setBrushMaskId } = useEditorStore.getState();
       if (selectedId === 'terrain') {
-        if (e.key === '1') {
-          setBrushMaskId('softCircle');
-          e.preventDefault();
-          return;
-        } else if (e.key === '2') {
-          setBrushMaskId('hardCircle');
-          e.preventDefault();
-          return;
-        } else if (e.key === '3') {
-          setBrushMaskId('star');
-          e.preventDefault();
-          return;
-        } else if (e.key === '4') {
-          setBrushMaskId('hexagon');
-          e.preventDefault();
-          return;
-        } else if (e.key === '5') {
-          setBrushMaskId('starOutline');
-          e.preventDefault();
-          return;
-        } else if (e.key === '6') {
-          setBrushMaskId('square');
-          e.preventDefault();
-          return;
-        }
+        if (e.key === '1') { setBrushMaskId('softCircle'); e.preventDefault(); return; }
+        else if (e.key === '2') { setBrushMaskId('hardCircle'); e.preventDefault(); return; }
+        else if (e.key === '3') { setBrushMaskId('star'); e.preventDefault(); return; }
+        else if (e.key === '4') { setBrushMaskId('hexagon'); e.preventDefault(); return; }
+        else if (e.key === '5') { setBrushMaskId('starOutline'); e.preventDefault(); return; }
+        else if (e.key === '6') { setBrushMaskId('square'); e.preventDefault(); return; }
 
-        if (e.key === '[') {
-          setBrushSize(Math.max(1, brushSize - 2));
-          e.preventDefault();
-          return;
-        } else if (e.key === ']') {
-          setBrushSize(Math.min(150, brushSize + 2));
-          e.preventDefault();
-          return;
-        } else if (e.key === '-') {
-          setBrushStrength(Math.max(0.01, brushStrength - 0.05));
-          e.preventDefault();
-          return;
-        } else if (e.key === '=' || e.key === '+') {
-          setBrushStrength(Math.min(1.0, brushStrength + 0.05));
-          e.preventDefault();
-          return;
-        }
+        if (e.key === '[') { setBrushSize(Math.max(1, brushSize - 2)); e.preventDefault(); return; }
+        else if (e.key === ']') { setBrushSize(Math.min(150, brushSize + 2)); e.preventDefault(); return; }
+        else if (e.key === '-') { setBrushStrength(Math.max(0.01, brushStrength - 0.05)); e.preventDefault(); return; }
+        else if (e.key === '=' || e.key === '+') { setBrushStrength(Math.min(1.0, brushStrength + 0.05)); e.preventDefault(); return; }
       }
 
       if (selectedIds.length === 0) return;
@@ -174,24 +136,89 @@ export const WorldEditorUI = () => {
 
   if (!mounted) return null;
 
-  const toggleSection = (section: string) => {
-    setActiveSection(activeSection === section ? null : section);
+  // ─── INSPECTOR CONTENT (context-sensitive) ───
+  const renderInspector = () => {
+    // Case 1: Terrain selected → Terrain tools
+    if (selectedId === 'terrain') {
+      return (
+        <div className="flex flex-col h-full">
+          {/* Terrain sub-tabs */}
+          <div className="flex gap-0.5 px-3 pt-2 pb-1 flex-shrink-0">
+            <button
+              onClick={() => setTerrainTab('sculpt')}
+              className={`flex-1 py-1.5 rounded-t-lg text-[8.5px] font-black uppercase tracking-wider transition-all cursor-pointer border-b-2 ${
+                terrainTab === 'sculpt'
+                  ? 'text-indigo-400 border-indigo-500 bg-indigo-500/5'
+                  : 'text-zinc-500 border-transparent hover:text-zinc-300'
+              }`}
+            >
+              🏔️ Sculpt & Paint
+            </button>
+            <button
+              onClick={() => setTerrainTab('vegetation')}
+              className={`flex-1 py-1.5 rounded-t-lg text-[8.5px] font-black uppercase tracking-wider transition-all cursor-pointer border-b-2 ${
+                terrainTab === 'vegetation'
+                  ? 'text-emerald-400 border-emerald-500 bg-emerald-500/5'
+                  : 'text-zinc-500 border-transparent hover:text-zinc-300'
+              }`}
+            >
+              🌿 Vegetation
+            </button>
+          </div>
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto custom-scrollbar px-3 pb-3 min-h-0">
+            {terrainTab === 'sculpt' ? <TerrainEditorModule /> : <VegetationModule />}
+          </div>
+        </div>
+      );
+    }
+
+    // Case 2: Mesh/object selected → Transform inspector
+    if (selectedId && selectedId !== 'terrain') {
+      return (
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-3 min-h-0">
+          <TransformsModule />
+        </div>
+      );
+    }
+
+    // Case 3: Nothing selected → Global scene tools
+    return (
+      <div className="flex flex-col h-full">
+        {/* Global sub-tabs */}
+        <div className="flex gap-0.5 px-3 pt-2 pb-1 flex-shrink-0 border-b border-zinc-800/40">
+          {([
+            { id: 'assets' as const, icon: <Layers className="w-3 h-3" />, label: 'Assets' },
+            { id: 'scene' as const, icon: <Settings className="w-3 h-3" />, label: 'Scene' },
+            { id: 'lighting' as const, icon: <Sun className="w-3 h-3" />, label: 'Lighting' },
+          ]).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setGlobalTab(tab.id)}
+              className={`flex-1 py-1.5 rounded-t-lg text-[8.5px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 border-b-2 ${
+                globalTab === tab.id
+                  ? 'text-blue-400 border-blue-500 bg-blue-500/5'
+                  : 'text-zinc-500 border-transparent hover:text-zinc-300'
+              }`}
+            >
+              {tab.icon} {tab.label}
+            </button>
+          ))}
+        </div>
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-3 pb-3 min-h-0">
+          {globalTab === 'assets' && <AssetsLibraryModule />}
+          {globalTab === 'scene' && <MapSettingsModule />}
+          {globalTab === 'lighting' && <LightingSettingsModule />}
+        </div>
+      </div>
+    );
   };
 
-  const SECTIONS = [
-    { id: 'elements', label: 'Asset blueprints', component: <AssetsLibraryModule /> },
-    { id: 'transforms', label: 'Mesh transforms', component: <TransformsModule /> },
-    { id: 'terrain', label: 'Terrain sculpt & paint', component: <TerrainEditorModule /> },
-    { id: 'vegetation', label: 'Vegetation spawner', component: <VegetationModule /> },
-    { id: 'lighting', label: 'Atmosphere & Lighting', component: <LightingSettingsModule /> },
-    { id: 'system', label: 'Workspace operations', component: <SystemModule /> }
-  ];
-
   return (
-    <div className="fixed inset-0 z-[9999] pointer-events-none flex justify-between select-none text-zinc-200">
+    <div className="fixed inset-0 z-[9999] pointer-events-none flex select-none text-zinc-200">
 
-
-      {/* ─── INITIALIZING LOADING OVERLAY ─── */}
+      {/* ─── LOADING OVERLAY ─── */}
       {isEditorOpen && isInitializing && (
         <div className="fixed inset-0 z-[10005] bg-zinc-950/85 backdrop-blur-md flex flex-col items-center justify-center pointer-events-auto">
           <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
@@ -213,97 +240,71 @@ export const WorldEditorUI = () => {
         </div>
       )}
 
-      {/* ─── MODULAR LEFT SIDEBAR DOCK (SHADCN UI SPEC) ─── */}
+      {/* ─── MAIN EDITOR PANEL ─── */}
       {isEditorOpen && (
-        <div className="world-editor-ui w-[310px] h-screen bg-zinc-950/90 border-r border-zinc-900 flex flex-col pointer-events-auto z-[9999] shadow-2xl relative overflow-hidden font-sans backdrop-blur-xl">
+        <div className="world-editor-ui w-[420px] h-screen bg-zinc-950/95 border-r border-zinc-800/60 flex flex-col pointer-events-auto z-[9999] shadow-2xl relative overflow-hidden font-sans backdrop-blur-xl">
 
-          {/* ─── SYNCHRONOUS DATABASE SYNC OVERLAY ─── */}
+          {/* ─── SAVING OVERLAY ─── */}
           {isSaving && (
             <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-md z-[10000] flex flex-col items-center justify-center animate-in fade-in duration-350">
               <div className="relative flex items-center justify-center">
-                {/* Ring 1: Pulse Glow */}
                 <div className="absolute w-16 h-16 rounded-full border border-blue-500/20 animate-ping duration-1000" />
-                {/* Ring 2: Spinning outer border */}
                 <div className="w-12 h-12 rounded-full border-t-2 border-r-2 border-b-2 border-transparent border-t-blue-500 border-r-indigo-500 animate-spin" />
-                {/* Core Center Pulse */}
                 <div className="absolute w-3 h-3 rounded-full bg-blue-500 shadow-[0_0_12px_#3b82f6] animate-pulse" />
               </div>
-              <span className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-zinc-300 mt-4 animate-pulse">
-                Saving Workspace
-              </span>
-              <span className="text-[7.5px] font-bold text-zinc-500 mt-1 uppercase tracking-widest">
-                Syncing with PostgreSQL...
-              </span>
+              <span className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-zinc-300 mt-4 animate-pulse">Saving Workspace</span>
+              <span className="text-[7.5px] font-bold text-zinc-500 mt-1 uppercase tracking-widest">Syncing with PostgreSQL...</span>
             </div>
           )}
 
-          {/* Header Branding */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-900/60 bg-zinc-950/40 flex-shrink-0">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6] animate-pulse" />
-              <h3 className="text-[11px] font-extrabold tracking-[0.15em] text-zinc-100 uppercase">
-                Jagres MAP STUDIO
-              </h3>
+          {/* Row 1: Top Toolbar */}
+          <EditorToolbar />
+
+          {/* Row 2: Main content — Hierarchy (left) + Inspector (right) */}
+          <div className="flex-1 flex min-h-0 overflow-hidden">
+
+            {/* Left: Scene Hierarchy (always visible) */}
+            <div className="w-[145px] flex-shrink-0 border-r border-zinc-800/40 overflow-hidden flex flex-col">
+              <SceneHierarchy />
             </div>
 
-            {/* Quick Exit */}
-            <button
-              onClick={() => setIsEditorOpen(false)}
-              className="p-1 hover:bg-zinc-900 rounded-md text-zinc-500 hover:text-white transition-all duration-200 outline-none cursor-pointer"
-              title="Close Workspace"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Scrolling Content Panel */}
-          <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col">
-
-            {/* Module 1: Core Map Settings (Search, circular blue-knob sliders, Save button) */}
-            <MapSettingsModule />
-
-            {/* Accordion List (Elements, Light, Water, etc.) */}
-            <div className="flex flex-col border-t border-zinc-900">
-              {SECTIONS.map((sec) => (
-                <div key={sec.id} className="border-b border-zinc-900/40">
+            {/* Right: Context-Sensitive Inspector */}
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+              {/* Inspector header */}
+              <div className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-800/40 bg-zinc-950/60 flex-shrink-0">
+                <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500">
+                  {selectedId === 'terrain' ? 'Terrain Inspector' : selectedId ? 'Object Inspector' : 'Scene Inspector'}
+                </span>
+                {selectedId && (
                   <button
-                    onClick={() => toggleSection(sec.id)}
-                    className={`w-full text-left px-4 py-2.5 text-[10px] font-semibold tracking-wider transition-all duration-200 flex items-center justify-between outline-none cursor-pointer ${activeSection === sec.id
-                        ? 'bg-zinc-900/40 text-blue-400 border-l-2 border-blue-500 font-bold'
-                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/10 border-l-2 border-transparent'
-                      }`}
+                    onClick={() => setSelectedId(null)}
+                    className="text-[7px] font-bold text-zinc-600 hover:text-zinc-300 uppercase tracking-wider cursor-pointer transition-colors"
                   >
-                    <span className="uppercase">{sec.label}</span>
-                    <ChevronRight className={`w-3 h-3 text-zinc-500 transition-transform duration-200 ${activeSection === sec.id ? 'rotate-90 text-blue-500' : ''}`} />
+                    ← Back
                   </button>
-                  {activeSection === sec.id && (
-                    <div className="px-4 pb-4 pt-1 bg-zinc-950/20 border-t border-zinc-900/30 animate-in fade-in duration-200">
-                      {sec.component}
-                    </div>
-                  )}
-                </div>
-              ))}
+                )}
+              </div>
+              {/* Inspector body */}
+              {renderInspector()}
             </div>
-
           </div>
 
-          {/* Telemetry diagnostics footer */}
-          <div className="px-4 py-2.5 bg-zinc-950/80 border-t border-zinc-900/60 flex items-center justify-between text-[9px] font-semibold tracking-wider text-zinc-500 flex-shrink-0">
+          {/* Row 3: Status Bar */}
+          <div className="px-3 py-2 bg-zinc-950/80 border-t border-zinc-800/50 flex items-center justify-between text-[8px] font-semibold tracking-wider text-zinc-500 flex-shrink-0">
             <span className="flex items-center gap-1.5 text-zinc-400">
-              <Package className="w-3.5 h-3.5 text-blue-500" />
-              PLACED LAYERS: {items.length}
+              <Package className="w-3 h-3 text-blue-500" />
+              {items.length} placed
+            </span>
+            <span className="text-zinc-600">
+              [ ] brush • Shift+drag invert • Ctrl+Z undo
             </span>
             <span className="text-emerald-500 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-              OPTIMAL
+              OK
             </span>
           </div>
-
         </div>
       )}
-
-      {/* ─── MODULAR RIGHT SIDEBAR DOCK (DEEPSEEK AI) ─── */}
-      <AIPromptWidget />
 
     </div>
   );

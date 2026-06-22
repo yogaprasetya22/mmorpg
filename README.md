@@ -78,7 +78,7 @@ Stores the physical properties of multi-map zones:
 Tracks every 3D model placed in the sandbox:
 * `id` (Primary Key)
 * `map_config_id` (Foreign Key referencing `map_configs`)
-* `path` (Pristine relative pathway, e.g., `/assets-model/kingdom/wall.glb`)
+* `path` (Pristine relative pathway, e.g., `/assets/environment/trees/Pine_1.glb`)
 * `pos_x`, `pos_y`, `pos_z` (Position coordinates)
 * `rot_x`, `rot_y`, `rot_z` (Rotation quaternions or Euler angles)
 * `scale_x`, `scale_y`, `scale_z` (Scale vectors)
@@ -93,7 +93,7 @@ Maintains individual stats of monster classes:
 
 ## 🌟 4. Advanced Systems Already Built
 
-1. **Dynamic Asset Scanner**: The backend recursively crawls `./assets-model` to dynamically deliver available `.glb` files over an API. This allows developers to add new assets by just putting a file in a folder.
+1. **Dynamic Asset Scanner**: The backend recursively crawls `./backend/assets/environment` to dynamically deliver available `.glb` files over an API. This allows developers to add new assets by just putting a file in a folder.
 2. **Authoritative AI State Machine**: Monsters operate on a server-controlled AI cycle:
    * **Patrolling**: Wandering around spawn points.
    * **Chasing**: Locking onto target players using a robust aggro system (first strike generates lock).
@@ -107,7 +107,7 @@ Maintains individual stats of monster classes:
 ---
 
 > [!TIP]
-> **To add new maps, assets, or monsters**: Simply drop new `.glb` files into the backend `assets-model` folder, configure a spawn point using the World Editor, and the server will automatically distribute them across the multiplayer canvas!
+> **To add new maps, assets, or monsters**: Simply drop new `.glb` files into the backend `assets` folder under the appropriate environment subfolder, configure a spawn point using the World Editor, and the server will automatically distribute them across the multiplayer canvas!
 
 ---
 

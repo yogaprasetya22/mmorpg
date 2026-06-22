@@ -31,6 +31,7 @@
 | 19 | Zero-Re-Render Architecture | `RemotePlayersRenderer.tsx`, `AvatarModel.tsx` | React reconciliation storm (500+ re-renders/sec) | [Stage 10: Performance](wiki/architecture/10_performance_optimization.md) |
 | 20 | Terrain Height Spatial Cache | `terrainCache.ts`, both remote renderers | 1,680 BVH raycasts/sec → FPS drop | [Stage 10: Performance](wiki/architecture/10_performance_optimization.md) |
 | 21 | Exponential Smoothing Interpolation | `RemotePlayersRenderer.tsx` | Object allocation storm (560 alloc/sec) | [Stage 10: Performance](wiki/architecture/10_performance_optimization.md) |
+| 22 | sanitizeAssetPath / Dynamic Assets | `useEditorStore.ts`, `config_handler.go` | 404 GLB/Assets dikirim ke Three.js | [Stage 3: Frontend Client State](wiki/architecture/03_frontend_state.md) |
 
 ---
 
@@ -579,6 +580,33 @@ smoothPos.current.x += (targetX - smoothPos.current.x) * factor;
 - Change `SMOOTH_TAU` above 0.15 — too laggy, 300ms+ perceived delay
 
 **Alasan:** The old buffer system allocated `{x, y, z, rotation, timestamp}` objects every network update (20Hz × 28 entities = 560/sec) plus `array.shift()` GC. Exponential smoothing achieves the same 160ms convergence with zero allocations.
+
+---
+
+### 22. 🎨 Multi-Layer Splat Texture — Dirty Flag
+
+**File:** `frontend/src/components/game/environment/StormEnvironment.tsx`
+* **Mekanisme**: Perubahan splat texture canvas di-upload ke GPU hanya 1 kali per frame di dalam hook `useFrame` menggunakan flag `dirtyPaintRef`.
+* **Jangan**: Panggil `paintTexture.needsUpdate = true` di dalam *mouse/pointer event handlers* langsung (seperti `onPointerMove`).
+* **Alasan**: Melakukan update/upload texture ke GPU pada setiap pointer event akan menyebabkan drop FPS parah karena memory upload overhead pada event loop berkecepatan tinggi.
+
+---
+
+### 23. 🪓 Resolusi Sculpt 512x512 & Async BVH
+
+**File:** `frontend/src/components/game/environment/StormEnvironment.tsx`
+* **Mekanisme**: Resolusi sculpt canvas dan mesh menggunakan 512x512. Rekonstruksi BVH Tree `boundsTree.refit()` didefer secara asinkronus (tidak langsung memblokir event loop utama pointer).
+* **Jangan**: Jalankan `boundsTree.refit()` atau `computeVertexNormals()` secara sinkron dalam thread `onPointerMove` event handler.
+* **Alasan**: Mesh 512x512 memiliki jumlah vertex yang jauh lebih besar. Sinkronisasi refit BVH/hitung normal pada thread pointer move event loop langsung akan membekukan UI thread dan memicu stuttering hebat.
+
+---
+
+### 24. 🌲 Instanced Vegetation Rendering
+
+**File:** `frontend/src/components/game/environment/InstancedVegetationRenderer.tsx`
+* **Mekanisme**: Seluruh pohon, rumput, dan bebatuan kecil prosedural dikelompokkan berdasarkan model path dan dirender menggunakan `THREE.InstancedMesh` dengan **1 draw call per model path**.
+* **Jangan**: Ubah kembali vegetasi menjadi mesh tunggal individual (`<primitive object={...} />` terpisah untuk setiap pohon).
+* **Alasan**: Ratusan pohon individu akan menghasilkan ratusan draw calls yang menghancurkan performa GPU. Sistem instancing meminimalkan overhead rendering hingga 60 FPS stabil.
 
 ---
 

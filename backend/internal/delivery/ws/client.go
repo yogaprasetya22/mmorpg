@@ -219,6 +219,11 @@ func (c *Client) ReadPump() {
 				} else {
 					c.Hub.BroadcastChatMessage("Server", fmt.Sprintf("🔄 Sukses sinkronisasi data database untuk %s!", c.Username))
 				}
+			} else if strings.HasPrefix(msg.Msg, "/max-stats") {
+				player := c.Hub.gameUsecase.GetActivePlayer(c.PlayerID)
+				if player != nil {
+					c.Hub.gameUsecase.UpdateMaxPlayerStats(c.PlayerID)
+				}
 			} else if strings.HasPrefix(msg.Msg, "/godgear") {
 				player := c.Hub.gameUsecase.GetActivePlayer(c.PlayerID)
 				if player != nil {
