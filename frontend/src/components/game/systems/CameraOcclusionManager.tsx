@@ -126,7 +126,7 @@ export const CameraOcclusionManager = () => {
 
   useFrame((_, delta) => {
     frameCounter.current++;
-    const shouldRaycast = frameCounter.current % 3 === 0;
+    const shouldRaycast = frameCounter.current % 6 === 0;
 
     const playerPosArr = useStore.getState().playerPosition;
     if (!playerPosArr) return;
@@ -153,7 +153,8 @@ export const CameraOcclusionManager = () => {
 
       // 2. RAYCAST
       _raycaster.set(camPos, direction);
-      _raycaster.far = camPos.distanceTo(_playerPos) - 0.2;
+      // Cap occlusion ray distance so only nearby objects are tested (saves BVH traversal on distant colliders)
+      _raycaster.far = Math.min(camPos.distanceTo(_playerPos) - 0.2, 80);
       const intersects = _raycaster.intersectObjects(colliders, true);
 
       activeFrameKeys.current.clear();

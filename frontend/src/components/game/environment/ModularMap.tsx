@@ -1,11 +1,14 @@
 'use client';
 
 import { useMemo, useEffect, useRef, Suspense, Component, ReactNode } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import { useEditorStore } from '@/src/state/useEditorStore';
 import { InstancedStaticCollider } from 'bvhecctrl';
 import * as THREE from 'three';
 import { registerCollider, unregisterCollider } from '@/src/core/utils/globalRaycaster';
+import { windUniforms } from '@/src/core/utils/wind';
+import { isGrassAssetPath, GrassField } from './GrassField';
 
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 
@@ -13,6 +16,11 @@ import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-
 (THREE.BufferGeometry.prototype as any).computeBoundsTree = computeBoundsTree;
 (THREE.BufferGeometry.prototype as any).disposeBoundsTree = disposeBoundsTree;
 (THREE.Mesh.prototype as any).raycast = acceleratedRaycast;
+
+// Module-level scratch objects (zero alloc)
+const _tempObj = new THREE.Object3D();
+const _tempMatrix = new THREE.Matrix4();
+const _color = new THREE.Color();
 
 // Simple error boundary to silently swallow GLB loading failures
 class MapItemErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -29,32 +37,40 @@ export const ModularMap = ({ debug }: { debug?: boolean }) => {
     loadFromDatabase();
   }, [selectedMapId, loadFromDatabase]);
 
-  const allItems = useMemo(() => {
-    return items;
-  }, [items]);
+  useFrame((state) => {
+    windUniforms.time.value = state.clock.getElapsedTime();
+  });
 
-  // Group items by their 3D model path
-  const groupedItems = useMemo(() => {
+  // Split: grass goes to GrassField, non-grass stays with colliders
+  const grassItems = useMemo(() => items.filter(i => isGrassAssetPath(i.path)), [items]);
+  const nonGrassItems = useMemo(() => items.filter(i => !isGrassAssetPath(i.path)), [items]);
+
+  // Group non-grass items by path for instanced rendering
+  const nonGrassGroups = useMemo(() => {
     const groups: Record<string, any[]> = {};
-    allItems.forEach((item) => {
+    nonGrassItems.forEach((item) => {
       if (!groups[item.path]) groups[item.path] = [];
       groups[item.path].push(item);
     });
     return groups;
-  }, [allItems]);
+  }, [nonGrassItems]);
 
-  if (allItems.length === 0 || isEditorOpen) return null;
+  if (items.length === 0 || isEditorOpen) return null;
 
   return (
     <>
-      {Object.entries(groupedItems).map(([path, instances]) => (
+      {/* Grass items — no collider, with wind sway */}
+      <GrassField items={grassItems} />
+
+      {/* Non-grass items — with collider, no wind sway */}
+      {Object.entries(nonGrassGroups).map(([path, instances]) => (
         <MapItemErrorBoundary key={`err-${path}`}>
           <Suspense fallback={null}>
-            <InstancedModelGroup 
-              key={`group-${path}-${instances.length}`} 
-              path={path} 
-              instances={instances} 
-              debug={debug} 
+            <InstancedModelGroup
+              key={`group-${path}-${instances.length}`}
+              path={path}
+              instances={instances}
+              debug={debug}
             />
           </Suspense>
         </MapItemErrorBoundary>
@@ -66,41 +82,39 @@ export const ModularMap = ({ debug }: { debug?: boolean }) => {
 const InstancedModelGroup = ({ path, instances, debug }: { path: string, instances: any[], debug?: boolean }) => {
   const { scene } = useGLTF(path) as any;
 
-  // Extract all meshes from the GLB scene
   const meshes = useMemo(() => {
     const extracted: { geometry: THREE.BufferGeometry, material: THREE.Material, localMatrix: THREE.Matrix4 }[] = [];
-    
-    // Ensure world matrices are updated before extracting
+
     scene.updateMatrixWorld(true);
 
     scene.traverse((child: any) => {
-      if (child.isMesh) {
-        // Optimize BVH generation for instanced physics
-        if (child.geometry && !child.geometry.boundsTree) {
-          child.geometry.computeBoundsTree({ maxDepth: 64, maxLeafSize: 10 });
-        }
-        
-        extracted.push({
-          geometry: child.geometry,
-          material: child.material, // Reuse reference to prevent shader compile stutters
-          localMatrix: child.matrixWorld.clone() // Save its local offset inside the GLB
-        });
+      if (!child.isMesh) return;
+      // BVH for physics collision
+      if (child.geometry && !child.geometry.boundsTree) {
+        child.geometry.computeBoundsTree({ maxDepth: 64, maxLeafSize: 10 });
       }
+
+      const mat = child.material.clone();
+      extracted.push({
+        geometry: child.geometry,
+        material: mat,
+        localMatrix: child.matrixWorld.clone()
+      });
     });
     return extracted;
-  }, [scene]);
+  }, [scene, path]);
 
   return (
-    <InstancedStaticCollider 
+    <InstancedStaticCollider
       debug={debug}
       restitution={0}
       friction={1}
     >
       {meshes.map((mesh, index) => (
-        <InstancedMeshPart 
-          key={index} 
-          meshData={mesh} 
-          instances={instances} 
+        <InstancedMeshPart
+          key={index}
+          meshData={mesh}
+          instances={instances}
         />
       ))}
     </InstancedStaticCollider>
@@ -109,51 +123,46 @@ const InstancedModelGroup = ({ path, instances, debug }: { path: string, instanc
 
 const InstancedMeshPart = ({ meshData, instances }: { meshData: any, instances: any[] }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null!);
+  const prevLenRef = useRef(0);
 
   useEffect(() => {
-    if (!meshRef.current) return;
+    const mesh = meshRef.current;
+    if (!mesh) return;
 
-    const tempObj = new THREE.Object3D();
-    const tempMatrix = new THREE.Matrix4();
-    const color = new THREE.Color();
+    if (instances.length === prevLenRef.current) return;
+    prevLenRef.current = instances.length;
 
     instances.forEach((item, i) => {
-      // 1. Set the world position from the editor
-      tempObj.position.set(item.pos[0], item.pos[1], item.pos[2]);
-      tempObj.rotation.set(item.rot[0], item.rot[1], item.rot[2]);
-      tempObj.scale.set(item.sca[0], item.sca[1], item.sca[2]);
-      tempObj.updateMatrix();
+      _tempObj.position.set(item.pos[0], item.pos[1], item.pos[2]);
+      _tempObj.rotation.set(item.rot[0], item.rot[1], item.rot[2]);
+      _tempObj.scale.set(item.sca[0], item.sca[1], item.sca[2]);
+      _tempObj.updateMatrix();
 
-      // 2. Combine world transform with the mesh's local offset
-      tempMatrix.multiplyMatrices(tempObj.matrix, meshData.localMatrix);
-      meshRef.current.setMatrixAt(i, tempMatrix);
+      _tempMatrix.multiplyMatrices(_tempObj.matrix, meshData.localMatrix);
+      mesh.setMatrixAt(i, _tempMatrix);
 
-      // 3. Apply custom color if requested
       if (item.color) {
-        color.set(item.color);
-        meshRef.current.setColorAt(i, color);
+        _color.set(item.color);
+        mesh.setColorAt(i, _color);
       } else {
-        color.set(0xffffff); // Default
-        meshRef.current.setColorAt(i, color);
+        _color.set(0xffffff);
+        mesh.setColorAt(i, _color);
       }
     });
 
-    meshRef.current.instanceMatrix.needsUpdate = true;
-    if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
 
-    // CRITICAL: Compute bounding box and sphere so that Three.js Raycaster 
-    // can intersect individual instances across the entire game world!
-    meshRef.current.computeBoundingSphere();
-    meshRef.current.computeBoundingBox();
+    mesh.computeBoundingSphere();
+    mesh.computeBoundingBox();
   }, [instances, meshData]);
 
   // Register in global colliders for X-Ray camera occlusion raycasting
   useEffect(() => {
     const mesh = meshRef.current;
-    if (mesh) {
-      registerCollider(mesh);
-      return () => unregisterCollider(mesh);
-    }
+    if (!mesh) return;
+    registerCollider(mesh);
+    return () => unregisterCollider(mesh);
   }, [instances, meshData]);
 
   return (
@@ -161,8 +170,8 @@ const InstancedMeshPart = ({ meshData, instances }: { meshData: any, instances: 
       ref={meshRef}
       args={[meshData.geometry, meshData.material, instances.length]}
       castShadow
-      receiveShadow
-      frustumCulled={false} // Prevent objects from disappearing at certain camera angles
+      receiveShadow={false}
+      frustumCulled
     />
   );
 };

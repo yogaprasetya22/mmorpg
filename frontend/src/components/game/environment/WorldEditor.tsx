@@ -6,6 +6,10 @@ import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { useEditorStore, MapItem } from '@/src/state/useEditorStore';
 import { getTerrainElevation } from '@/src/core/utils/terrainHeight';
+import { API_BASE_URL } from '@/src/core/config';
+import { windUniforms } from '@/src/core/utils/wind';
+import { GrassField, isGrassAssetPath } from './GrassField';
+import { _charPos as _ghostPreviewPos } from '../player/buffers';
 
 // ─── TERRAIN PROJECTION HELPER ───
 // Returns an array of 3D world points that form a closed loop
@@ -178,6 +182,25 @@ const themeAssets: Record<string, { paths: string[], colors?: string[] }> = {
       "/assets/environment/vegetation/Clover_2.glb"
     ],
     colors: ["#4ade80", "#22c55e", "#16a34a", "#86efac"]
+  },
+  grass: {
+    paths: [
+      "/assets/environment/vegetation/Grass_Large.glb",
+      "/assets/environment/vegetation/Grass_Small.glb",
+      "/assets/environment/vegetation/Grass_Large_Extruded.glb",
+      "/assets/environment/vegetation/Grass_Wispy_Short.glb",
+      "/assets/environment/vegetation/Grass_Wispy_Tall.glb",
+      "/assets/environment/vegetation/Grass_Common_Short.glb",
+      "/assets/environment/vegetation/Grass_Common_Tall.glb",
+      "/assets/environment/vegetation/Clover_1.glb",
+      "/assets/environment/vegetation/Clover_2.glb",
+      "/assets/environment/vegetation/Fern_1.glb",
+      "/assets/environment/vegetation/Flower_1.glb",
+      "/assets/environment/vegetation/Flower_1_Clump.glb",
+      "/assets/environment/vegetation/Flower_2.glb",
+      "/assets/environment/vegetation/Flower_2_Clump.glb"
+    ],
+    colors: ["#4ade80", "#22c55e", "#16a34a", "#86efac", "#a3e635"]
   }
 };
 
@@ -232,10 +255,10 @@ const SleekSelectionRing = memo(({ radius, isDragging }: { radius: number, isDra
       {/* Pulsing neon indigo ring */}
       <mesh rotation-x={-Math.PI / 2}>
         <ringGeometry args={[radius - 0.04, radius, 64]} />
-        <meshBasicMaterial 
-          color={isDragging ? "#6366f1" : "#818cf8"} 
-          transparent 
-          opacity={0.85} 
+        <meshBasicMaterial
+          color={isDragging ? "#6366f1" : "#818cf8"}
+          transparent
+          opacity={0.85}
           depthWrite={false}
           side={THREE.DoubleSide}
         />
@@ -243,10 +266,10 @@ const SleekSelectionRing = memo(({ radius, isDragging }: { radius: number, isDra
       {/* Ground soft aura glow */}
       <mesh rotation-x={-Math.PI / 2}>
         <ringGeometry args={[0, radius]} />
-        <meshBasicMaterial 
-          color={isDragging ? "#4f46e5" : "#6366f1"} 
-          transparent 
-          opacity={isDragging ? 0.22 : 0.12} 
+        <meshBasicMaterial
+          color={isDragging ? "#4f46e5" : "#6366f1"}
+          transparent
+          opacity={isDragging ? 0.22 : 0.12}
           depthWrite={false}
           side={THREE.DoubleSide}
         />
@@ -260,10 +283,10 @@ const SleekHoverRing = memo(({ radius }: { radius: number }) => {
   return (
     <mesh rotation-x={-Math.PI / 2} position-y={0.02}>
       <ringGeometry args={[radius - 0.03, radius, 64]} />
-      <meshBasicMaterial 
+      <meshBasicMaterial
         color="#fbbf24" // Beautiful warm amber hover glow!
-        transparent 
-        opacity={0.65} 
+        transparent
+        opacity={0.65}
         depthWrite={false}
         side={THREE.DoubleSide}
       />
@@ -287,7 +310,7 @@ const HolographicBrushProjection = memo(({ maskId, size, strength, position, env
 
   // Outer projected circle — always shown for circles and stars
   const outerPts = useMemo(
-    () => (['softCircle', 'hardCircle', 'star', 'starOutline'].includes(maskId)) 
+    () => (['softCircle', 'hardCircle', 'star', 'starOutline'].includes(maskId))
       ? buildProjectedCirclePoints(cx, cy, cz, size, SEGS, environment, terrainConfig)
       : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -454,9 +477,9 @@ const PlacedMaskProjection = memo(({ item, isSelected, isHovered, onPointerOver,
   const filledColor = color || '#3b82f6';
 
   return (
-    <group 
-      name={item.id} 
-      position={[pos[0], pos[1] + 0.08, pos[2]]} 
+    <group
+      name={item.id}
+      position={[pos[0], pos[1] + 0.08, pos[2]]}
       rotation={[-Math.PI / 2, 0, rot[1]]}
       scale={[1, 1, 1]}
       onPointerOver={onPointerOver}
@@ -571,6 +594,8 @@ export const WorldEditor = () => {
     vegetationBrushActive,
     setVegetationBrushActive,
     vegetationTheme,
+    vegetationSingleAsset,
+    vegetationFixedScale,
     vegetationDensity,
 
     // Smooth panning states
@@ -588,6 +613,10 @@ export const WorldEditor = () => {
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   const isDraggingVegetationRef = useRef(false);
   const lastSprayTimeRef = useRef(0);
+  // Spray buffer: accumulate items without store flush every 90ms
+  const sprayBufferRef = useRef<MapItem[] | null>(null);
+  // Cache the last known spray position
+  const lastSprayPosRef = useRef<[number, number, number] | null>(null);
 
   // Cache starting coordinates to support cancellation
   const dragStartRef = useRef<{
@@ -720,7 +749,7 @@ export const WorldEditor = () => {
     };
 
     updateItemsWithHistory(prev => [...prev, newItem]);
-    
+
     // Select newly spawned item and immediately pick it up in direct drag mode!
     setSelectedId(newItem.id);
     setDraggedId(newItem.id);
@@ -761,7 +790,7 @@ export const WorldEditor = () => {
         setIsShiftPressed(true);
       }
       if (!isEditorOpen) return;
-      
+
       if (e.key === 'Escape') {
         e.preventDefault();
         cancelActiveDragOrPlacement();
@@ -804,8 +833,8 @@ export const WorldEditor = () => {
       const activeId = draggedId || selectedId;
       const direction = e.deltaY > 0 ? -1 : 1;
       const isShift = e.shiftKey;
-      const isCtrl  = e.ctrlKey;
-      const isAlt   = e.altKey;
+      const isCtrl = e.ctrlKey;
+      const isAlt = e.altKey;
 
       // ── Ctrl + Scroll: Brush strength (terrain/sculpt active) ──
       if (isCtrl && !isAlt && !isShift && selectedId === 'terrain') {
@@ -891,22 +920,23 @@ export const WorldEditor = () => {
     return () => el.removeEventListener('wheel', handleWheel);
   }, [draggedId, selectedId, selectedIds, activeAsset, items, updateItemsWithHistory, setLastUsedScale, setLastUsedRotation, lastUsedScales, lastUsedRotations, gl, scene, brushStrength, setBrushStrength, vegetationBrushActive]);
 
-  // Handle local vegetation spray brush points adding
-  const handleSprayVegetation = useCallback((center: [number, number, number]) => {
+  // Handle local vegetation spray brush points adding — uses spray buffer
+  const handleSprayVegetation = useCallback((center: [number, number, number], flushImmediate: boolean) => {
     const now = Date.now();
-    if (now - lastSprayTimeRef.current < 90) return; // limit frequency to 90ms intervals
+    if (!flushImmediate && now - lastSprayTimeRef.current < 90) return;
     lastSprayTimeRef.current = now;
 
     const [cx, , cz] = center;
-    const radius = brushSize * 0.12; // visual scaling for 3D units
+    // Use dedicated vegetation radius from store
+    const { vegetationRadius } = useEditorStore.getState();
+    const radius = vegetationRadius;
 
     if (isShiftPressed) {
-      // Erase mode: filter out items within radius
+      // Erase mode: commit directly
       const nextItems = items.filter((item) => {
         if (item.type !== 'procedural-vegetation') return true;
         const [px, , pz] = item.pos;
-        const dist = Math.hypot(px - cx, pz - cz);
-        return dist > radius;
+        return Math.hypot(px - cx, pz - cz) > radius;
       });
       if (nextItems.length !== items.length) {
         updateItemsWithHistory(nextItems);
@@ -915,27 +945,26 @@ export const WorldEditor = () => {
     }
 
     const count = Math.max(1, Math.round(vegetationDensity / 12));
+    const { vegetationSingleAsset, vegetationFixedScale } = useEditorStore.getState();
     const theme = themeAssets[vegetationTheme] || themeAssets.pine;
     const newTrees: MapItem[] = [];
 
     for (let i = 0; i < count; i++) {
-      const r = Math.sqrt(Math.random()) * radius; // uniform distribution
+      const r = Math.sqrt(Math.random()) * radius;
       const theta = Math.random() * Math.PI * 2;
       const px = cx + Math.cos(theta) * r;
       const pz = cz + Math.sin(theta) * r;
 
-      // Perfectly calculates high-low elevation Y coordinate matching mountain slope contours
       let py = getTerrainElevation(px, pz, environment, 24, terrainConfig);
       if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
         const raycastH = (window as any).getGroundHeight(px, pz, -999);
-        if (raycastH !== -999) {
-          py = raycastH;
-        }
+        if (raycastH !== -999) py = raycastH;
       }
 
-      const modelPath = theme.paths[Math.floor(Math.random() * theme.paths.length)];
+      const resolvedPath = vegetationSingleAsset || theme.paths[Math.floor(Math.random() * theme.paths.length)];
+      const modelPath = resolvedPath.startsWith('http') ? resolvedPath : `${API_BASE_URL}${resolvedPath}`;
       const color = theme.colors ? theme.colors[Math.floor(Math.random() * theme.colors.length)] : undefined;
-      const scaleRatio = 0.55 + Math.random() * 0.9;
+      const scaleRatio = vegetationFixedScale > 0 ? vegetationFixedScale : 0.55 + Math.random() * 0.9;
       const rotY = Math.random() * Math.PI * 2;
 
       newTrees.push({
@@ -949,8 +978,15 @@ export const WorldEditor = () => {
       });
     }
 
-    if (newTrees.length > 0) {
-      updateItemsWithHistory([...items, ...newTrees]);
+    if (newTrees.length === 0) return;
+
+    if (flushImmediate) {
+      // Flush to store (mouse up / final commit)
+      updateItemsWithHistory((prev: MapItem[]) => [...prev, ...newTrees]);
+    } else {
+      // Buffer into ref — flush later
+      if (!sprayBufferRef.current) sprayBufferRef.current = [];
+      sprayBufferRef.current.push(...newTrees);
     }
   }, [brushSize, vegetationDensity, vegetationTheme, environment, terrainConfig, items, updateItemsWithHistory, isShiftPressed]);
 
@@ -962,8 +998,8 @@ export const WorldEditor = () => {
       setIsShiftPressed(e.shiftKey);
       const target = e.target as HTMLElement;
       const over = !!(
-        target.closest('.world-editor-ui') || 
-        target.closest('[data-leva]') || 
+        target.closest('.world-editor-ui') ||
+        target.closest('[data-leva]') ||
         target.closest('#leva__root') ||
         ['BUTTON', 'INPUT', 'SELECT', 'LABEL'].includes(target.tagName)
       );
@@ -973,11 +1009,11 @@ export const WorldEditor = () => {
     const onDown = (e: PointerEvent) => {
       setIsShiftPressed(e.shiftKey);
       if (isOverUI) return;
-      
+
       const target = e.target as HTMLElement;
       if (
-        target.closest('.world-editor-ui') || 
-        target.closest('[data-leva]') || 
+        target.closest('.world-editor-ui') ||
+        target.closest('[data-leva]') ||
         target.closest('#leva__root') ||
         ['BUTTON', 'INPUT', 'SELECT', 'LABEL'].includes(target.tagName)
       ) return;
@@ -985,6 +1021,8 @@ export const WorldEditor = () => {
       if (vegetationBrushActive) {
         if (e.button === 0) {
           isDraggingVegetationRef.current = true;
+          sprayBufferRef.current = [];
+          lastSprayPosRef.current = null;
         }
         return;
       }
@@ -1003,6 +1041,13 @@ export const WorldEditor = () => {
       if (vegetationBrushActive) {
         if (e.button === 0) {
           isDraggingVegetationRef.current = false;
+          // Flush spray buffer on release
+          if (sprayBufferRef.current && sprayBufferRef.current.length > 0) {
+            const buf = sprayBufferRef.current;
+            sprayBufferRef.current = null;
+            updateItemsWithHistory((prev: MapItem[]) => [...prev, ...buf]);
+          }
+          lastSprayPosRef.current = null;
         }
         return;
       }
@@ -1050,7 +1095,7 @@ export const WorldEditor = () => {
       }
 
       if (e.button !== 0 || !pointerStartRef.current) return;
-      
+
       const elapsed = Date.now() - pointerStartRef.current.time;
       const dist = Math.hypot(e.clientX - pointerStartRef.current.x, e.clientY - pointerStartRef.current.y);
       pointerStartRef.current = null;
@@ -1065,17 +1110,17 @@ export const WorldEditor = () => {
 
       raycaster.setFromCamera(exactMouse, camera);
       const intersects = raycaster.intersectObjects(scene.children, true);
-      const filteredIntersects = draggedId 
+      const filteredIntersects = draggedId
         ? intersects.filter(i => {
-            let cur: any = i.object;
-            while (cur) {
-              if (cur.name === draggedId) return false;
-              cur = cur.parent;
-            }
-            return true;
-          })
+          let cur: any = i.object;
+          while (cur) {
+            if (cur.name === draggedId) return false;
+            cur = cur.parent;
+          }
+          return true;
+        })
         : intersects;
-      
+
       if (filteredIntersects.length === 0) {
         if (draggedId) {
           commitPlacement(draggedId);
@@ -1088,8 +1133,8 @@ export const WorldEditor = () => {
       // Check if we hit an Item
       const itemHit = filteredIntersects.find(i => {
         let cur: any = i.object;
-        while(cur) {
-          if(cur.name?.startsWith('item_')) return true;
+        while (cur) {
+          if (cur.name && (cur.name.startsWith('item_') || items.some(it => it.id === cur.name))) return true;
           cur = cur.parent;
         }
         return false;
@@ -1097,10 +1142,10 @@ export const WorldEditor = () => {
 
       if (itemHit) {
         let cur: any = itemHit.object;
-        while(cur) {
-          if(cur.name?.startsWith('item_')) {
+        while (cur) {
+          if (cur.name && (cur.name.startsWith('item_') || items.some(it => it.id === cur.name))) {
             const hitId = cur.name;
-            
+
             if (draggedId) {
               commitPlacement(draggedId);
             } else if (selectedId === hitId) {
@@ -1137,13 +1182,13 @@ export const WorldEditor = () => {
       }
 
       // Handle ground / terrain click
-      const groundHit = filteredIntersects.find(i => 
+      const groundHit = filteredIntersects.find(i =>
         i.object.name && (
-          i.object.name.toLowerCase().includes('terrain') || 
+          i.object.name.toLowerCase().includes('terrain') ||
           i.object.name.toLowerCase().includes('ground')
         )
       );
-      
+
       if (groundHit) {
         if (draggedId) {
           // Committing placement
@@ -1170,15 +1215,16 @@ export const WorldEditor = () => {
 
   // Frame Loop logic
   useFrame((_, delta) => {
+    windUniforms.time.value = _.clock.getElapsedTime();
     // ─── 0. CAMERA FOCUS TARGET LERPING ───
     if (cameraFocusTarget) {
       const controls = (_.controls || (camera as any).controls) as any;
       if (controls) {
         const targetVec = new THREE.Vector3(...cameraFocusTarget);
-        
+
         // Smoothly interpolate orbit controls focus target Y-level elevations
         controls.target.lerp(targetVec, 1 - Math.exp(-8 * delta));
-        
+
         // Bug 2 fix: Dynamic camera distance based on focused object's bounding box size
         let cameraDistance = 22; // default fallback
         if (cameraFocusObjectId && cameraFocusObjectId !== 'terrain') {
@@ -1192,13 +1238,13 @@ export const WorldEditor = () => {
             cameraDistance = Math.max(6, Math.min(50, maxDim * 2.5 + 4));
           }
         }
-        
+
         // Position camera at a proportional offset based on computed distance
         const dir = new THREE.Vector3(0.65, 0.5, 0.65).normalize();
         const desiredCamPos = targetVec.clone().add(dir.multiplyScalar(cameraDistance));
-        
+
         camera.position.lerp(desiredCamPos, 1 - Math.exp(-8 * delta));
-        
+
         // Once cameras settle closely to focus vectors, free constraints controls
         if (controls.target.distanceTo(targetVec) < 0.1) {
           setCameraFocusTarget(null);
@@ -1215,45 +1261,47 @@ export const WorldEditor = () => {
       return;
     }
 
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(scene.children, true);
-    
-    // Vegetation Spray Brush Mode
+    //────────────────────────────────────────────────────
+    // VEGETATION BRUSH MODE — always raycast full scene
+    //────────────────────────────────────────────────────
     if (vegetationBrushActive) {
-      const terrainHit = intersects.find(i => 
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(scene.children, true);
+      const terrainHit = intersects.find(i =>
         i.object.name && (
-          i.object.name.toLowerCase().includes('terrain') || 
+          i.object.name.toLowerCase().includes('terrain') ||
           i.object.name.toLowerCase().includes('ground')
         )
       );
       if (terrainHit) {
         const p = terrainHit.point;
         setBrushHoverPos([p.x, p.y, p.z]);
-        
+        lastSprayPosRef.current = [p.x, p.y, p.z];
+
         if (isDraggingVegetationRef.current) {
-          handleSprayVegetation([p.x, p.y, p.z]);
-          
-          // Disable orbit controls while dragging to prevent rotation issues
+          handleSprayVegetation(lastSprayPosRef.current, false);
           const controls = _.controls as any;
-          if (controls && controls.enabled) {
-            controls.enabled = false;
-          }
+          if (controls && controls.enabled) controls.enabled = false;
         } else {
-          // Re-enable controls when not active spraying
           const controls = _.controls as any;
-          if (controls && !controls.enabled && !draggedId) {
-            controls.enabled = true;
-          }
+          if (controls && !controls.enabled && !draggedId) controls.enabled = true;
         }
       } else {
         setBrushHoverPos(null);
+        if (!isDraggingVegetationRef.current) lastSprayPosRef.current = null;
       }
-      
+
       if (hoverPos) setHoverPos(null);
       if (hoveredId) setHoveredId(null);
       document.body.style.cursor = 'cell';
       return;
     }
+
+    //────────────────────────────────────────────────────
+    // NON‑VEG MODE: full scene raycast
+    //────────────────────────────────────────────────────
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(scene.children, true);
 
     // Terrain Paint Mode
     if (paintMode) {
@@ -1270,21 +1318,21 @@ export const WorldEditor = () => {
     }
 
     // Poin 1: Abaikan objek yang sedang diseret (Raycast Target Filtering)
-    const filteredIntersects = draggedId 
+    const filteredIntersects = draggedId
       ? intersects.filter(i => {
-          let cur: any = i.object;
-          while (cur) {
-            if (cur.name === draggedId) return false;
-            cur = cur.parent;
-          }
-          return true;
-        })
+        let cur: any = i.object;
+        while (cur) {
+          if (cur.name === draggedId) return false;
+          cur = cur.parent;
+        }
+        return true;
+      })
       : intersects;
 
     // Retrieve terrain coordinates
-    const terrainHit = filteredIntersects.find(i => 
+    const terrainHit = filteredIntersects.find(i =>
       i.object.name && (
-        i.object.name.toLowerCase().includes('terrain') || 
+        i.object.name.toLowerCase().includes('terrain') ||
         i.object.name.toLowerCase().includes('ground')
       )
     );
@@ -1319,11 +1367,11 @@ export const WorldEditor = () => {
     if (terrainHit) {
       // Langkah A: Tangkap koordinat mouse di tanah
       const rawPos = terrainHit.point;
-      
+
       // Langkah B: Bulatkan koordinat X dan Z ke grid terdekat
       const snapX = snap(rawPos.x);
       const snapZ = snap(rawPos.z);
-      
+
       // Langkah C: Ambil tinggi permukaan tanah tepat di koordinat X dan Z yang sudah dibulatkan
       let snapY = getTerrainElevation(snapX, snapZ, environment, 24, terrainConfig);
       if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
@@ -1332,10 +1380,10 @@ export const WorldEditor = () => {
           snapY = raycastH;
         }
       }
-      
+
       // Bug 3 fix: Use locked elevation offset (not recalculated pivot)
       const snappedPoint = new THREE.Vector3(snapX, snapY + dragElevationOffsetRef.current, snapZ);
-      
+
       // Poin 4: Perhalus pergerakan lerp target posisi saat meluncur di grid dan tebing/lereng curam
       targetDragPosRef.current.lerp(snappedPoint, 1 - Math.exp(-24 * delta));
 
@@ -1352,7 +1400,7 @@ export const WorldEditor = () => {
       if (obj) {
         // Lerp coordinates for absolute Paralives sliding feel!
         obj.position.lerp(targetDragPosRef.current, 1 - Math.exp(-15 * delta));
-        
+
         // Disable orbit controls while dragging to prevent rotation issues
         const controls = _.controls as any;
         if (controls && controls.enabled) {
@@ -1372,8 +1420,8 @@ export const WorldEditor = () => {
     // Item Hover Highlighting
     const itemHit = intersects.find(i => {
       let cur: any = i.object;
-      while(cur) {
-        if(cur.name?.startsWith('item_')) return true;
+      while (cur) {
+        if (cur.name && (cur.name.startsWith('item_') || items.some(it => it.id === cur.name))) return true;
         cur = cur.parent;
       }
       return false;
@@ -1381,8 +1429,8 @@ export const WorldEditor = () => {
 
     if (itemHit) {
       let cur: any = itemHit.object;
-      while(cur) {
-        if(cur.name?.startsWith('item_')) {
+      while (cur) {
+        if (cur.name && (cur.name.startsWith('item_') || items.some(it => it.id === cur.name))) {
           const hitId = cur.name;
           if (hoveredId !== hitId) setHoveredId(hitId);
           document.body.style.cursor = 'pointer';
@@ -1400,25 +1448,42 @@ export const WorldEditor = () => {
 
   const normalItems = useMemo(() => items.filter(i => i.type !== 'procedural-vegetation'), [items]);
   const proceduralItems = useMemo(() => items.filter(i => i.type === 'procedural-vegetation'), [items]);
+  const grassItems = useMemo(() => proceduralItems.filter(i => isGrassAssetPath(i.path)), [proceduralItems]);
+  const treeItems = useMemo(() => proceduralItems.filter(i => !isGrassAssetPath(i.path)), [proceduralItems]);
 
   return (
     <group>
       {/* Visual blueprint placement or ground projection cursor */}
       {hoverPos && activeAsset && (
         <Suspense fallback={
-          <mesh position={[hoverPos.x, hoverPos.y + 0.15, hoverPos.z]} rotation-x={-Math.PI/2}>
+          <mesh position={[hoverPos.x, hoverPos.y + 0.15, hoverPos.z]} rotation-x={-Math.PI / 2}>
             <ringGeometry args={[0.4, 0.5, 32]} />
             <meshBasicMaterial color="#fbbf24" transparent opacity={0.8} />
           </mesh>
         }>
-          <GhostPreview 
-            path={activeAsset.path} 
-            position={hoverPos} 
-            scale={lastUsedScales[activeAsset.path] || [1, 1, 1]} 
+          <GhostPreview
+            path={activeAsset.path}
+            position={hoverPos}
+            scale={lastUsedScales[activeAsset.path] || [1, 1, 1]}
             rotation={lastUsedRotations[activeAsset.path] || [0, 0, 0]}
           />
         </Suspense>
       )}
+
+      {/* Grass single-asset ghost preview — skip while spraying (mouse down) */}
+      {vegetationBrushActive && brushHoverPos && vegetationSingleAsset && !isDraggingVegetationRef.current && (() => {
+        _ghostPreviewPos.set(brushHoverPos[0], brushHoverPos[1], brushHoverPos[2]);
+        return (
+          <Suspense fallback={null}>
+            <GhostPreview
+              path={vegetationSingleAsset.startsWith('http') ? vegetationSingleAsset : `${API_BASE_URL}${vegetationSingleAsset}`}
+              position={_ghostPreviewPos}
+              scale={vegetationFixedScale > 0 ? [vegetationFixedScale, vegetationFixedScale, vegetationFixedScale] : [1, 1, 1]}
+              rotation={[0, 0, 0]}
+            />
+          </Suspense>
+        );
+      })()}
 
       {/* ─── VEGETATION SPRAY BRUSH RADIAL RING ─── */}
       {vegetationBrushActive && brushHoverPos && (() => {
@@ -1445,16 +1510,16 @@ export const WorldEditor = () => {
 
       {/* ─── PAINT SPLAT HOLOGRAPHIC MASK PROJECTION ─── */}
       {paintMode && brushHoverPos && (
-        <HolographicBrushProjection 
-          maskId={brushMaskId} 
-          size={brushSize} 
-          strength={brushStrength} 
+        <HolographicBrushProjection
+          maskId={brushMaskId}
+          size={brushSize}
+          strength={brushStrength}
           position={brushHoverPos}
           environment={environment}
           terrainConfig={terrainConfig}
         />
       )}
-      
+
       {normalItems.map((item) => (
         <SafeErrorBoundary
           key={item.id}
@@ -1465,7 +1530,7 @@ export const WorldEditor = () => {
             </mesh>
           }
         >
-          <Suspense 
+          <Suspense
             fallback={
               <mesh position={item.pos} rotation={item.rot} scale={item.sca}>
                 <boxGeometry args={[1, 1, 1]} />
@@ -1474,7 +1539,7 @@ export const WorldEditor = () => {
             }
           >
             {item.type === 'mask_projection' ? (
-              <PlacedMaskProjection 
+              <PlacedMaskProjection
                 item={item}
                 isSelected={selectedIds.includes(item.id)}
                 isHovered={hoveredId === item.id}
@@ -1489,9 +1554,9 @@ export const WorldEditor = () => {
                 }}
               />
             ) : (
-              <EditorItem 
-                item={item} 
-                isSelected={selectedIds.includes(item.id)} 
+              <EditorItem
+                item={item}
+                isSelected={selectedIds.includes(item.id)}
                 isHovered={hoveredId === item.id}
                 isDragging={draggedId === item.id}
                 onClick={(e) => {
@@ -1508,14 +1573,15 @@ export const WorldEditor = () => {
           </Suspense>
         </SafeErrorBoundary>
       ))}
-      <ProceduralVegetationLayer items={proceduralItems} />
+      <GrassField items={grassItems} />
+      <ProceduralVegetationLayer items={treeItems} />
     </group>
   );
 };
 
-const EditorItem = memo(({ item, isSelected, isHovered, isDragging, onClick }: { 
-  item: MapItem; 
-  isSelected: boolean; 
+const EditorItem = memo(({ item, isSelected, isHovered, isDragging, onClick }: {
+  item: MapItem;
+  isSelected: boolean;
   isHovered: boolean;
   isDragging: boolean;
   onClick: (e: any) => void;
@@ -1532,11 +1598,13 @@ const EditorItem = memo(({ item, isSelected, isHovered, isDragging, onClick }: {
         if (item.color) {
           child.material = child.material.clone();
           child.material.color.set(item.color);
+        } else {
+          child.material = child.material.clone();
         }
       }
     });
     return c;
-  }, [gltfScene, item.id, item.color]);
+  }, [gltfScene, item.id, item.color, item.path]);
 
   // Dynamically compute absolute mesh radius using bounding dimensions
   const radius = useMemo(() => {
@@ -1548,8 +1616,8 @@ const EditorItem = memo(({ item, isSelected, isHovered, isDragging, onClick }: {
   }, [cloned]);
 
   return (
-    <primitive 
-      object={cloned} 
+    <primitive
+      object={cloned}
       name={item.id}
       position={item.pos}
       rotation={item.rot}
@@ -1569,19 +1637,19 @@ const EditorItem = memo(({ item, isSelected, isHovered, isDragging, onClick }: {
   );
 }, (prev, next) => {
   return prev.item.id === next.item.id &&
-         prev.isSelected === next.isSelected &&
-         prev.isHovered === next.isHovered &&
-         prev.isDragging === next.isDragging &&
-         prev.item.pos[0] === next.item.pos[0] &&
-         prev.item.pos[1] === next.item.pos[1] &&
-         prev.item.pos[2] === next.item.pos[2] &&
-         prev.item.rot[0] === next.item.rot[0] &&
-         prev.item.rot[1] === next.item.rot[1] &&
-         prev.item.rot[2] === next.item.rot[2] &&
-         prev.item.sca[0] === next.item.sca[0] &&
-         prev.item.sca[1] === next.item.sca[1] &&
-         prev.item.sca[2] === next.item.sca[2] &&
-         prev.item.color === next.item.color;
+    prev.isSelected === next.isSelected &&
+    prev.isHovered === next.isHovered &&
+    prev.isDragging === next.isDragging &&
+    prev.item.pos[0] === next.item.pos[0] &&
+    prev.item.pos[1] === next.item.pos[1] &&
+    prev.item.pos[2] === next.item.pos[2] &&
+    prev.item.rot[0] === next.item.rot[0] &&
+    prev.item.rot[1] === next.item.rot[1] &&
+    prev.item.rot[2] === next.item.rot[2] &&
+    prev.item.sca[0] === next.item.sca[0] &&
+    prev.item.sca[1] === next.item.sca[1] &&
+    prev.item.sca[2] === next.item.sca[2] &&
+    prev.item.color === next.item.color;
 });
 
 const ProceduralVegetationLayer = memo(({ items }: { items: MapItem[] }) => {
@@ -1614,23 +1682,24 @@ const InstancedVegetationModel = memo(({ path, instances }: { path: string, inst
 
     scene.traverse((child: any) => {
       if (child.isMesh) {
+        const mat = child.material.clone();
         extracted.push({
           geometry: child.geometry,
-          material: child.material.clone(),
+          material: mat,
           localMatrix: child.matrixWorld.clone()
         });
       }
     });
     return extracted;
-  }, [scene]);
+  }, [scene, path]);
 
   return (
     <group>
       {meshes.map((mesh, index) => (
-        <InstancedMeshPart 
-          key={index} 
-          meshData={mesh} 
-          instances={instances} 
+        <InstancedMeshPart
+          key={index}
+          meshData={mesh}
+          instances={instances}
         />
       ))}
     </group>
@@ -1674,8 +1743,8 @@ const InstancedMeshPart = ({ meshData, instances }: { meshData: any, instances: 
       ref={meshRef}
       args={[meshData.geometry, meshData.material, instances.length]}
       castShadow
-      receiveShadow
-      frustumCulled={false}
+      receiveShadow={false}
+      frustumCulled
     />
   );
 };

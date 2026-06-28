@@ -103,7 +103,7 @@ export const InstancedTrees = ({ mode, baseDistance = 24 }: { mode: 'DIORAMA' | 
                 ref={meshRef} 
                 args={[treeGeometry, treeMaterial, TREE_COUNT]} 
                 castShadow 
-                receiveShadow 
+                receiveShadow={false} 
             />
         </InstancedStaticCollider>
     );

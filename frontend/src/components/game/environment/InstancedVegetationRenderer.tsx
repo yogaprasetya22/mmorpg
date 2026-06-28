@@ -66,7 +66,7 @@ const InstancedGroup = ({ path, items }: { path: string; items: MapItem[] }) => 
       ref={meshRef}
       args={[geometry, material as THREE.Material, items.length]}
       castShadow
-      receiveShadow
+      receiveShadow={false}
       frustumCulled
     />
   );

@@ -283,8 +283,8 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
 
                 color={sky === 'night' ? "#a5b4fc" : "#ffffff"}
                 castShadow
-                shadow-mapSize-width={2048}
-                shadow-mapSize-height={2048}
+                shadow-mapSize-width={1024}
+                shadow-mapSize-height={1024}
                 shadow-bias={-0.0005}
                 shadow-normalBias={0.06}
 

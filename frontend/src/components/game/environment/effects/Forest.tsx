@@ -6,6 +6,10 @@ import { useGLTF } from '@react-three/drei';
 import { SimplexNoise } from 'three-stdlib';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 import { InstancedStaticCollider } from 'bvhecctrl';
+import { applyWindSway } from '@/src/core/utils/wind';
+import { isGrassAssetPath } from '../../environment/GrassField';
+
+import { API_BASE_URL } from '@/src/core/config';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BVH prototype patch (idempotent)
@@ -34,7 +38,7 @@ const MAPLE_PATHS: string[] = [
     '/assets/environment/trees/MapleTree_4.glb',
     '/assets/environment/trees/MapleTree_5.glb',
 ];
-const ALL_TREE_PATHS = [...BIRCH_PATHS, ...MAPLE_PATHS];
+const ALL_TREE_PATHS = [...BIRCH_PATHS, ...MAPLE_PATHS].map(p => `${API_BASE_URL}${p}`);
 
 // Default values (also used if settingsRef not provided)
 const DEFAULT_TREE_COUNT = 150;
@@ -56,7 +60,7 @@ function setupLeafMaterial(mat: THREE.Material | THREE.Material[]) {
             // INDUSTRY STANDARD for foliage: alphaTest with transparent=false
             m.transparent = false;
             m.alphaTest = 0.5;
-            m.side = THREE.DoubleSide; 
+            m.side = THREE.DoubleSide;
             m.needsUpdate = true;
         }
     });
@@ -67,20 +71,36 @@ function setupLeafMaterial(mat: THREE.Material | THREE.Material[]) {
 // ─────────────────────────────────────────────────────────────────────────────
 function extractMeshParts(
     scene: THREE.Group,
+    path: string,
 ): { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[] }[] {
     const parts: { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[] }[] = [];
     scene.updateMatrixWorld(true);
     scene.traverse((child) => {
         if (!(child as THREE.Mesh).isMesh || !child.visible) return;
         const mesh = child as THREE.Mesh;
-        
+
         // Skip common collision mesh naming conventions
         if (mesh.name.toLowerCase().includes('collision') || mesh.name.toLowerCase().includes('physic')) return;
         const geom = mesh.geometry.clone();
         geom.applyMatrix4(mesh.matrixWorld); // bake local transform
         (geom as any).computeBoundsTree({ maxLeafSize: 8 });
-        setupLeafMaterial(mesh.material);
-        parts.push({ geometry: geom, material: mesh.material });
+
+        // Clone material to prevent modifying template GLTF cache directly
+        const mat = Array.isArray(mesh.material)
+            ? mesh.material.map(m => m.clone())
+            : mesh.material.clone();
+
+        setupLeafMaterial(mat);
+
+        const mats = Array.isArray(mat) ? mat : [mat];
+        // Forest only contains trees, but guard against future non-grass additions
+        mats.forEach(m => {
+            if (isGrassAssetPath(path)) {
+                applyWindSway(m, path);
+            }
+        });
+
+        parts.push({ geometry: geom, material: mat });
     });
     return parts;
 }
@@ -123,7 +143,7 @@ const TreePartInstanced = ({ geometry, material, positions, scales, rotations, c
                 ref={meshRef}
                 args={[geometry, material as THREE.Material, count]}
                 castShadow
-                receiveShadow
+                receiveShadow={false}
                 frustumCulled={true}
             />
         </InstancedStaticCollider>
@@ -146,8 +166,8 @@ const TreeVariantInstances = ({ path, positions, scales, rotations, globalScale 
 
     const parts = useMemo(() => {
         if (!scene) return [];
-        return extractMeshParts(scene);
-    }, [scene]);
+        return extractMeshParts(scene, path);
+    }, [scene, path]);
 
     const count = positions.length;
     if (count === 0 || parts.length === 0) return null;

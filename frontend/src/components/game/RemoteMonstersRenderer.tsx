@@ -116,7 +116,8 @@ export const RemoteMonsterInstance = ({
       if (child.isMesh) {
         // Enable highly optimized shadows for remote monsters
         child.castShadow = true;
-        child.receiveShadow = true;
+        // Monsters don't need to receive shadows (performance)
+        child.receiveShadow = false;
         // Pre-compute bounding sphere once — skip per-frame auto-compute
         child.geometry?.computeBoundingSphere?.();
         // Freeze material to skip redundant uniform uploads
