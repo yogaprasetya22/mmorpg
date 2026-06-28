@@ -1123,17 +1123,17 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
         intensity={lightIntensity ?? (sky === 'night' ? 0.15 : 0.8)}
 
         castShadow
-        shadow-mapSize-width={isEditorOpen ? 4096 : 1024}
-        shadow-mapSize-height={isEditorOpen ? 4096 : 1024}
+        shadow-mapSize-width={isEditorOpen ? 4096 : 2048}
+        shadow-mapSize-height={isEditorOpen ? 4096 : 2048}
         shadow-bias={isEditorOpen ? -0.001 : -0.0005}
         shadow-normalBias={isEditorOpen ? 0.15 : 0.06}
 
         shadow-camera-near={isEditorOpen ? 1 : 0.5}
-        shadow-camera-far={isEditorOpen ? 500 : 120}
-        shadow-camera-left={isEditorOpen ? -150 : -35}
-        shadow-camera-right={isEditorOpen ? 150 : 35}
-        shadow-camera-top={isEditorOpen ? 150 : 35}
-        shadow-camera-bottom={isEditorOpen ? -150 : -35}
+        shadow-camera-far={isEditorOpen ? 500 : 250}
+        shadow-camera-left={isEditorOpen ? -150 : -120}
+        shadow-camera-right={isEditorOpen ? 150 : 120}
+        shadow-camera-top={isEditorOpen ? 150 : 120}
+        shadow-camera-bottom={isEditorOpen ? -150 : -120}
       />
 
       <Terrain

@@ -475,6 +475,9 @@ export interface EditorState {
     setVegetationFixedScale: (scale: number) => void;
     vegetationRadius: number;
     setVegetationRadius: (r: number) => void;
+    // Per‑theme asset override: themeId → asset path or null (random)
+    vegetationAssetOverrides: Record<string, string | null>;
+    setVegetationAssetOverride: (themeId: string, path: string | null) => void;
 
     isSaving: boolean;
     setIsSaving: (saving: boolean) => void;
@@ -1760,6 +1763,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     setVegetationFixedScale: (scale) => set({ vegetationFixedScale: scale }),
     vegetationRadius: 10,
     setVegetationRadius: (r) => set({ vegetationRadius: r }),
+    vegetationAssetOverrides: {},
+    setVegetationAssetOverride: (themeId, path) => set((state) => ({
+      vegetationAssetOverrides: { ...state.vegetationAssetOverrides, [themeId]: path },
+    })),
     clearVegetation: () => {
         const { items } = get();
         const filtered = items.filter(
