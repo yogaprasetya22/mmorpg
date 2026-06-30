@@ -12,7 +12,7 @@
 
 import { Component, ErrorInfo, ReactNode } from "react";
 import * as THREE from "three";
-import { getTerrainElevation } from "@/src/core/utils/terrainHeight";
+import { getTerrainElevation } from "@jagres/shared";
 import { isGrassAssetPath } from "../GrassField";
 
 export { isGrassAssetPath };

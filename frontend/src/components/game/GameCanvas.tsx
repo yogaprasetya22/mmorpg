@@ -3,9 +3,6 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   MapControls,
-  PerformanceMonitor,
-  AdaptiveEvents,
-  AdaptiveDpr,
 } from "@react-three/drei";
 import { useControls, Leva, folder } from "leva";
 import dynamic from 'next/dynamic';
@@ -13,7 +10,6 @@ import dynamic from 'next/dynamic';
 const Perf = dynamic(() => import("r3f-perf").then((mod) => mod.Perf), { ssr: false });
 
 import { EnvironmentMultiGlobal } from "./environment/EnvironmentMultiGlobal";
-import { SafePostProcessing } from "./systems/SafePostProcessing";
 import { MapObstacle } from "@/src/core/domain/unit.types";
 import { useStore } from "@/src/state/useStore";
 import { useEditorStore } from "@/src/state/useEditorStore";
@@ -27,14 +23,34 @@ import { ModularMap } from "./environment/ModularMap";
 
 // Imported Standalone Components
 import { SceneAnalyzer } from "./SceneAnalyzer";
-import { AdaptivePerformanceOptimizer } from "./AdaptivePerformanceOptimizer";
 import { CameraOcclusionManager } from "./systems/CameraOcclusionManager";
+
+// New performance components
+import FrameSkipper from "./systems/FrameSkipper";
+import { EntityUpdateSystem } from "./systems/EntityUpdateSystem";
+import { EmptyDrawGuard } from "./systems/EmptyDrawGuard";
+import { OptimizedPostProcessing } from "./systems/OptimizedPostProcessing";
+
+// Arena/Multiplayer Components
+import { PlayerController } from "./PlayerController";
+import { RemotePlayersRenderer } from "./RemotePlayersRenderer";
+import { RemoteMonstersRenderer } from "./RemoteMonstersRenderer";
+import { VFXProvider } from "./systems/VFXManager";
+import { DamageHUDBatcher } from "./systems/DamageHUDBatcher";
+import { ArcherTrapSystem } from "./systems/ArcherTrapSystem";
+import { BeginnerSpellEffect } from "./systems/effects/BeginnerSpellEffect";
+import { FighterSpellEffect } from "./systems/effects/FighterSpellEffect";
+import { TankSpellEffect } from "./systems/effects/TankSpellEffect";
+import { AssassinSpellEffect } from "./systems/effects/AssassinSpellEffect";
+import { MageSpellEffect } from "./systems/effects/MageSpellEffect";
+import { ModelsPreloader } from "@/app/arena/components/ModelsPreloader";
+import { FPSCounterUpdater } from "@/app/arena/components/FPSCounter";
 
 // Monkey-patch THREE.DataTextureLoader to fix multiple bugs in Three.js core:
 // 1. If onError is undefined, it attempts to execute the local error object as a function (error(error)).
 // 2. If onError is defined, it runs it but does NOT return, causing a crash at `if ( texData.image !== undefined )` because texData is undefined.
 if (typeof window !== 'undefined' && THREE.DataTextureLoader) {
-  THREE.DataTextureLoader.prototype.load = function (url, onLoad, onProgress, onError) {
+  THREE.DataTextureLoader.prototype.load = function (url: string, onLoad?: (texture: THREE.DataTexture, texData: object) => void, onProgress?: (event: ProgressEvent) => void, onError?: (error: unknown) => void) {
     const scope = this;
     const texture = new THREE.DataTexture();
 
@@ -46,7 +62,7 @@ if (typeof window !== 'undefined' && THREE.DataTextureLoader) {
 
     loader.load(
       url,
-      function (buffer) {
+      function (buffer: string | ArrayBuffer) {
         let texData;
         try {
           texData = (scope as any).parse(buffer);
@@ -116,6 +132,32 @@ if (typeof window !== 'undefined' && THREE.DataTextureLoader) {
   };
 }
 
+export interface ArenaState {
+  envReady: boolean;
+  localPlayerModelPath: string;
+  selectedCharacter: any;
+  damageQueue: React.RefObject<any[]>;
+  mmSpellsRef: React.RefObject<any[]>;
+  spellsRef: React.RefObject<any[]>;
+  fighterSpellsRef: React.RefObject<any[]>;
+  tankSpellsRef: React.RefObject<any[]>;
+  assassinSpellsRef: React.RefObject<any[]>;
+  simTimeRef: React.RefObject<number>;
+  dealPlayerDamage: (monsterId: string, damage?: number, isCrit?: boolean) => void;
+  sendPlayerState: any;
+  sendPlayerSkill: any;
+  playerStatsRef: React.RefObject<any>;
+  isAutoMode: boolean;
+  activeRemotePlayers: any[];
+  connectedPlayersRef: React.RefObject<any[]>;
+  gameConfig: any;
+  unitRegistryRef: React.RefObject<any[]>;
+  worldMonstersRef: React.RefObject<any[]>;
+  setModelsReady: (ready: boolean) => void;
+  setEnvFinished: (finished: boolean) => void;
+  spawnVFX: any;
+}
+
 interface GameCanvasProps {
   isCinematic: boolean;
   setMapObstacles: (obs: MapObstacle[]) => void;
@@ -126,7 +168,15 @@ interface GameCanvasProps {
   downloadPerfLogs?: () => void;
   clearVFXCache?: () => void;
   isEditor?: boolean;
+  arenaState?: ArenaState;
 }
+
+/**
+ * Fixed DPR cap — coarse pointer (mobile/tablet) = 1.25, fine = 1.5.
+ * Lower fragment-shader cost than the old AdaptiveDpr monitoring loop.
+ */
+const MAX_DPR = typeof window !== 'undefined' &&
+  window.matchMedia('(pointer: coarse)').matches ? 1.25 : 1.5
 
 export const GameCanvas = React.memo(({
   isCinematic: _isCinematic,
@@ -136,10 +186,10 @@ export const GameCanvas = React.memo(({
   downloadPerfLogs,
   clearVFXCache,
   isEditor = false,
+  arenaState,
 }: GameCanvasProps) => {
-  const [dpr, setDpr] = useState(1.0);
+  const [dpr] = useState(MAX_DPR);
   const [envReady, setEnvReady] = useState(false); // Terrain BVH readiness gate
-  const [adaptivePotatoMode, setAdaptivePotatoMode] = useState(false);
   const isSettingsOpen = useStore(s => s.isSettingsOpen);
   const selectedMapId = useEditorStore(s => s.selectedMapId);
   const bloomThreshold = useEditorStore(s => s.bloomThreshold);
@@ -151,11 +201,9 @@ export const GameCanvas = React.memo(({
     setEnvReady(false);
   }, [selectedMapId]);
 
-  // Sync isEditorOpen in the editor store automatically when mounting the editor canvas
+  // Sync isEditorOpen with isEditor prop — prevents editor state leak into arena
   useEffect(() => {
-    if (isEditor) {
-      useEditorStore.getState().setIsEditorOpen(true);
-    }
+    useEditorStore.getState().setIsEditorOpen(isEditor);
   }, [isEditor]);
 
   // Helper to persist updated simulation settings directly into the GORM PostgreSQL backend
@@ -168,7 +216,7 @@ export const GameCanvas = React.memo(({
       const token = typeof window !== 'undefined' ? localStorage.getItem("game_auth_token") : "";
       await fetch(`${API_BASE_URL}/api/config/settings`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "Authorization": token ? `Bearer ${token}` : ""
         },
@@ -193,7 +241,7 @@ export const GameCanvas = React.memo(({
     fogFar: { value: 450, min: 100, max: 1000, step: 10, label: "Fog Far" },
     exposure: { value: 1.0, min: 0.1, max: 4.0, step: 0.1, label: "Sky Exposure" },
 
-    sensitivity: { 
+    sensitivity: {
       value: settingsRef.current.mouseSensitivity || 0.002, min: 0.0005, max: 0.01, step: 0.0001, label: "Mouse Sensitivity",
       onChange: (v) => { settingsRef.current.mouseSensitivity = v; }
     },
@@ -203,11 +251,10 @@ export const GameCanvas = React.memo(({
     }
   }, { collapsed: true, render: () => debug }) as any;
 
-  const [{ perfPosition, minimal, deepAnalyze, showPerf }, setDiag] = useControls("Diagnostics", () => ({
+  const [{ minimal, deepAnalyze }, setDiag] = useControls("Diagnostics", () => ({
     engineTime: { value: 0, label: "Engine Tick (ms)", editable: false },
     suspect: { value: "OPTIMAL", label: "Lag Suspect", editable: false },
     "Performance Tool": folder({
-      showPerf: { value: false, label: "Show R3F-Perf" },
       perfPosition: {
         value: "top-right",
         options: ["top-right", "top-left", "bottom-right", "bottom-left"],
@@ -225,15 +272,15 @@ export const GameCanvas = React.memo(({
       const lastUpdate = useRef(0);
       useFrame((state) => {
         if (!debug) return; // Skip updating Leva diagnostics if debug panel is closed to prevent culling warnings
-        
+
         const now = state.clock.elapsedTime * 1000;
         if (now - lastUpdate.current > 1000) {
           lastUpdate.current = now;
           if (settingsRef.current.telemetry) {
             const { engineMs, bottleneck } = settingsRef.current.telemetry;
-            setDiag({ 
-              engineTime: typeof engineMs === 'number' ? engineMs : 0, 
-              suspect: bottleneck || "OPTIMAL" 
+            setDiag({
+              engineTime: typeof engineMs === 'number' ? engineMs : 0,
+              suspect: bottleneck || "OPTIMAL"
             });
           }
         }
@@ -243,8 +290,13 @@ export const GameCanvas = React.memo(({
     return Bridge;
   }, [debug, setDiag, settingsRef]);
 
-  const VisualTuningBridge = ({ fov, fogDensity, exposure }: { fov: number, fogDensity: number, exposure: number }) => {
+  const VisualTuningBridge = ({ fov, fogDensity }: { fov: number, fogDensity: number }) => {
     const { camera, scene, gl } = useThree();
+
+    // Suppress deprecation warn — PCFSoftShadowMap removed in r183+, use PCFShadowMap
+    useEffect(() => {
+      gl.shadowMap.type = THREE.PCFShadowMap;
+    }, [gl]);
 
     useEffect(() => {
       if (camera && (camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
@@ -259,12 +311,10 @@ export const GameCanvas = React.memo(({
       }
     }, [scene, fogDensity]);
 
-    useEffect(() => {
-      gl.toneMappingExposure = exposure;
-    }, [gl, exposure]);
-
     return null;
   };
+
+  const isPotato = settingsRef.current.potatoMode;
 
   return (
     <div className={`w-full h-full overflow-hidden relative bg-slate-950 flex flex-col select-none touch-none ${isFullscreen ? '' : 'rounded-2xl border border-white/10 shadow-2xl'}`}>
@@ -304,14 +354,14 @@ export const GameCanvas = React.memo(({
           </button>
         )}
       </div>
-      
+
       <div className="flex-grow w-full relative h-full">
-        <Leva 
-          hidden={!debug} 
+        <Leva
+          hidden={!debug}
           theme={{
             colors: { accent1: '#6366f1' },
             sizes: { rootWidth: '320px' }
-          }} 
+          }}
           fill
           flat
         />
@@ -321,8 +371,10 @@ export const GameCanvas = React.memo(({
         </div>
 
         <Canvas
-          shadows={true}
-          dpr={dpr}
+          shadows={{
+            type: THREE.PCFShadowMap,
+          }}
+          dpr={[1, dpr]}
           camera={{ position: [0, 60, 120], fov: 50 }}
           gl={{
             antialias: true,
@@ -337,26 +389,22 @@ export const GameCanvas = React.memo(({
           className="select-none touch-none w-full h-full"
         >
           {debug && <SceneAnalyzer />}
-          <AdaptivePerformanceOptimizer
-            settingsRef={settingsRef}
-            adaptivePotatoMode={adaptivePotatoMode}
-            setAdaptivePotatoMode={setAdaptivePotatoMode}
-            isEditor={isEditor}
+          {/* Phase 1: Passive frame skipper (50fps cap, doesn't break init) */}
+          <FrameSkipper fps={50} />
+
+          {/* Phase 3.2: Entity update system (imperative transform sync) */}
+          <EntityUpdateSystem />
+
+          {/* Phase 7.2: Empty draw guard (prevent WebGL/WebGPU crashes) */}
+          <EmptyDrawGuard />
+
+          <Perf
+            position="bottom-right"
+            minimal={minimal}
+            showGraph={!minimal}
+            deepAnalyze={deepAnalyze}
+            className="z-[2000]"
           />
-          <PerformanceMonitor onIncline={() => setDpr(Math.min(dpr + 0.05, 0.9))} onDecline={() => setDpr(Math.max(dpr - 0.05, 0.6))} />
-
-          <AdaptiveEvents />
-          <AdaptiveDpr pixelated={true} />
-
-          {(showPerf || isEditor) && (
-            <Perf
-              position={isEditor ? "bottom-right" : perfPosition}
-              minimal={minimal}
-              showGraph={!minimal}
-              deepAnalyze={deepAnalyze}
-              className="z-[2000]"
-            />
-          )}
 
           {(isEditor || (!isFullscreen && !envReady)) && (
             <MapControls
@@ -381,7 +429,14 @@ export const GameCanvas = React.memo(({
             debug={debug}
             onReady={() => {
               requestAnimationFrame(() => {
-                requestAnimationFrame(() => setEnvReady(true));
+                requestAnimationFrame(() => {
+                  setEnvReady(true);
+                  if (arenaState) {
+                    setTimeout(() => {
+                      arenaState.setEnvFinished(true);
+                    }, 600);
+                  }
+                });
               });
             }}
           />
@@ -390,17 +445,88 @@ export const GameCanvas = React.memo(({
           {!isEditor && <CameraOcclusionManager />}
           {isEditor && <WorldEditor />}
 
-          <DiagnosticsBridge />
-          <VisualTuningBridge fov={fov} fogDensity={fogDensity} exposure={exposure} />
+          {arenaState && (
+            <VFXProvider>
+              <ModelsPreloader onReady={() => { (arenaState as any).setModelsReady(true) }} />
 
-          {!settingsRef.current.potatoMode && !adaptivePotatoMode && (
-            <SafePostProcessing
-              bloomThreshold={bloomThreshold !== null && bloomThreshold !== undefined ? bloomThreshold : 1.75}
-              bloomStrength={bloomStrength !== null && bloomStrength !== undefined ? bloomStrength : 0.15}
-              bloomRadius={bloomRadius !== null && bloomRadius !== undefined ? bloomRadius : 0.25}
-              exposure={exposure}
-            />
+              <BeginnerSpellEffect spellsRef={arenaState.mmSpellsRef} unitRegistry={arenaState.unitRegistryRef} simTimeRef={arenaState.simTimeRef} />
+              <FighterSpellEffect fighterSpellsRef={arenaState.fighterSpellsRef} simTimeRef={arenaState.simTimeRef} />
+              <TankSpellEffect tankSpellsRef={arenaState.tankSpellsRef} simTimeRef={arenaState.simTimeRef} unitRegistry={arenaState.unitRegistryRef} />
+              <AssassinSpellEffect assassinSpellsRef={arenaState.assassinSpellsRef} simTimeRef={arenaState.simTimeRef} />
+              <MageSpellEffect spellsRef={arenaState.spellsRef} unitRegistry={arenaState.unitRegistryRef} simTimeRef={arenaState.simTimeRef} />
+
+              <DamageHUDBatcher
+                damageQueue={arenaState.damageQueue}
+                playerStatsRef={arenaState.playerStatsRef}
+              />
+
+              <ArcherTrapSystem
+                unitRegistry={arenaState.unitRegistryRef}
+                dealPlayerDamage={arenaState.dealPlayerDamage}
+                spawnVFX={arenaState.spawnVFX}
+              />
+
+              <PlayerController
+                paused={!arenaState.envReady}
+                modelPath={arenaState.localPlayerModelPath}
+                playerClass={arenaState.selectedCharacter?.class || "Warrior"}
+                settingsRef={settingsRef}
+                damageQueue={arenaState.damageQueue}
+                mmSpellsRef={arenaState.mmSpellsRef}
+                spellsRef={arenaState.spellsRef}
+                fighterSpellsRef={arenaState.fighterSpellsRef}
+                tankSpellsRef={arenaState.tankSpellsRef}
+                assassinSpellsRef={arenaState.assassinSpellsRef}
+                simTimeRef={arenaState.simTimeRef}
+                dealPlayerDamage={arenaState.dealPlayerDamage}
+                sendPlayerState={arenaState.sendPlayerState}
+                sendPlayerSkill={arenaState.sendPlayerSkill}
+                playerStats={arenaState.playerStatsRef.current?.hp >= 0 ? arenaState.playerStatsRef.current : undefined}
+                playerStatsRef={arenaState.playerStatsRef}
+                selectedCharacter={arenaState.selectedCharacter}
+                isAutoMode={arenaState.isAutoMode}
+              />
+
+              <RemotePlayersRenderer
+                activeRemotePlayers={arenaState.activeRemotePlayers}
+                connectedPlayersRef={arenaState.connectedPlayersRef}
+                gameConfig={arenaState.gameConfig}
+                mmSpellsRef={arenaState.mmSpellsRef}
+                spellsRef={arenaState.spellsRef}
+                fighterSpellsRef={arenaState.fighterSpellsRef}
+                tankSpellsRef={arenaState.tankSpellsRef}
+                assassinSpellsRef={arenaState.assassinSpellsRef}
+                unitRegistry={arenaState.unitRegistryRef}
+                localPlayerId={arenaState.selectedCharacter?.id}
+              />
+
+              <RemoteMonstersRenderer
+                worldMonstersRef={arenaState.worldMonstersRef}
+                onAttack={(monsterId) => {
+                  (window as any).monsterClickedThisFrame = true;
+                  (window as any).clickedTargetId = monsterId;
+                  (window as any).hasAttackIntent = true;
+                }}
+                connectedPlayersRef={arenaState.connectedPlayersRef}
+                localPlayerId={arenaState.selectedCharacter?.id}
+                gameConfig={arenaState.gameConfig}
+              />
+
+              <FPSCounterUpdater />
+            </VFXProvider>
           )}
+
+          <DiagnosticsBridge />
+          <VisualTuningBridge fov={fov} fogDensity={fogDensity} />
+
+          {/* Phase 3.3: Conditional post-processing (no EffectComposer in potato mode) */}
+          <OptimizedPostProcessing
+            enabled={!isPotato}
+            bloomThreshold={bloomThreshold ?? 1.75}
+            bloomStrength={bloomStrength ?? 0.15}
+            bloomRadius={bloomRadius ?? 0.25}
+            exposure={exposure}
+          />
         </Canvas>
       </div>
       {isEditor && <WorldEditorUI />}

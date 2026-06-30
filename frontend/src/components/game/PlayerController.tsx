@@ -20,8 +20,8 @@ import { useVFX } from './systems/VFXManager';
 import ProjectilePool, { ProjectilePoolHandle } from './systems/ProjectilePool';
 import { useStore } from '@/src/state/useStore';
 import { useEditorStore } from '@/src/state/useEditorStore';
-import { getTerrainElevation } from '@/src/core/utils/terrainHeight';
 import { AvatarModel } from './avatar/AvatarModel';
+import { getTerrainElevation } from '@jagres/shared';
 import { classToWeaponCategory, classWeaponMap } from './avatar/weaponConfigs';
 import {
   releaseNextPendingArrow,
@@ -36,7 +36,7 @@ const getDefaultCustomization = (_gender: string, playerClass: string, hairStyle
   else if (playerClass === "Beginner") weaponId = "asset_weapon_bow";
 
   const hairAssetId = `asset_hair_${String(hairStyle).padStart(3, '0')}`;
-  
+
   return {
     "Head": {
       color: "#f5c6a5",
@@ -198,13 +198,13 @@ import {
 // They are captured by a dedicated window keydown listener in archerSkillInput.ts
 // so they work regardless of canvas focus state.
 export const keyboardMap = [
-  { name: 'forward',   keys: ['ArrowUp',    'KeyW'] },
-  { name: 'backward',  keys: ['ArrowDown',  'KeyS'] },
-  { name: 'leftward',  keys: ['ArrowLeft',  'KeyA'] },
+  { name: 'forward', keys: ['ArrowUp', 'KeyW'] },
+  { name: 'backward', keys: ['ArrowDown', 'KeyS'] },
+  { name: 'leftward', keys: ['ArrowLeft', 'KeyA'] },
   { name: 'rightward', keys: ['ArrowRight', 'KeyD'] },
-  { name: 'jump',      keys: ['Space'] },
-  { name: 'run',       keys: ['Shift'] },
-  { name: 'action1',   keys: ['KeyF', 'KeyE'] },
+  { name: 'jump', keys: ['Space'] },
+  { name: 'run', keys: ['Shift'] },
+  { name: 'action1', keys: ['KeyF', 'KeyE'] },
 ];
 
 export const PlayerController = (props: PlayerProps) => {
@@ -229,14 +229,14 @@ export const PlayerController = (props: PlayerProps) => {
     isAutoMode = false,
   } = props;
 
-  const poolRef      = useRef<ProjectilePoolHandle>(null);
-  const ecctrlRef    = useRef<any>(null);
+  const poolRef = useRef<ProjectilePoolHandle>(null);
+  const ecctrlRef = useRef<any>(null);
   const characterRef = useRef<THREE.Group>(null!);
-  const { camera }   = useThree();
-  const spellsPtr       = useRef(0);
-  const mmSpellPtr      = useRef(0);
+  const { camera } = useThree();
+  const spellsPtr = useRef(0);
+  const mmSpellPtr = useRef(0);
   const fighterSpellPtr = useRef(0);
-  const tankSpellPtr    = useRef(0);
+  const tankSpellPtr = useRef(0);
   const assassinSpellPtr = useRef(0);
   const syncAccumulator = useRef(0);
   const lastHpRef = useRef(1000);
@@ -244,7 +244,7 @@ export const PlayerController = (props: PlayerProps) => {
   const [isTargetingAoE, setIsTargetingAoE] = useState(false);
   const aoeTargetPos = useRef(new THREE.Vector3());
   const [isSpawning, setIsSpawning] = useState(true);
-  
+
   const [currentSpeed, setCurrentSpeed] = useState(6.5);
 
   const castState = useRef<CastState>({
@@ -333,8 +333,8 @@ export const PlayerController = (props: PlayerProps) => {
 
   const localCustomization = useMemo(() => {
     const hasStats = playerStats && typeof playerStats.hp !== 'undefined' && playerStats.hp !== -1;
-    const stats = hasStats 
-      ? playerStats 
+    const stats = hasStats
+      ? playerStats
       : ((playerStatsRef?.current && playerStatsRef.current.hp !== -1) ? playerStatsRef.current : (selectedCharacter || {}));
     return parseCustomization(
       (stats as any).custom_avatar_url || (stats as any).customAvatarUrl,
@@ -364,7 +364,7 @@ export const PlayerController = (props: PlayerProps) => {
   usePlayerControls(settingsRef);
 
   const { spawnVFX } = useVFX();
-  const [, getKeys]  = useKeyboardControls();
+  const [, getKeys] = useKeyboardControls();
 
   const isDead = playerStats && typeof playerStats.hp !== 'undefined' && playerStats.hp <= 0;
 
@@ -537,7 +537,7 @@ export const PlayerController = (props: PlayerProps) => {
         // (skill will execute naturally when casting is false next frame)
       }
 
-      const isChatFocus = !!(document.activeElement && 
+      const isChatFocus = !!(document.activeElement &&
         (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA'));
       const keys = isChatFocus ? {} : getKeys();
       const isMovingInput = !!(keys.forward || keys.backward || keys.leftward || keys.rightward);
@@ -793,8 +793,8 @@ export const PlayerController = (props: PlayerProps) => {
           (window as any).__pendingSkillKey = null;
           const CODE_TO_SKILL: Record<string, string> = {
             Digit1: 'double_strafe', Digit2: 'double_strafe',
-            Digit3: 'arrow_shower',  Digit4: 'arrow_repel',
-            Digit5: 'ankle_snare',   Digit6: 'improve_concentration',
+            Digit3: 'arrow_shower', Digit4: 'arrow_repel',
+            Digit5: 'ankle_snare', Digit6: 'improve_concentration',
             F1: 'rain_of_arrows',
           };
           const fromBar = CODE_TO_SKILL[pendingKey];
@@ -875,66 +875,66 @@ export const PlayerController = (props: PlayerProps) => {
           // Skip the generic AoE cast below — handled
         } else {
 
-        const mockTarget: any = {
-          id: "ground_target",
-          name: "Ground",
-          type: "enemy",
-          isActive: true,
-          isDying: false,
-          hp: 9999,
-          maxHp: 9999,
-          position: [aoeTargetPos.current.x, aoeTargetPos.current.y, aoeTargetPos.current.z],
-          level: 1,
-          poolIdx: 0,
-        };
+          const mockTarget: any = {
+            id: "ground_target",
+            name: "Ground",
+            type: "enemy",
+            isActive: true,
+            isDying: false,
+            hp: 9999,
+            maxHp: 9999,
+            position: [aoeTargetPos.current.x, aoeTargetPos.current.y, aoeTargetPos.current.z],
+            level: 1,
+            poolIdx: 0,
+          };
 
-        const ctx = {
-          charPos: _charPos.clone(),
-          originVec: _originVec.clone(),
-          camDir: _camDir.clone(),
-          combo: 0,
-          playerStats,
-          dealPlayerDamage,
-          spawnVFX,
-          camera,
-          simTimeRef,
-          mmSpellsRef,
-          mmSpellPtr,
-          fighterSpellsRef,
-          fighterSpellPtr,
-          assassinSpellsRef,
-          assassinSpellPtr,
-          tankSpellsRef,
-          tankSpellPtr,
-          spellsRef,
-          spellsPtr,
-          poolRef,
-          grid: (window as any).battleGrid,
-          ecctrlRef,
-          cameraShake: (window as any).cameraShake,
-        };
+          const ctx = {
+            charPos: _charPos.clone(),
+            originVec: _originVec.clone(),
+            camDir: _camDir.clone(),
+            combo: 0,
+            playerStats,
+            dealPlayerDamage,
+            spawnVFX,
+            camera,
+            simTimeRef,
+            mmSpellsRef,
+            mmSpellPtr,
+            fighterSpellsRef,
+            fighterSpellPtr,
+            assassinSpellsRef,
+            assassinSpellPtr,
+            tankSpellsRef,
+            tankSpellPtr,
+            spellsRef,
+            spellsPtr,
+            poolRef,
+            grid: (window as any).battleGrid,
+            ecctrlRef,
+            cameraShake: (window as any).cameraShake,
+          };
 
-        const stats = playerStatsRef?.current || playerStats || {};
-        const dex = stats.base_dex ?? stats.baseDEX ?? 10;
-        const int = stats.base_int ?? stats.baseINT ?? 10;
+          const stats = playerStatsRef?.current || playerStats || {};
+          const dex = stats.base_dex ?? stats.baseDEX ?? 10;
+          const int = stats.base_int ?? stats.baseINT ?? 10;
 
-        const fct = 0.4;
-        const vctBase = 1.2;
-        const vctRatio = Math.min(1.0, (dex + int / 2.0) / 265.0);
-        const vctActual = vctBase * (1.0 - vctRatio);
-        const totalCastTime = fct + vctActual;
+          const fct = 0.4;
+          const vctBase = 1.2;
+          const vctRatio = Math.min(1.0, (dex + int / 2.0) / 265.0);
+          const vctActual = vctBase * (1.0 - vctRatio);
+          const totalCastTime = fct + vctActual;
 
-        console.log(`🔮 Starting Cast: DEX=${dex}, INT=${int}, VCT Ratio=${vctRatio.toFixed(3)}, FCT=${fct}s, VCT=${vctActual.toFixed(3)}s, Total=${totalCastTime.toFixed(3)}s`);
+          console.log(`🔮 Starting Cast: DEX=${dex}, INT=${int}, VCT Ratio=${vctRatio.toFixed(3)}, FCT=${fct}s, VCT=${vctActual.toFixed(3)}s, Total=${totalCastTime.toFixed(3)}s`);
 
-        castState.current = {
-          isCasting: true,
-          startTime: now,
-          totalTime: totalCastTime * 1000,
-          fctTime: fct * 1000,
-          vctTime: vctActual * 1000,
-          target: mockTarget,
-          context: ctx,
-        };
+          castState.current = {
+            isCasting: true,
+            startTime: now,
+            totalTime: totalCastTime * 1000,
+            fctTime: fct * 1000,
+            vctTime: vctActual * 1000,
+            target: mockTarget,
+            context: ctx,
+          };
         } // end else (non-archer AoE)
       }
 
@@ -1061,7 +1061,7 @@ export const PlayerController = (props: PlayerProps) => {
       //   θ = atan2(-camDir.z, camDir.x)
       const modelGroup = ecctrlRef.current?.model;
       if (modelGroup && !isDead &&
-          currentDebuff !== "stun" && currentDebuff !== "freeze") {
+        currentDebuff !== "stun" && currentDebuff !== "freeze") {
         // ── Reset child group Y rotation accumulated during attack/chase ──
         // usePlayerTargeting adds to characterRef.rotation.y when attacking.
         // Smoothly lerp it back to 0 when NOT in attack or chase state.
@@ -1080,9 +1080,9 @@ export const PlayerController = (props: PlayerProps) => {
 
   return (
     <>
-      <ProjectilePool 
-        ref={poolRef} 
-        damageQueue={damageQueue} 
+      <ProjectilePool
+        ref={poolRef}
+        damageQueue={damageQueue}
         dealPlayerDamage={dealPlayerDamage}
         playerClass={playerClass}
         unitRegistry={unitRegistry}
@@ -1137,14 +1137,14 @@ export const PlayerController = (props: PlayerProps) => {
 
           <mesh ref={freezeVFXRef} position={[0, 1.0, 0]} visible={false}>
             <boxGeometry args={[1.2, 2.0, 1.2]} />
-            <meshPhysicalMaterial 
-              color="#67e8f9" 
-              transparent 
-              opacity={0.6} 
-              roughness={0.1} 
+            <meshPhysicalMaterial
+              color="#67e8f9"
+              transparent
+              opacity={0.6}
+              roughness={0.1}
               metalness={0.1}
-              transmission={0.6} 
-              thickness={1.5} 
+              transmission={0.6}
+              thickness={1.5}
             />
           </mesh>
 
@@ -1168,22 +1168,22 @@ export const PlayerController = (props: PlayerProps) => {
 
       <group position={[_charPos.x, _charPos.y + 1.2, _charPos.z]}>
         <Html center style={{ pointerEvents: 'none' }}>
-          <div 
-            id="player-cast-bar-container" 
+          <div
+            id="player-cast-bar-container"
             className="hidden flex flex-col items-center gap-1 select-none"
           >
             <div className="text-[9px] font-black text-amber-300 drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.9)] uppercase tracking-wider">
               Casting...
             </div>
-            
+
             <div className="w-24 h-2 bg-black/85 border border-white/20 rounded shadow-md overflow-hidden flex">
-              <div 
-                id="player-cast-fct" 
+              <div
+                id="player-cast-fct"
                 className="h-full bg-amber-400"
                 style={{ width: '0%' }}
               />
-              <div 
-                id="player-cast-vct" 
+              <div
+                id="player-cast-vct"
                 className="h-full bg-emerald-400"
                 style={{ width: '0%' }}
               />

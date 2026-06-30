@@ -7,7 +7,7 @@ import { useInView } from 'react-intersection-observer';
 import { Search, Package, Eye, RotateCw } from 'lucide-react';
 import * as THREE from 'three';
 import { useEditorStore, ASSET_LIBRARY } from '@/src/state/useEditorStore';
-import { FULL_MATERIAL_LIBRARY } from '@/src/core/logic/environment/assetRegistry';
+import { FULL_MATERIAL_LIBRARY } from '@jagres/shared';
 
 // ─── SINGLE 3D PREVIEW MODEL (rotates smoothly, one GLB at a time) ───
 const PreviewModel = ({ path }: { path: string }) => {
@@ -47,11 +47,11 @@ const PreviewModel = ({ path }: { path: string }) => {
 
 // ─── CATEGORY → ICON/GRADIENT MAPPING (consistent visual identity per type) ───
 const CATEGORY_VISUAL: Record<string, { emoji: string; gradient: string; ring: string }> = {
-  trees:      { emoji: '🌲', gradient: 'from-emerald-950/60 to-emerald-900/20', ring: 'ring-emerald-500/20' },
-  tree:       { emoji: '🌲', gradient: 'from-emerald-950/60 to-emerald-900/20', ring: 'ring-emerald-500/20' },
-  vegetation: { emoji: '🌿', gradient: 'from-green-950/60 to-green-900/20',     ring: 'ring-green-500/20' },
-  rocks:      { emoji: '🪨', gradient: 'from-stone-950/60 to-stone-900/20',     ring: 'ring-stone-500/20' },
-  characters: { emoji: '🧑', gradient: 'from-sky-950/60 to-sky-900/20',         ring: 'ring-sky-500/20' },
+  trees: { emoji: '🌲', gradient: 'from-emerald-950/60 to-emerald-900/20', ring: 'ring-emerald-500/20' },
+  tree: { emoji: '🌲', gradient: 'from-emerald-950/60 to-emerald-900/20', ring: 'ring-emerald-500/20' },
+  vegetation: { emoji: '🌿', gradient: 'from-green-950/60 to-green-900/20', ring: 'ring-green-500/20' },
+  rocks: { emoji: '🪨', gradient: 'from-stone-950/60 to-stone-900/20', ring: 'ring-stone-500/20' },
+  characters: { emoji: '🧑', gradient: 'from-sky-950/60 to-sky-900/20', ring: 'ring-sky-500/20' },
 };
 
 const DEFAULT_VISUAL = { emoji: '📦', gradient: 'from-zinc-950/60 to-zinc-900/20', ring: 'ring-zinc-500/20' };
@@ -92,11 +92,10 @@ const AssetCard = React.memo(({ asset, isActive, onClick, onHover }: {
       ref={ref}
       onClick={onClick}
       onMouseEnter={onHover}
-      className={`group relative flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all duration-200 border ${
-        isActive
+      className={`group relative flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all duration-200 border ${isActive
           ? 'bg-indigo-600/15 border-indigo-500 shadow-[0_0_12px_rgba(99,102,241,0.4)] scale-[0.96] ring-2 ring-indigo-500/20'
           : 'bg-zinc-900/40 border-zinc-800/60 hover:bg-zinc-800/50 hover:border-zinc-700/60 hover:scale-[0.98]'
-      }`}
+        }`}
       style={{ contentVisibility: 'auto', containIntrinsicSize: '0 68px' }}
     >
       {inView ? (
@@ -112,9 +111,8 @@ const AssetCard = React.memo(({ asset, isActive, onClick, onHover }: {
             )}
           </div>
           {/* Asset name label */}
-          <span className={`text-[7.5px] font-mono tracking-tighter truncate w-full px-0.5 text-center leading-tight ${
-            isActive ? 'text-indigo-300 font-bold' : 'text-zinc-500 group-hover:text-zinc-300'
-          }`}>
+          <span className={`text-[7.5px] font-mono tracking-tighter truncate w-full px-0.5 text-center leading-tight ${isActive ? 'text-indigo-300 font-bold' : 'text-zinc-500 group-hover:text-zinc-300'
+            }`}>
             {asset.name}
           </span>
         </>
@@ -209,10 +207,10 @@ export const AssetsLibraryModule = () => {
   const filteredAssets = selectedCategory === 'materials'
     ? FULL_MATERIAL_LIBRARY
     : (dynamicAssets.length > 0 ? dynamicAssets : ASSET_LIBRARY).filter((a: any) => {
-        const matchesSearch = a.name.toLowerCase().includes(search.toLowerCase());
-        const matchesCategory = selectedCategory === 'all' || a.category === selectedCategory;
-        return matchesSearch && matchesCategory;
-      });
+      const matchesSearch = a.name.toLowerCase().includes(search.toLowerCase());
+      const matchesCategory = selectedCategory === 'all' || a.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
 
   // Determine current preview target (selected or hovered asset)
   const currentPreview = previewAsset || activeAsset;
@@ -245,11 +243,10 @@ export const AssetsLibraryModule = () => {
           <button
             key={cat}
             onClick={() => setSelectedCategory(cat)}
-            className={`py-1.5 px-1 rounded-md text-[7px] font-black tracking-tighter uppercase transition-all ${
-              selectedCategory === cat
+            className={`py-1.5 px-1 rounded-md text-[7px] font-black tracking-tighter uppercase transition-all ${selectedCategory === cat
                 ? 'bg-indigo-600 text-white shadow shadow-indigo-600/20'
                 : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/40'
-            }`}
+              }`}
           >
             {cat}
           </button>

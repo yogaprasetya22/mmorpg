@@ -15,7 +15,7 @@
 import { useMemo, useRef, useEffect } from 'react';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
-import type { MapItem } from '@/src/state/useEditorStore';
+import type { MapItem } from '@jagres/shared';
 
 // ── PER-PATH INSTANCED GROUP ─────────────────────────────────────────────────
 

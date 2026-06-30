@@ -6,7 +6,7 @@ import { useGLTF } from '@react-three/drei';
 import { SimplexNoise } from 'three-stdlib';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 import { InstancedStaticCollider } from 'bvhecctrl';
-import { applyWindSway } from '@/src/core/utils/wind';
+import { applyWindSway } from '@jagres/shared';
 import { isGrassAssetPath } from '../../environment/GrassField';
 
 import { API_BASE_URL } from '@/src/core/config';
@@ -75,7 +75,7 @@ function extractMeshParts(
 ): { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[] }[] {
     const parts: { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[] }[] = [];
     scene.updateMatrixWorld(true);
-    scene.traverse((child) => {
+    scene.traverse((child: THREE.Object3D) => {
         if (!(child as THREE.Mesh).isMesh || !child.visible) return;
         const mesh = child as THREE.Mesh;
 
@@ -87,7 +87,7 @@ function extractMeshParts(
 
         // Clone material to prevent modifying template GLTF cache directly
         const mat = Array.isArray(mesh.material)
-            ? mesh.material.map(m => m.clone())
+            ? mesh.material.map((m: THREE.Material) => m.clone())
             : mesh.material.clone();
 
         setupLeafMaterial(mat);

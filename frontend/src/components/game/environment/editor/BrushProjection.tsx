@@ -89,7 +89,7 @@ export const HolographicBrushProjection = memo((props: HolographicProps) => {
 
 // ─── PLACED MASK PROJECTION ───
 
-import type { MapItem } from '@/src/state/useEditorStore';
+import type { MapItem } from '@jagres/shared';
 
 interface PlacedMaskProps {
     item: MapItem;

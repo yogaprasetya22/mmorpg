@@ -16,14 +16,13 @@ import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from 'rea
 import { useThree, useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
-import { useEditorStore, MapItem } from '@/src/state/useEditorStore';
-import { getTerrainElevation } from '@/src/core/utils/terrainHeight';
-import { API_BASE_URL } from '@/src/core/config';
-import { windUniforms } from '@/src/core/utils/wind';
+import { useEditorStore } from '@/src/state/useEditorStore';
+import type { MapItem } from '@jagres/shared';
+import { getTerrainElevation, API_BASE_URL, windUniforms } from '@jagres/shared';
 import { GrassField, isGrassAssetPath } from './GrassField';
 import { _charPos as _ghostPreviewPos } from '../player/buffers';
 import { THEME_ASSETS } from './editor/VegetationModule';
-import { getCachedTerrainHeight } from '@/src/core/utils/terrainCache';
+import { getCachedTerrainHeight } from '@jagres/shared';
 
 // Extracted sub-components
 import { SafeErrorBoundary, _scratchBox3, _scratchSize, _scratchDir, _scratchTarget, buildProjectedCirclePoints } from './editor/editorUtils';
@@ -50,10 +49,27 @@ export const WorldEditor = () => {
   } = useEditorStore();
 
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [hoverPos, setHoverPos] = useState<THREE.Vector3 | null>(null);
+  const [hasHoverPos, setHasHoverPos] = useState(false);
+  const hoverPosRef = useRef<THREE.Vector3 | null>(null);
+  const groupRef = useRef<THREE.Group>(null);
   const [isOverUI, setIsOverUI] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [isShiftPressed, setIsShiftPressed] = useState(false);
+
+  const getRaycastTargets = useCallback(() => {
+    const targets: THREE.Object3D[] = [];
+    const terrain = scene.getObjectByName('terrain');
+    if (terrain) targets.push(terrain);
+
+    if (groupRef.current) {
+      groupRef.current.children.forEach(child => {
+        if (child.name && (child.name.startsWith('item_') || items.some(it => it.id === child.name))) {
+          targets.push(child);
+        }
+      });
+    }
+    return targets.length > 0 ? targets : scene.children;
+  }, [scene, items]);
 
   // Refs
   const isDraggingVegetationRef = useRef(false);
@@ -254,7 +270,7 @@ export const WorldEditor = () => {
           const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
           const exactMouse = new THREE.Vector2(ndcX, ndcY);
           raycaster.setFromCamera(exactMouse, camera);
-          const hits = raycaster.intersectObjects(scene.children, true);
+          const hits = raycaster.intersectObjects(getRaycastTargets(), true);
           const terrainHit = hits.find(i => i.object.name === 'terrain');
           if (terrainHit) {
             const hp = terrainHit.point;
@@ -275,7 +291,7 @@ export const WorldEditor = () => {
       const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       const exactMouse = new THREE.Vector2(ndcX, ndcY);
       raycaster.setFromCamera(exactMouse, camera);
-      const hits = raycaster.intersectObjects(scene.children, true);
+      const hits = raycaster.intersectObjects(getRaycastTargets(), true);
       const filtered = draggedId ? hits.filter(i => { let c: any = i.object; while (c) { if (c.name === draggedId) return false; c = c.parent; } return true; }) : hits;
       if (filtered.length === 0) { if (draggedId) commitPlacement(draggedId); else setSelectedId(null); return; }
       const itemHit = filtered.find(i => { let c: any = i.object; while (c) { if (c.name && (c.name.startsWith('item_') || items.some(it => it.id === c.name))) return true; c = c.parent; } return false; });
@@ -390,7 +406,8 @@ export const WorldEditor = () => {
     }
 
     if (!isEditorOpen || isOverUI) {
-      if (hoverPos) setHoverPos(null);
+      hoverPosRef.current = null;
+      if (hasHoverPos) setHasHoverPos(false);
       if (hoveredId) setHoveredId(null);
       if (brushHoverPos) setBrushHoverPos(null);
       document.body.style.cursor = 'auto';
@@ -400,7 +417,7 @@ export const WorldEditor = () => {
     // VEGETATION MODE
     if (vegetationBrushActive) {
       raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(scene.children, true);
+      const intersects = raycaster.intersectObjects(getRaycastTargets(), true);
       const terrainHit = intersects.find(i => i.object.name && (i.object.name.toLowerCase().includes('terrain') || i.object.name.toLowerCase().includes('ground')));
       if (terrainHit) {
         const p = terrainHit.point;
@@ -416,7 +433,8 @@ export const WorldEditor = () => {
           if (ctrls && !ctrls.enabled && !draggedId) ctrls.enabled = true;
         }
       } else { setBrushHoverPos(null); if (!isDraggingVegetationRef.current) lastSprayPosRef.current = null; }
-      if (hoverPos) setHoverPos(null);
+      hoverPosRef.current = null;
+      if (hasHoverPos) setHasHoverPos(false);
       if (hoveredId) setHoveredId(null);
       document.body.style.cursor = 'cell';
       return;
@@ -424,7 +442,7 @@ export const WorldEditor = () => {
 
     // FULL RAYCAST (non-veg modes)
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(scene.children, true);
+    const intersects = raycaster.intersectObjects(getRaycastTargets(), true);
 
     // Paint mode
     if (paintMode) {
@@ -433,7 +451,8 @@ export const WorldEditor = () => {
         const now = _.clock.getElapsedTime();
         if (now - lastBrushUpdateRef.current > 0.1) { lastBrushUpdateRef.current = now; setBrushHoverPos([terrainHit.point.x, terrainHit.point.y, terrainHit.point.z]); }
       } else { setBrushHoverPos(null); }
-      if (hoverPos) setHoverPos(null);
+      hoverPosRef.current = null;
+      if (hasHoverPos) setHasHoverPos(false);
       if (hoveredId) setHoveredId(null);
       document.body.style.cursor = 'crosshair';
       return;
@@ -470,8 +489,12 @@ export const WorldEditor = () => {
       const snappedPoint = new THREE.Vector3(snapX, snapY + dragElevationOffsetRef.current, snapZ);
       targetDragPosRef.current.lerp(snappedPoint, 1 - Math.exp(-24 * delta));
       smoothHoverPosRef.current.lerp(new THREE.Vector3(snapX, snapY, snapZ), 1 - Math.exp(-18 * delta));
-      setHoverPos(smoothHoverPosRef.current);
-    } else { setHoverPos(null); }
+      hoverPosRef.current = smoothHoverPosRef.current;
+      if (!hasHoverPos) setHasHoverPos(true);
+    } else {
+      hoverPosRef.current = null;
+      if (hasHoverPos) setHasHoverPos(false);
+    }
 
     if (draggedId) {
       const obj = scene.getObjectByName(draggedId);
@@ -502,11 +525,11 @@ export const WorldEditor = () => {
   const treeItems = useMemo(() => proceduralItems.filter(i => !isGrassAssetPath(i.path)), [proceduralItems]);
 
   return (
-    <group>
+    <group ref={groupRef}>
       {/* Ghost preview for manual placement */}
-      {hoverPos && activeAsset && (
-        <Suspense fallback={<mesh position={[hoverPos.x, hoverPos.y + 0.15, hoverPos.z]} rotation-x={-Math.PI / 2}><ringGeometry args={[0.4, 0.5, 32]} /><meshBasicMaterial color="#fbbf24" transparent opacity={0.8} /></mesh>}>
-          <GhostPreview path={activeAsset.path} position={hoverPos} scale={lastUsedScales[activeAsset.path] || [1, 1, 1]} rotation={lastUsedRotations[activeAsset.path] || [0, 0, 0]} />
+      {hasHoverPos && activeAsset && (
+        <Suspense fallback={null}>
+          <GhostPreview path={activeAsset.path} positionRef={hoverPosRef} scale={lastUsedScales[activeAsset.path] || [1, 1, 1]} rotation={lastUsedRotations[activeAsset.path] || [0, 0, 0]} />
         </Suspense>
       )}
 

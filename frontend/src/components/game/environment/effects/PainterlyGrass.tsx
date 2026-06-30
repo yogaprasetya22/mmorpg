@@ -1,9 +1,8 @@
 import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { PainterlyGrassMaterial } from '../../systems/effects/PainterlyMaterials';
 import { useStore } from "@/src/state/useStore";
-import { getTerrainElevation } from "@/src/core/utils/terrainHeight";
+import { PainterlyGrassMaterial, getTerrainElevation } from '@jagres/shared';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const GRASS_COUNT = 1500; // Total instances (each instance will be a cluster)
@@ -41,7 +40,7 @@ export const PainterlyGrass = ({ baseDistance = 24, mode }: PainterlyGrassProps)
         let count = 0;
         const radius = mode === 'DIORAMA' ? baseDistance + 15 : 400;
         const density = gameState === 'SETUP' ? GRASS_COUNT / 3 : GRASS_COUNT;
-        
+
         // Use a seeded-like deterministic random for stability
         let seed = 123.456;
         const rnd = () => {
@@ -60,10 +59,10 @@ export const PainterlyGrass = ({ baseDistance = 24, mode }: PainterlyGrassProps)
 
             // Match the corrected unmirrored terrain mesh coordinates
             const elevation = getTerrainElevation(x, z, mode, baseDistance);
-            
+
             // Do not place grass on mountains!
             if (elevation > 0.5) continue;
-            
+
             // Terrain mesh is now positioned at [0, 0, 0] for all modes
             const baseHeight = 0.0;
 
@@ -76,7 +75,7 @@ export const PainterlyGrass = ({ baseDistance = 24, mode }: PainterlyGrassProps)
         }
         mesh.count = count;
         mesh.instanceMatrix.needsUpdate = true;
-        
+
         // Fix disappearing issue (Frustum Culling bounds)
         mesh.computeBoundingSphere();
     }, [baseDistance, dummy, gameState, mode]);

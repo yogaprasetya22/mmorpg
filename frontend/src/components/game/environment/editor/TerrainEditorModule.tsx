@@ -17,8 +17,8 @@ import {
   Bookmark
 } from 'lucide-react';
 import { useEditorStore } from '@/src/state/useEditorStore';
-import { FULL_MATERIAL_LIBRARY } from '@/src/core/logic/environment/assetRegistry';
 import type { BrushMaskId } from '@/src/state/useEditorStore';
+import { FULL_MATERIAL_LIBRARY } from '@jagres/shared';
 
 // ─── REUSABLE BRUSH MASK SELECTOR (6 shapes) ───
 const MASK_OPTIONS: { id: BrushMaskId; title: string; hotkey: string; icon: React.ReactNode }[] = [
@@ -80,11 +80,10 @@ const BrushMaskSelector = ({ brushMaskId, setBrushMaskId, accentColor = 'blue' }
           key={mask.id}
           onClick={() => setBrushMaskId(mask.id)}
           title={`${mask.title} (Hotkey: ${mask.hotkey})`}
-          className={`h-7 rounded-md border flex items-center justify-center transition-all duration-200 cursor-pointer active:scale-90 ${
-            brushMaskId === mask.id
+          className={`h-7 rounded-md border flex items-center justify-center transition-all duration-200 cursor-pointer active:scale-90 ${brushMaskId === mask.id
               ? `${active} scale-105`
               : 'bg-transparent border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/30 hover:scale-105'
-          }`}
+            }`}
         >
           {mask.icon}
         </button>
@@ -132,11 +131,11 @@ const BrushSliders = ({ brushSize, setBrushSize, brushStrength, setBrushStrength
 
 // ─── TOOL ACCENT COLORS ───
 const TOOL_COLORS: Record<string, { accent: string; label: string; icon: React.ReactNode; maskAccent: string }> = {
-  raise:   { accent: 'text-emerald-400', label: 'Raise Hills',   icon: <ArrowUp className="w-3.5 h-3.5 text-emerald-500" />,     maskAccent: 'emerald' },
-  lower:   { accent: 'text-rose-400',    label: 'Lower Valleys', icon: <ArrowDown className="w-3.5 h-3.5 text-rose-500" />,       maskAccent: 'rose' },
-  smooth:  { accent: 'text-cyan-400',    label: 'Smooth Slope',  icon: <Sparkles className="w-3.5 h-3.5 text-cyan-400" />,       maskAccent: 'cyan' },
-  flatten: { accent: 'text-amber-400',   label: 'Flatten Plain', icon: <Eraser className="w-3.5 h-3.5 text-amber-500" />,        maskAccent: 'amber' },
-  paint:   { accent: 'text-indigo-400',  label: 'Paint Splat',   icon: <Paintbrush className="w-3.5 h-3.5 text-indigo-400" />,   maskAccent: 'indigo' },
+  raise: { accent: 'text-emerald-400', label: 'Raise Hills', icon: <ArrowUp className="w-3.5 h-3.5 text-emerald-500" />, maskAccent: 'emerald' },
+  lower: { accent: 'text-rose-400', label: 'Lower Valleys', icon: <ArrowDown className="w-3.5 h-3.5 text-rose-500" />, maskAccent: 'rose' },
+  smooth: { accent: 'text-cyan-400', label: 'Smooth Slope', icon: <Sparkles className="w-3.5 h-3.5 text-cyan-400" />, maskAccent: 'cyan' },
+  flatten: { accent: 'text-amber-400', label: 'Flatten Plain', icon: <Eraser className="w-3.5 h-3.5 text-amber-500" />, maskAccent: 'amber' },
+  paint: { accent: 'text-indigo-400', label: 'Paint Splat', icon: <Paintbrush className="w-3.5 h-3.5 text-indigo-400" />, maskAccent: 'indigo' },
 };
 
 export const TerrainEditorModule = () => {
@@ -230,21 +229,19 @@ export const TerrainEditorModule = () => {
       <div className="flex p-0.5 bg-zinc-950/80 rounded-lg border border-zinc-900 text-[9px] font-medium relative">
         <button
           onClick={() => setTerrainMode('sculpt')}
-          className={`flex-1 py-1.5 rounded-md uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer select-none ${
-            terrainMode === 'sculpt'
+          className={`flex-1 py-1.5 rounded-md uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer select-none ${terrainMode === 'sculpt'
               ? 'bg-zinc-900 text-white font-bold border border-zinc-800 shadow-[0_2px_8px_rgba(0,0,0,0.4)]'
               : 'text-zinc-500 hover:text-zinc-300 border border-transparent'
-          }`}
+            }`}
         >
           <Mountain className="w-3.5 h-3.5 text-zinc-400" /> Height sculpt
         </button>
         <button
           onClick={() => setTerrainMode('paint')}
-          className={`flex-1 py-1.5 rounded-md uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer select-none ${
-            terrainMode === 'paint'
+          className={`flex-1 py-1.5 rounded-md uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer select-none ${terrainMode === 'paint'
               ? 'bg-zinc-900 text-white font-bold border border-zinc-800 shadow-[0_2px_8px_rgba(0,0,0,0.4)]'
               : 'text-zinc-500 hover:text-zinc-300 border border-transparent'
-          }`}
+            }`}
         >
           <Paintbrush className="w-3.5 h-3.5 text-zinc-400" /> Paint splat
         </button>
@@ -272,11 +269,10 @@ export const TerrainEditorModule = () => {
                   <button
                     key={tool}
                     onClick={() => setSculptTool(tool)}
-                    className={`py-1.5 rounded-md text-center transition-all flex items-center justify-center gap-1.5 border text-[9px] cursor-pointer select-none ${
-                      isActive
+                    className={`py-1.5 rounded-md text-center transition-all flex items-center justify-center gap-1.5 border text-[9px] cursor-pointer select-none ${isActive
                         ? `bg-${accent}-600/10 border-${accent}-500/30 ${meta.accent} font-black shadow-[0_0_12px_rgba(0,0,0,0.1)]`
                         : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/40'
-                    }`}
+                      }`}
                     style={isActive ? {
                       backgroundColor: accent === 'emerald' ? 'rgba(16,185,129,0.08)' : accent === 'rose' ? 'rgba(244,63,94,0.08)' : accent === 'cyan' ? 'rgba(6,182,212,0.08)' : 'rgba(245,158,11,0.08)',
                       borderColor: accent === 'emerald' ? 'rgba(16,185,129,0.25)' : accent === 'rose' ? 'rgba(244,63,94,0.25)' : accent === 'cyan' ? 'rgba(6,182,212,0.25)' : 'rgba(245,158,11,0.25)',
@@ -462,11 +458,10 @@ export const TerrainEditorModule = () => {
                     <div
                       key={blueprint.id}
                       onClick={() => applyPaintBlueprint(blueprint.id)}
-                      className={`group relative flex items-center gap-2 p-2 bg-zinc-900/40 hover:bg-zinc-900 border rounded-xl transition-all cursor-pointer select-none ${
-                        isActive
+                      className={`group relative flex items-center gap-2 p-2 bg-zinc-900/40 hover:bg-zinc-900 border rounded-xl transition-all cursor-pointer select-none ${isActive
                           ? 'border-blue-500/70 bg-blue-500/[0.04] shadow-[0_0_10px_rgba(59,130,246,0.15)]'
                           : 'border-zinc-900 hover:border-zinc-800'
-                      }`}
+                        }`}
                     >
                       <div className="w-7 h-7 rounded-lg border border-zinc-800/80 flex items-center justify-center relative overflow-hidden flex-shrink-0" style={{ backgroundColor: blueprint.brushColor }}>
                         {material?.diffuse && (
@@ -527,11 +522,10 @@ export const TerrainEditorModule = () => {
                   <button
                     key={layerIdx}
                     onClick={() => setActivePaintLayer(layerIdx as any)}
-                    className={`p-1.5 rounded-xl border flex flex-col items-center gap-1 transition-all relative overflow-hidden cursor-pointer select-none ${
-                      isActive
+                    className={`p-1.5 rounded-xl border flex flex-col items-center gap-1 transition-all relative overflow-hidden cursor-pointer select-none ${isActive
                         ? 'border-indigo-500 bg-indigo-500/5 shadow-[0_0_12px_rgba(99,102,241,0.25)]'
                         : 'border-zinc-800 hover:border-zinc-700 bg-zinc-900/30'
-                    }`}
+                      }`}
                   >
                     <div className="w-8 h-8 rounded-lg border border-zinc-800/80 flex items-center justify-center relative overflow-hidden flex-shrink-0" style={{ backgroundColor: color || '#3d5c36' }}>
                       {material?.diffuse && (
@@ -560,21 +554,19 @@ export const TerrainEditorModule = () => {
               <div className="grid grid-cols-2 gap-1.5 text-[8px] font-bold">
                 <button
                   onClick={() => setPaintLayerMaterial(activePaintLayer, null)}
-                  className={`py-1 rounded border transition-all cursor-pointer select-none ${
-                    !paintLayerMaterials[activePaintLayer]
+                  className={`py-1 rounded border transition-all cursor-pointer select-none ${!paintLayerMaterials[activePaintLayer]
                       ? 'bg-indigo-600/20 border-indigo-500 text-white font-extrabold'
                       : 'border-transparent text-zinc-500 hover:bg-zinc-900'
-                  }`}
+                    }`}
                 >
                   Solid Color
                 </button>
                 <button
                   onClick={() => setPaintLayerMaterial(activePaintLayer, FULL_MATERIAL_LIBRARY[0].id)}
-                  className={`py-1 rounded border transition-all cursor-pointer select-none ${
-                    paintLayerMaterials[activePaintLayer]
+                  className={`py-1 rounded border transition-all cursor-pointer select-none ${paintLayerMaterials[activePaintLayer]
                       ? 'bg-indigo-600/20 border-indigo-500 text-white font-extrabold'
                       : 'border-transparent text-zinc-500 hover:bg-zinc-900'
-                  }`}
+                    }`}
                 >
                   Texture Material
                 </button>
@@ -587,11 +579,10 @@ export const TerrainEditorModule = () => {
                     <button
                       key={mat.id}
                       onClick={() => setPaintLayerMaterial(activePaintLayer, mat.id)}
-                      className={`h-8 rounded border transition-all relative overflow-hidden cursor-pointer select-none ${
-                        paintLayerMaterials[activePaintLayer] === mat.id
+                      className={`h-8 rounded border transition-all relative overflow-hidden cursor-pointer select-none ${paintLayerMaterials[activePaintLayer] === mat.id
                           ? 'border-indigo-500 shadow'
                           : 'border-transparent hover:border-zinc-700'
-                      }`}
+                        }`}
                     >
                       {mat.diffuse && <img src={mat.diffuse} className="absolute inset-0 w-full h-full object-cover opacity-60" alt="" />}
                       <div className="absolute inset-0 flex items-center justify-center bg-black/60 hover:bg-transparent transition-colors">
@@ -608,11 +599,10 @@ export const TerrainEditorModule = () => {
                       <button
                         key={c}
                         onClick={() => setPaintLayerColor(activePaintLayer, c)}
-                        className={`w-5.5 h-5.5 rounded border transition-all cursor-pointer select-none flex-shrink-0 hover:scale-110 active:scale-95 ${
-                          paintLayerColors[activePaintLayer] === c
+                        className={`w-5.5 h-5.5 rounded border transition-all cursor-pointer select-none flex-shrink-0 hover:scale-110 active:scale-95 ${paintLayerColors[activePaintLayer] === c
                             ? 'border-indigo-400 scale-105 shadow-[0_0_8px_rgba(99,102,241,0.5)]'
                             : 'border-zinc-800 hover:border-zinc-600'
-                        }`}
+                          }`}
                         style={{ backgroundColor: c }}
                       />
                     ))}

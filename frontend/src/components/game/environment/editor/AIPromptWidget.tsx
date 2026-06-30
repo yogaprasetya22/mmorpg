@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import { Sparkles, Loader2, Wand2, RotateCcw, HelpCircle, Package, ArrowRight, CheckCircle2 } from 'lucide-react';
-import { useEditorStore, MapItem } from '@/src/state/useEditorStore';
-import { getTerrainElevation } from '@/src/core/utils/terrainHeight';
-import { API_BASE_URL } from '@/src/core/config';
+import { useEditorStore } from '@/src/state/useEditorStore';
+import type { MapItem } from '@jagres/shared';
+import { getTerrainElevation, API_BASE_URL } from '@jagres/shared';
 
 interface AIHistoryItem {
   id: string;
@@ -131,7 +131,7 @@ export const AIPromptWidget = () => {
       const token = typeof window !== 'undefined' ? localStorage.getItem("game_auth_token") : "";
       const res = await fetch(`${API_BASE_URL}/api/world-editor/ai-generate`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': token ? `Bearer ${token}` : ""
         },
@@ -173,10 +173,10 @@ export const AIPromptWidget = () => {
         const baseDistance = 24;
         newlyPlacedItems = result.items.map((item: any) => {
           const [x, y, z] = item.pos;
-          
+
           // Fetch elevation
           const elevation = getTerrainElevation(x, z, "STORM", baseDistance, terrainConfig, false);
-          
+
           // Snapping math: if Y coordinate is negligible, stick exactly to the ground.
           // Otherwise offset relative to height for castle structures
           const finalY = (Math.abs(y) < 0.1) ? (elevation - 0.25) : (elevation + y);
@@ -287,7 +287,7 @@ export const AIPromptWidget = () => {
 
   return (
     <div className="world-editor-ui w-[320px] h-screen bg-zinc-950/90 border-l border-zinc-900 flex flex-col pointer-events-auto z-[9999] shadow-2xl relative overflow-hidden font-sans backdrop-blur-xl flex-shrink-0 ml-auto select-none">
-      
+
       {/* ─── HEADER BRANDING ─── */}
       <div className="flex items-center gap-2 px-4 py-3.5 border-b border-zinc-900/60 bg-zinc-950/40 flex-shrink-0">
         <div className="p-1 rounded bg-purple-600/20 border border-purple-500/30">
@@ -300,7 +300,7 @@ export const AIPromptWidget = () => {
 
       {/* ─── SCROLLABLE INNER DOCK ─── */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-4 flex flex-col gap-4">
-        
+
         {/* Prompt Input Form */}
         <form onSubmit={handleAIGeneration} className="flex flex-col gap-2.5">
           <div className="flex flex-col gap-1">
@@ -348,11 +348,11 @@ export const AIPromptWidget = () => {
                 {stepsLog.filter(s => s.status === 'done').length * 20}%
               </span>
             </div>
-            
+
             {/* Progress Bar */}
             <div className="w-full h-1 bg-zinc-950 rounded-full overflow-hidden border border-zinc-900">
-              <div 
-                className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-500" 
+              <div
+                className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-500"
                 style={{ width: `${stepsLog.filter(s => s.status === 'done').length * 20}%` }}
               />
             </div>
@@ -368,11 +368,10 @@ export const AIPromptWidget = () => {
                   ) : (
                     <div className="w-3.5 h-3.5 rounded-full border border-zinc-800 flex-shrink-0 bg-zinc-950" />
                   )}
-                  <span className={`font-semibold tracking-tight leading-none ${
-                    step.status === 'done' ? 'text-zinc-500 line-through decoration-zinc-800/60' :
-                    step.status === 'active' ? 'text-zinc-200 font-bold' :
-                    'text-zinc-700'
-                  }`}>
+                  <span className={`font-semibold tracking-tight leading-none ${step.status === 'done' ? 'text-zinc-500 line-through decoration-zinc-800/60' :
+                      step.status === 'active' ? 'text-zinc-200 font-bold' :
+                        'text-zinc-700'
+                    }`}>
                     {step.label}
                   </span>
                 </div>
@@ -430,7 +429,7 @@ export const AIPromptWidget = () => {
 
           <div className="flex-1 flex flex-col gap-2.5 overflow-y-auto max-h-[300px] pr-1 custom-scrollbar">
             {history.map((record) => (
-              <div 
+              <div
                 key={record.id}
                 className="p-3 bg-zinc-900/60 border border-zinc-850 hover:border-zinc-800 rounded-xl flex flex-col gap-2 transition-all relative overflow-hidden group shadow"
               >
@@ -456,8 +455,8 @@ export const AIPromptWidget = () => {
                     </span>
                     <div className="flex flex-wrap gap-1">
                       {record.itemSummary.map((item, i) => (
-                        <span 
-                          key={i} 
+                        <span
+                          key={i}
                           className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-850 text-[8px] font-mono text-blue-400"
                         >
                           {item.name} x{item.count}

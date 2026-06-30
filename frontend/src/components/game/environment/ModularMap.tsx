@@ -18,8 +18,7 @@ import { useEditorStore } from '@/src/state/useEditorStore';
 import { useStore } from '@/src/state/useStore';
 import { InstancedStaticCollider } from 'bvhecctrl';
 import * as THREE from 'three';
-import { registerCollider, unregisterCollider } from '@/src/core/utils/globalRaycaster';
-import { windUniforms } from '@/src/core/utils/wind';
+import { windUniforms } from '@jagres/shared';
 import { isGrassAssetPath, GrassField } from './GrassField';
 import { _charPos } from '../player/buffers';
 
@@ -31,13 +30,26 @@ import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-
 
 // ── Constants ──
 const SECTOR_SIZE = 50;        // metres — matches VegetationLayers sector grid
-const RENDER_DIST_SQ = 200 * 200;  // 200m render distance
-const PHYSICS_DIST_SQ = 60 * 60;   // 60m physics collider distance
+const RENDER_DIST_SQ = 160 * 160;  // 160m render distance — match VegetationLayers
 
 // ── Module-level scratch (zero alloc) ──
 const _tempObj = new THREE.Object3D();
 const _tempMatrix = new THREE.Matrix4();
 const _color = new THREE.Color();
+const _projScreenMatrix = new THREE.Matrix4();
+const _frustum = new THREE.Frustum();
+const _sectorSphere = new THREE.Sphere();
+let _lastFrustumFrame = -1;
+
+function getSharedFrustum(state: any): THREE.Frustum {
+  const frame = state.gl.info.render.frame;
+  if (frame !== _lastFrustumFrame) {
+    _lastFrustumFrame = frame;
+    _projScreenMatrix.multiplyMatrices(state.camera.projectionMatrix, state.camera.matrixWorldInverse);
+    _frustum.setFromProjectionMatrix(_projScreenMatrix);
+  }
+  return _frustum;
+}
 
 function sectorKey(x: number, z: number): string {
   return `${Math.floor(x / SECTOR_SIZE)},${Math.floor(z / SECTOR_SIZE)}`;
@@ -121,16 +133,41 @@ const InstancedModelGroup = ({ path, instances, sectorCenter, debug }: {
 }) => {
   const { scene } = useGLTF(path) as any;
   const groupRef = useRef<THREE.Group>(null!);
+  const frameCounterRef = useRef(Math.floor(Math.random() * 3));
 
-  // Distance-based visibility culling
-  useFrame(() => {
-    if (!groupRef.current) return;
+  // Distance + Frustum based visibility culling (staggered check)
+  useFrame((state) => {
+    const group = groupRef.current;
+    if (!group) return;
+
+    frameCounterRef.current++;
+    if (frameCounterRef.current % 3 !== 0) return;
+
     const pos = useStore.getState().playerPosition;
     if (!pos) return;
+
     const dx = sectorCenter[0] - pos[0];
     const dz = sectorCenter[1] - pos[2];
     const distSq = dx * dx + dz * dz;
-    groupRef.current.visible = distSq < RENDER_DIST_SQ;
+
+    // 1. Distance culling
+    if (distSq > RENDER_DIST_SQ) {
+      if (group.visible) group.visible = false;
+      return;
+    }
+
+    // 2. Camera Frustum Culling
+    // Sector size is 50m, so max distance from center in XZ plane is ~35.4m.
+    // We assume a radius of 45m to cover height / scaling.
+    _sectorSphere.center.set(sectorCenter[0], pos[1], sectorCenter[1]); // use player Y as height proxy
+    _sectorSphere.radius = 45;
+
+    const frustum = getSharedFrustum(state);
+    const isInsideFrustum = frustum.intersectsSphere(_sectorSphere);
+
+    if (group.visible !== isInsideFrustum) {
+      group.visible = isInsideFrustum;
+    }
   });
 
   const meshes = useMemo(() => {
@@ -138,13 +175,15 @@ const InstancedModelGroup = ({ path, instances, sectorCenter, debug }: {
     scene.updateMatrixWorld(true);
     scene.traverse((child: any) => {
       if (!child.isMesh) return;
+      // BVH needed by InstancedStaticCollider (shapecast collision)
+      // and CameraOcclusionManager (ghost-through-walls raycast).
+      // One-time compute on load, not per frame.
       if (child.geometry && !child.geometry.boundsTree) {
         child.geometry.computeBoundsTree({ maxDepth: 64, maxLeafSize: 10 });
       }
-      const mat = child.material.clone();
       extracted.push({
         geometry: child.geometry,
-        material: mat,
+        material: child.material,
         localMatrix: child.matrixWorld.clone(),
       });
     });
@@ -155,7 +194,7 @@ const InstancedModelGroup = ({ path, instances, sectorCenter, debug }: {
     <group ref={groupRef}>
       <InstancedStaticCollider debug={debug} restitution={0} friction={1}>
         {meshes.map((mesh, i) => (
-          <InstancedMeshPart key={i} meshData={mesh} instances={instances} sectorCenter={sectorCenter} />
+          <InstancedMeshPart key={i} meshData={mesh} instances={instances} />
         ))}
       </InstancedStaticCollider>
     </group>
@@ -164,12 +203,11 @@ const InstancedModelGroup = ({ path, instances, sectorCenter, debug }: {
 
 // ── INSTANCED MESH PART ──
 
-const InstancedMeshPart = ({ meshData, instances, sectorCenter }: {
-  meshData: any; instances: any[]; sectorCenter: [number, number];
+const InstancedMeshPart = ({ meshData, instances }: {
+  meshData: any; instances: any[];
 }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null!);
   const prevLenRef = useRef(0);
-  const colliderRegisteredRef = useRef(false);
 
   useEffect(() => {
     const mesh = meshRef.current;
@@ -194,39 +232,11 @@ const InstancedMeshPart = ({ meshData, instances, sectorCenter }: {
     mesh.computeBoundingBox();
   }, [instances, meshData]);
 
-  // Distance-based physics collider registration
-  useEffect(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
-    const checkDist = () => {
-      const pos = useStore.getState().playerPosition;
-      if (!pos) return;
-      const dx = sectorCenter[0] - pos[0];
-      const dz = sectorCenter[1] - pos[2];
-      const distSq = dx * dx + dz * dz;
-      const shouldRegister = distSq < PHYSICS_DIST_SQ;
-
-      if (shouldRegister && !colliderRegisteredRef.current) {
-        registerCollider(mesh);
-        colliderRegisteredRef.current = true;
-      } else if (!shouldRegister && colliderRegisteredRef.current) {
-        unregisterCollider(mesh);
-        colliderRegisteredRef.current = false;
-      }
-    };
-    checkDist();
-    const interval = setInterval(checkDist, 1000); // re-check every second
-    return () => { clearInterval(interval); clearCollider(); };
-    function clearCollider() {
-      if (colliderRegisteredRef.current) { unregisterCollider(mesh); colliderRegisteredRef.current = false; }
-    }
-  }, [instances, meshData, sectorCenter]);
-
   return (
     <instancedMesh
       ref={meshRef}
       args={[meshData.geometry, meshData.material, instances.length]}
-      castShadow
+      castShadow={false}
       receiveShadow={false}
       frustumCulled
     />

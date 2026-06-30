@@ -4,19 +4,23 @@
  * Location: @/frontend/src/components/game/environment/editor/GhostPreview.tsx
  */
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useGLTF } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
 interface GhostPreviewProps {
     path: string;
-    position: THREE.Vector3;
+    position?: THREE.Vector3;
+    positionRef?: React.RefObject<THREE.Vector3 | null>;
     scale: number | [number, number, number];
     rotation: [number, number, number];
 }
 
-export const GhostPreview = ({ path, position, scale, rotation }: GhostPreviewProps) => {
+export const GhostPreview = ({ path, position, positionRef, scale, rotation }: GhostPreviewProps) => {
     const { scene } = useGLTF(path);
+    const groupRef = useRef<THREE.Group>(null!);
+
     const ghost = useMemo(() => {
         const clone = scene.clone();
         clone.traverse((node: any) => {
@@ -50,10 +54,28 @@ export const GhostPreview = ({ path, position, scale, rotation }: GhostPreviewPr
         return -box.min.y;
     }, [ghost, sca, rotation]);
 
-    const adjustedPosition = useMemo(
-        () => new THREE.Vector3(position.x, position.y + pivotToBottomY, position.z),
-        [position, pivotToBottomY],
-    );
+    // Position ghost imperatively in useFrame to avoid parent re-renders
+    useFrame(() => {
+        if (groupRef.current) {
+            if (positionRef && positionRef.current) {
+                groupRef.current.position.set(
+                    positionRef.current.x,
+                    positionRef.current.y + pivotToBottomY,
+                    positionRef.current.z
+                );
+            } else if (position) {
+                groupRef.current.position.set(
+                    position.x,
+                    position.y + pivotToBottomY,
+                    position.z
+                );
+            }
+        }
+    });
 
-    return <primitive object={ghost} position={adjustedPosition} rotation={rotation} scale={sca} />;
+    return (
+        <group ref={groupRef}>
+            <primitive object={ghost} rotation={rotation} scale={sca} />
+        </group>
+    );
 };

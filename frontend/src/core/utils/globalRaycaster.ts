@@ -18,7 +18,7 @@ let cachedTerrainMesh: THREE.Mesh | null = null;
 
 export const registerCollider = (obj: THREE.Object3D) => {
     if (!obj) return;
-    obj.traverse((child) => {
+    obj.traverse((child: THREE.Object3D) => {
         if ((child as THREE.Mesh).isMesh) {
             const mesh = child as THREE.Mesh;
             if (mesh.name === "terrain") {
@@ -36,7 +36,7 @@ export const registerCollider = (obj: THREE.Object3D) => {
 
 export const unregisterCollider = (obj: THREE.Object3D) => {
     if (!obj) return;
-    obj.traverse((child) => {
+    obj.traverse((child: THREE.Object3D) => {
         if ((child as THREE.Mesh).isMesh) {
             const mesh = child as THREE.Mesh;
             if (mesh === cachedTerrainMesh) {
@@ -76,7 +76,7 @@ export const getGroundHeight = (x: number, z: number, fallbackY: number): number
 
     const hits = raycaster.intersectObjects(colliders, false);
     if (hits.length > 0) {
-        const terrainHit = hits.find(h => h.object.name === "terrain");
+        const terrainHit = hits.find((h: THREE.Intersection) => h.object.name === "terrain");
         if (terrainHit) {
             return terrainHit.point.y;
         }

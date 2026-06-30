@@ -10,27 +10,11 @@ const AvatarExperience = dynamic(
 );
 import { AvatarConfiguratorUI } from '@/src/components/game/avatar/AvatarConfiguratorUI';
 
-import * as THREE from 'three';
+import { KeyboardControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
-import { KeyboardControls, Stats } from '@react-three/drei';
-import { SafePostProcessing } from '@/src/components/game/systems/SafePostProcessing';
-import { PlayerController, keyboardMap } from '@/src/components/game/PlayerController';
-import { RemotePlayersRenderer } from '@/src/components/game/RemotePlayersRenderer';
-import { RemoteMonstersRenderer } from '@/src/components/game/RemoteMonstersRenderer';
-import { FPSCounterUpdater } from './components/FPSCounter';
+import { keyboardMap } from '@/src/components/game/PlayerController';
 import { Minimap } from '@/src/components/game/Minimap';
-import { EnvironmentMultiGlobal } from '@/src/components/game/environment/EnvironmentMultiGlobal';
-import { ModularMap } from '@/src/components/game/environment/ModularMap';
-import { CameraOcclusionManager } from '@/src/components/game/systems/CameraOcclusionManager';
-import { VFXProvider } from '@/src/components/game/systems/VFXManager';
-import { DamageHUDBatcher } from '@/src/components/game/systems/DamageHUDBatcher';
-import { ArcherTrapSystem } from '@/src/components/game/systems/ArcherTrapSystem';
-import { BeginnerSpellEffect } from '@/src/components/game/systems/effects/BeginnerSpellEffect';
-import { FighterSpellEffect } from '@/src/components/game/systems/effects/FighterSpellEffect';
-import { TankSpellEffect } from '@/src/components/game/systems/effects/TankSpellEffect';
-import { AssassinSpellEffect } from '@/src/components/game/systems/effects/AssassinSpellEffect';
-import { MageSpellEffect } from '@/src/components/game/systems/effects/MageSpellEffect';
-import { useEditorStore } from '@/src/state/useEditorStore';
+import { GameCanvas } from '@/src/components/game/GameCanvas';
 
 // BVH bootstrap + GLTF preloads (side-effect import)
 import './ArenaClient.bootstrap';
@@ -40,8 +24,6 @@ import { useArenaGameState } from './ArenaClient.hooks';
 
 // Components
 // FPSCounterUpdater removed — was adding useFrame overhead for CustomEvent dispatch every 1s
-import { ExposureBridge } from './components/ExposureBridge';
-import { ModelsPreloader } from './components/ModelsPreloader';
 // PerformanceDiagnostics removed — ring buffer + DOM updates + WS telemetry every frame was adding overhead
 import { GameChat } from './components/GameChat';
 import { PlayerStatsHUD } from './components/PlayerStatsHUD';
@@ -63,9 +45,6 @@ import { SettingsDashboardModal } from './components/SettingsDashboardModal';
 // Re-export types and constants for backward compatibility
 export { CLASS_LABELS } from './ArenaClient.constants';
 export type { GameChatRef, PlayerStatsHUDRef, GameStatusBarRef, DeathOverlayRef, QuestPanelRef } from './ArenaClient.types';
-
-/** Stub camera director (reserved for epic ending cinematics). */
-const CameraDirector = () => null;
 
 export default function MultiplayerArena() {
   const state = useArenaGameState();
@@ -131,10 +110,7 @@ export default function MultiplayerArena() {
     };
   }, [state.chatRef]);
 
-  // Read bloom settings from editor store (saved by world editor, applied here in arena)
-  const bloomStrength  = useEditorStore(s => s.bloomStrength);
-  const bloomRadius    = useEditorStore(s => s.bloomRadius);
-  const bloomThreshold = useEditorStore(s => s.bloomThreshold);
+
 
   // View 0: Session Recovery
   if (state.isRecoveringSession) {
@@ -214,112 +190,39 @@ export default function MultiplayerArena() {
       {/* 3D CANVAS */}
       <div className="absolute inset-0 w-full h-full z-0">
         <KeyboardControls map={keyboardMap}>
-          <Canvas
-            shadows={{ type: THREE.BasicShadowMap }}
-            dpr={state.dpr}
-            gl={{
-              antialias: false,
-              powerPreference: "high-performance",
-              logarithmicDepthBuffer: false,
-              stencil: false,
-              depth: true,
-              alpha: false,
-              failIfMajorPerformanceCaveat: false,
-              precision: "mediump",
+          <GameCanvas
+            isEditor={false}
+            isCinematic={false}
+            debug={false}
+            mapObstacles={[]}
+            setMapObstacles={() => { }}
+            settingsRef={state.settingsRef}
+            arenaState={{
+              envReady: state.envReady,
+              localPlayerModelPath: state.localPlayerModelPath,
+              selectedCharacter: state.selectedCharacter,
+              damageQueue: state.damageQueue,
+              mmSpellsRef: state.mmSpellsRef,
+              spellsRef: state.spellsRef,
+              fighterSpellsRef: state.fighterSpellsRef,
+              tankSpellsRef: state.tankSpellsRef,
+              assassinSpellsRef: state.assassinSpellsRef,
+              simTimeRef: state.simTimeRef,
+              dealPlayerDamage: state.handleAuthoritativeAttack,
+              sendPlayerState: state.sendPlayerState,
+              sendPlayerSkill: state.sendPlayerSkill,
+              playerStatsRef: state.playerStatsRef,
+              isAutoMode: state.isAutoMode,
+              activeRemotePlayers: state.activeRemotePlayers,
+              connectedPlayersRef: state.connectedPlayersRef,
+              gameConfig: state.gameConfig,
+              unitRegistryRef: state.unitRegistryRef,
+              worldMonstersRef: state.worldMonstersRef,
+              setModelsReady: state.setModelsReady,
+              setEnvFinished: state.setEnvFinished,
+              spawnVFX: (state as any).spawnVFX,
             }}
-            className="w-full h-full"
-          >
-            <ExposureBridge exposure={1.0} />
-
-            <VFXProvider>
-              <CameraDirector />
-              <ModelsPreloader onReady={() => state.setModelsReady(true)} />
-
-              <EnvironmentMultiGlobal
-                settingsRef={state.settingsRef}
-                debug={false}
-                onReady={() => { setTimeout(() => { state.setEnvFinished(true); }, 600); }}
-              />
-              <Suspense fallback={null}><ModularMap debug={false} /></Suspense>
-              <CameraOcclusionManager />
-
-              <BeginnerSpellEffect spellsRef={state.mmSpellsRef} unitRegistry={state.unitRegistryRef} simTimeRef={state.simTimeRef} />
-              <FighterSpellEffect fighterSpellsRef={state.fighterSpellsRef} simTimeRef={state.simTimeRef} />
-              <TankSpellEffect tankSpellsRef={state.tankSpellsRef} simTimeRef={state.simTimeRef} unitRegistry={state.unitRegistryRef} />
-              <AssassinSpellEffect assassinSpellsRef={state.assassinSpellsRef} simTimeRef={state.simTimeRef} />
-              <MageSpellEffect spellsRef={state.spellsRef} unitRegistry={state.unitRegistryRef} simTimeRef={state.simTimeRef} />
-
-              <DamageHUDBatcher 
-                damageQueue={state.damageQueue} 
-                playerStatsRef={state.playerStatsRef} 
-              />
-
-              <ArcherTrapSystem
-                unitRegistry={state.unitRegistryRef}
-                dealPlayerDamage={state.handleAuthoritativeAttack}
-                spawnVFX={(state as any).spawnVFX}
-              />
-
-              <PlayerController
-                paused={!state.envReady}
-                modelPath={state.localPlayerModelPath}
-                playerClass={state.selectedCharacter?.class || "Warrior"}
-                settingsRef={state.settingsRef}
-                damageQueue={state.damageQueue}
-                mmSpellsRef={state.mmSpellsRef}
-                spellsRef={state.spellsRef}
-                fighterSpellsRef={state.fighterSpellsRef}
-                tankSpellsRef={state.tankSpellsRef}
-                assassinSpellsRef={state.assassinSpellsRef}
-                simTimeRef={state.simTimeRef}
-                dealPlayerDamage={state.handleAuthoritativeAttack}
-                sendPlayerState={state.sendPlayerState}
-                sendPlayerSkill={state.sendPlayerSkill}
-                playerStats={state.playerStatsRef.current.hp >= 0 ? state.playerStatsRef.current : undefined}
-                playerStatsRef={state.playerStatsRef}
-                selectedCharacter={state.selectedCharacter}
-                isAutoMode={state.isAutoMode}
-              />
-
-              <RemotePlayersRenderer
-                activeRemotePlayers={state.activeRemotePlayers}
-                connectedPlayersRef={state.connectedPlayersRef}
-                gameConfig={state.gameConfig}
-                mmSpellsRef={state.mmSpellsRef}
-                spellsRef={state.spellsRef}
-                fighterSpellsRef={state.fighterSpellsRef}
-                tankSpellsRef={state.tankSpellsRef}
-                assassinSpellsRef={state.assassinSpellsRef}
-                unitRegistry={state.unitRegistryRef}
-                localPlayerId={state.selectedCharacter?.id}
-              />
-
-              <RemoteMonstersRenderer
-                worldMonstersRef={state.worldMonstersRef}
-                onAttack={(monsterId) => {
-                  (window as any).monsterClickedThisFrame = true;
-                  (window as any).clickedTargetId = monsterId;
-                  (window as any).hasAttackIntent = true;
-                }}
-                connectedPlayersRef={state.connectedPlayersRef}
-                localPlayerId={state.selectedCharacter?.id}
-                gameConfig={state.gameConfig}
-              />
-
-              {/* R3F performance stats — shows FPS, draw calls, triangles, memory */}
-              <Stats className="!top-auto !bottom-2 !left-2" />
-              {/* FPS counter that dispatches custom events for the top-bar FPSBadge */}
-              <FPSCounterUpdater />
-            </VFXProvider>
-
-             {!state.settingsRef.current.potatoMode && (
-              <SafePostProcessing
-                bloomThreshold={bloomThreshold ?? 1.25}
-                bloomStrength={bloomStrength ?? 0.35}
-                bloomRadius={bloomRadius ?? 0.4}
-              />
-            )}
-          </Canvas>
+          />
         </KeyboardControls>
       </div>
 

@@ -8,17 +8,17 @@ import { SkeletonUtils } from 'three-stdlib';
 import { MeshoptDecoder } from 'meshoptimizer';
 import { MonsterNetworkState, PlayerNetworkState } from "@/src/hooks/useWebSocketGame";
 import { useStore } from "@/src/state/useStore";
-import { getTerrainElevation } from "@/src/core/utils/terrainHeight";
-import { getCachedTerrainHeight } from "@/src/core/utils/terrainCache";
 import { useEditorStore } from "@/src/state/useEditorStore";
-import { API_BASE_URL } from "@/src/core/config";
 import { HpBarPlanes } from "./shared/HpBarPlanes";
+import { API_BASE_URL } from "@/src/core/config";
+import { getTerrainElevation, getCachedTerrainHeight } from '@jagres/shared';
 
 // ─── Shared scratch vectors to avoid per-frame allocations ───────────────────
 const _v3 = new THREE.Vector3();
-// ─── Module-level LOD thresholds (hoisted out of useFrame to avoid re-eval every frame) ─
-const MONSTER_FAR_SQ     = 95 * 95;  // > 95 units: cull completely (increased range!)
-const MONSTER_MED_FAR_SQ = 60 * 60;  // > 60 units: hide billboard + text (increased range!)
+// ─── Module-level LOD thresholds ──────────────────────────────────────────────
+const MONSTER_FAR_SQ = 95 * 95;       // > 95 units: cull completely
+const MONSTER_MED_FAR_SQ = 40 * 40;   // > 40 units: hide billboard + text
+const MONSTER_LOD_SQ = 20 * 20;        // > 20 units: throttle animation updates (10Hz)
 
 
 // ─── Global visual position registry (module-level Map, not window) ────────────
@@ -44,11 +44,11 @@ export interface RemoteMonsterInstanceProps {
 function buildClipNameCache(actions: Record<string, THREE.AnimationAction | null>) {
   const keys = Object.keys(actions);
   return {
-    idle:   keys.find(k => k === 'Idle'   || k.toLowerCase() === 'idle')   ?? 'Idle',
-    walk:   keys.find(k => k === 'Walk'   || k.toLowerCase().includes('walk') || k === 'Run' || k.toLowerCase() === 'run') ?? 'Idle',
-    run:    keys.find(k => k === 'Run'    || k.toLowerCase() === 'run')     ?? 'Idle',
+    idle: keys.find(k => k === 'Idle' || k.toLowerCase() === 'idle') ?? 'Idle',
+    walk: keys.find(k => k === 'Walk' || k.toLowerCase().includes('walk') || k === 'Run' || k.toLowerCase() === 'run') ?? 'Idle',
+    run: keys.find(k => k === 'Run' || k.toLowerCase() === 'run') ?? 'Idle',
     attack: keys.find(k => k.toLowerCase().includes('attack') || k.toLowerCase().includes('slash') || k.toLowerCase().includes('bash')) ?? 'Idle',
-    death:  keys.find(k => k === 'Death'  || k.toLowerCase().includes('death')) ?? 'Idle',
+    death: keys.find(k => k === 'Death' || k.toLowerCase().includes('death')) ?? 'Idle',
   };
 }
 
@@ -114,9 +114,8 @@ export const RemoteMonsterInstance = ({
     const cloned = SkeletonUtils.clone(scene);
     cloned.traverse((child: any) => {
       if (child.isMesh) {
-        // Enable highly optimized shadows for remote monsters
-        child.castShadow = true;
-        // Monsters don't need to receive shadows (performance)
+        // No shadow on monsters — removes shadow pass draw calls (cuts ~50%)
+        child.castShadow = false;
         child.receiveShadow = false;
         // Pre-compute bounding sphere once — skip per-frame auto-compute
         child.geometry?.computeBoundingSphere?.();
@@ -163,6 +162,7 @@ export const RemoteMonsterInstance = ({
   const smoothHpRatio = useRef(1);
   const prevHp = useRef(-1);
   const flinchEndTime = useRef(0);
+  const _lastAnimUpdate = useRef(0); // throttle for far monster animation updates
 
   useEffect(() => {
     return () => {
@@ -257,10 +257,10 @@ export const RemoteMonsterInstance = ({
 
     // Push new network state to buffer if it differs from the last pushed state
     const buf = stateBufferRef.current;
-    if (buf.length === 0 || 
-        buf[buf.length - 1].x !== x || 
-        buf[buf.length - 1].z !== z ||
-        buf[buf.length - 1].animation !== (data.animation || "")) {
+    if (buf.length === 0 ||
+      buf[buf.length - 1].x !== x ||
+      buf[buf.length - 1].z !== z ||
+      buf[buf.length - 1].animation !== (data.animation || "")) {
       buf.push({
         x: x,
         y: groundY,
@@ -273,7 +273,7 @@ export const RemoteMonsterInstance = ({
 
     // Perform Entity Interpolation with a 160ms visual buffer delay to absorb 20Hz network jitter
     const renderTime = performance.now() - 160;
-    
+
     let targetX = x;
     let targetY = groundY;
     let targetZ = z;
@@ -282,14 +282,14 @@ export const RemoteMonsterInstance = ({
     if (buf.length >= 2) {
       let i = 0;
       for (; i < buf.length - 1; i++) {
-        if (buf[i].timestamp <= renderTime && buf[i+1].timestamp > renderTime) {
+        if (buf[i].timestamp <= renderTime && buf[i + 1].timestamp > renderTime) {
           break;
         }
       }
 
       if (i < buf.length - 1) {
         const start = buf[i];
-        const end = buf[i+1];
+        const end = buf[i + 1];
         const elapsed = renderTime - start.timestamp;
         const duration = end.timestamp - start.timestamp;
         const alpha = Math.min(1, Math.max(0, elapsed / (duration || 1)));
@@ -348,12 +348,12 @@ export const RemoteMonsterInstance = ({
     if (data.is_dead || serverAnim === "death") desiredState = "death";
     else if (isFlinching) desiredState = "idle"; // Flinch stagger animation lock
     else if (serverAnim === "attack") desiredState = "attack";
-    else if (serverAnim === "run")    desiredState = "run";
-    else if (serverAnim === "walk")   desiredState = "walk";
+    else if (serverAnim === "run") desiredState = "run";
+    else if (serverAnim === "walk") desiredState = "walk";
     else if (data.target_player_id && data.target_player_id !== "") {
-      if (isMoving.current)        desiredState = "run";
+      if (isMoving.current) desiredState = "run";
       else if (isWithinAttackRange) desiredState = "attack";
-      else                          desiredState = "idle";
+      else desiredState = "idle";
     } else if (isMoving.current) {
       desiredState = "walk";
     }
@@ -372,7 +372,7 @@ export const RemoteMonsterInstance = ({
     if (isFlinching && desiredState !== "death") {
       const remainingTime = flinchEndTime.current - performance.now();
       const factor = Math.max(0, Math.min(1, remainingTime / 220));
-      
+
       // Tilt backwards
       groupRef.current.rotation.x = -0.15 * factor;
     } else {
@@ -410,12 +410,19 @@ export const RemoteMonsterInstance = ({
     if (targetAngle !== null) {
       let diff = targetAngle - groupRef.current.rotation.y;
       while (diff < -Math.PI) diff += Math.PI * 2;
-      while (diff > Math.PI)  diff -= Math.PI * 2;
+      while (diff > Math.PI) diff -= Math.PI * 2;
       groupRef.current.rotation.y += diff * Math.min(1, 24.0 * delta);
     }
 
+    // ─── LOD: throttle animation updates for far monsters ─────────────────────
+    // > 20 units: only update animation state at 10Hz (mixer.update still runs)
+    const isFar = camDistSq > MONSTER_LOD_SQ;
+    const nowMs = performance.now();
+    const canUpdateAnim = !isFar || (nowMs - _lastAnimUpdate.current >= 100);
+
     // ─── Animation State Machine (JIT clip name cache initialization) ──────────
-    if (hasActionsRef.current) {
+    if (hasActionsRef.current && canUpdateAnim) {
+      _lastAnimUpdate.current = nowMs;
       if (!clipCache.current) {
         clipCache.current = buildClipNameCache(actions);
       }
@@ -423,11 +430,11 @@ export const RemoteMonsterInstance = ({
       if (clipCache.current && currentAnimState.current !== desiredState) {
         const cache = clipCache.current;
         let clipName: string;
-        if      (desiredState === "death")  clipName = cache.death;
+        if (desiredState === "death") clipName = cache.death;
         else if (desiredState === "attack") clipName = cache.attack;
-        else if (desiredState === "run")    clipName = cache.run;
-        else if (desiredState === "walk")   clipName = cache.walk;
-        else                                clipName = cache.idle;
+        else if (desiredState === "run") clipName = cache.run;
+        else if (desiredState === "walk") clipName = cache.walk;
+        else clipName = cache.idle;
 
         const nextAction = actions[clipName];
         if (nextAction && nextAction !== activeAction.current) {
@@ -449,11 +456,11 @@ export const RemoteMonsterInstance = ({
       }
     }
 
-    // ─── Synchronized animation timescale ────────────────────────────────────
-    if (activeAction.current) {
-      if      (desiredState === "walk") activeAction.current.timeScale = Math.max(0.4, Math.min(1.8, smoothedSpeed.current / 1.5));
-      else if (desiredState === "run")  activeAction.current.timeScale = Math.max(0.4, Math.min(2.0, smoothedSpeed.current / 3.0));
-      else                              activeAction.current.timeScale = 1.0;
+    // ─── Synchronized animation timescale (also throttled for far monsters) ───
+    if (activeAction.current && canUpdateAnim) {
+      if (desiredState === "walk") activeAction.current.timeScale = Math.max(0.4, Math.min(1.8, smoothedSpeed.current / 1.5));
+      else if (desiredState === "run") activeAction.current.timeScale = Math.max(0.4, Math.min(2.0, smoothedSpeed.current / 3.0));
+      else activeAction.current.timeScale = 1.0;
     }
 
     // ─── Billboard & HP UI (hidden beyond MED_FAR_SQ) ────────────────────────
@@ -518,7 +525,7 @@ export const RemoteMonsterInstance = ({
 
       <group
         scale={scale}
-        onClick={(e) => {
+        onClick={(e: import('@react-three/fiber').ThreeEvent<MouseEvent>) => {
           e.stopPropagation();
           if (monsterIdRef.current) onAttack(monsterIdRef.current);
         }}

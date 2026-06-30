@@ -6,17 +6,11 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Environment, Sky } from '@react-three/drei';
 import { StaticCollider } from 'bvhecctrl';
-import { getTerrainElevation } from "@/src/core/utils/terrainHeight";
-import {
-    PainterlyWaterMaterial,
-    PainterlyTerrainMaterial,
-    PainterlyGrassMaterial
-} from '../systems/effects/PainterlyMaterials';
 
 import { useStore } from "@/src/state/useStore";
 import { useEditorStore } from "@/src/state/useEditorStore";
 import { registerCollider, unregisterCollider } from '@/src/core/utils/globalRaycaster';
-import { API_BASE_URL } from '@/src/core/config';
+import { getTerrainElevation, PainterlyWaterMaterial, PainterlyTerrainMaterial, PainterlyGrassMaterial, API_BASE_URL } from '@jagres/shared';
 
 
 import { PainterlyGrass } from './effects/PainterlyGrass';
@@ -75,11 +69,11 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
             if (lightRef.current.target.parent !== scene) {
                 scene.add(lightRef.current.target);
             }
-            
+
             let centerX = 0;
             let centerY = 0;
             let centerZ = 0;
-            
+
             const isEditorOpen = useEditorStore.getState().isEditorOpen;
             if (isEditorOpen) {
                 centerX = state.camera.position.x;
@@ -144,7 +138,7 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
         img.onload = () => {
             ctx.clearRect(0, 0, 256, 256);
             ctx.drawImage(img, 0, 0);
-            
+
             // Update heights cache
             const imgData = ctx.getImageData(0, 0, 256, 256).data;
             const heights = new Float32Array(256 * 256);
@@ -178,7 +172,7 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
         const resolution = settingsRef?.current?.potatoMode ? 64 : 128;
         const geo = new THREE.PlaneGeometry(size, size, resolution, resolution);
         const pos = geo.attributes.position;
-        
+
         for (let i = 0; i < pos.count; i++) {
             const x = pos.getX(i);
             const y = pos.getY(i);
@@ -255,9 +249,9 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
             {/* 1. SKYBOX & SUNLIGHT (High Noon / 12 PM) */}
             {skyFile && !skyLoadFailed ? (
                 <EnvironmentErrorBoundary onCatch={() => setSkyLoadFailed(true)}>
-                    <Environment 
-                        files={skyFile} 
-                        background 
+                    <Environment
+                        files={skyFile}
+                        background
                         backgroundIntensity={skyboxIntensity !== null ? skyboxIntensity : (sky === 'night' ? 0.02 : 0.15)}
                         blur={0}
                     />
@@ -276,7 +270,7 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
                 groundColor="#556677"
             />
 
-             <directionalLight
+            <directionalLight
                 ref={lightRef}
                 position={sunPosition}
                 intensity={lightIntensity ?? (sky === 'night' ? 0.15 : 0.8)}
@@ -296,11 +290,11 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
                 shadow-camera-far={120}
             />
             {sky === 'night' && (
-                <pointLight 
-                    position={[0, 1.5, 0]} 
-                    intensity={(ambientIntensity !== null ? 0.8 * (ambientIntensity / 1.0) : 0.8)} 
-                    color="#ff5500" 
-                    distance={40} 
+                <pointLight
+                    position={[0, 1.5, 0]}
+                    intensity={(ambientIntensity !== null ? 0.8 * (ambientIntensity / 1.0) : 0.8)}
+                    color="#ff5500"
+                    distance={40}
                 />
             )}
 
@@ -312,7 +306,7 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
 
 
             {/* 3. TERRAIN ISLAND & MOUNTAINS */}
-            <StaticCollider 
+            <StaticCollider
                 key={`terrain-sc-${sculptTrigger}`}
                 debug={debug}
                 BVHOptions={{
@@ -322,12 +316,12 @@ export const WhimsicalDiorama = ({ baseDistance = 24, settingsRef, debug = false
                     verbose: false
                 } as any}
             >
-                <mesh 
+                <mesh
                     ref={meshRef}
                     name="terrain"
                     geometry={terrainGeometry}
-                    rotation={[-Math.PI / 2, 0, 0]} 
-                    position={[0, -0.6, 0]} 
+                    rotation={[-Math.PI / 2, 0, 0]}
+                    position={[0, -0.6, 0]}
                     receiveShadow
                 >
                     <primitive object={PainterlyTerrainMaterial} attach="material" wireframe={debug} />

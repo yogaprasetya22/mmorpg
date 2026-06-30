@@ -2,7 +2,8 @@
 
 import { useState, memo, MouseEvent } from 'react';
 import { Mountain, Box, Search, X, EyeOff, ChevronDown, ChevronRight } from 'lucide-react';
-import { useEditorStore, MapItem } from '@/src/state/useEditorStore';
+import { useEditorStore } from '@/src/state/useEditorStore';
+import type { MapItem } from '@jagres/shared';
 
 /**
  * SceneHierarchy — Unity-style scene tree panel.
@@ -28,11 +29,10 @@ const HierarchyRow = memo(({
 
   return (
     <div
-      className={`flex items-center gap-1 pl-4 pr-1 py-[3px] rounded-md border text-[9px] transition-all duration-150 group cursor-pointer ${
-        isSelected
+      className={`flex items-center gap-1 pl-4 pr-1 py-[3px] rounded-md border text-[9px] transition-all duration-150 group cursor-pointer ${isSelected
           ? 'bg-blue-600/15 border-blue-500/50 text-white'
           : 'bg-transparent border-transparent hover:bg-zinc-800/40 text-zinc-400 hover:text-zinc-200'
-      }`}
+        }`}
       onClick={onClick}
     >
       <Box className={`w-3 h-3 flex-shrink-0 ${isSelected ? 'text-blue-400' : 'text-zinc-600 group-hover:text-zinc-400'}`} />
@@ -154,11 +154,10 @@ export const SceneHierarchy = () => {
             {/* Terrain Node (always present) */}
             <div
               onClick={handleSelectTerrain}
-              className={`flex items-center gap-1.5 pl-4 pr-1 py-[3px] rounded-md border text-[9px] transition-all duration-150 cursor-pointer ${
-                selectedId === 'terrain'
+              className={`flex items-center gap-1.5 pl-4 pr-1 py-[3px] rounded-md border text-[9px] transition-all duration-150 cursor-pointer ${selectedId === 'terrain'
                   ? 'bg-indigo-600/15 border-indigo-500/50 text-white'
                   : 'bg-transparent border-transparent hover:bg-zinc-800/40 text-zinc-400 hover:text-zinc-200'
-              }`}
+                }`}
             >
               <Mountain className={`w-3 h-3 flex-shrink-0 ${selectedId === 'terrain' ? 'text-indigo-400' : 'text-zinc-600'}`} />
               <span className="flex-1 font-bold tracking-tight">Terrain</span>

@@ -50,7 +50,7 @@ export const CameraOcclusionManager = () => {
     mat.depthWrite = false;
 
     const originalOnBeforeCompile = sourceMat.onBeforeCompile;
-    mat.onBeforeCompile = (shader, renderer) => {
+    mat.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms, renderer: THREE.WebGLRenderer) => {
       if (originalOnBeforeCompile) {
         originalOnBeforeCompile(shader, renderer);
       }
@@ -159,7 +159,7 @@ export const CameraOcclusionManager = () => {
 
       activeFrameKeys.current.clear();
 
-      intersects.forEach((hit) => {
+      intersects.forEach((hit: THREE.Intersection) => {
         if (hit.object.name === 'terrain') return;
         const mesh = hit.object as THREE.Mesh | THREE.InstancedMesh;
         if (!mesh.geometry || !mesh.material) return;

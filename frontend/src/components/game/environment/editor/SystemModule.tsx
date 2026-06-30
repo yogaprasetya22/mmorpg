@@ -2,26 +2,26 @@
 
 import { memo, MouseEvent } from 'react';
 import { Undo2, Redo2, Copy, Box, Mountain, X, Camera } from 'lucide-react';
-import { useEditorStore, MapItem } from '@/src/state/useEditorStore';
+import { useEditorStore } from '@/src/state/useEditorStore';
+import type { MapItem } from '@jagres/shared';
 
-const LayerRow = memo(({ 
-  item, 
-  isSelected, 
-  onClick, 
-  onDelete 
-}: { 
-  item: MapItem; 
-  isSelected: boolean; 
+const LayerRow = memo(({
+  item,
+  isSelected,
+  onClick,
+  onDelete
+}: {
+  item: MapItem;
+  isSelected: boolean;
   onClick: (e: MouseEvent) => void;
   onDelete: () => void;
 }) => {
   return (
-    <div className={`flex items-center justify-between pl-2 pr-1 py-0.5 rounded-lg border text-[9.5px] transition-all font-mono duration-200 ${
-      isSelected 
-        ? 'bg-blue-950/60 border-blue-500/80 text-white shadow-sm' 
+    <div className={`flex items-center justify-between pl-2 pr-1 py-0.5 rounded-lg border text-[9.5px] transition-all font-mono duration-200 ${isSelected
+        ? 'bg-blue-950/60 border-blue-500/80 text-white shadow-sm'
         : 'bg-zinc-950/40 border-zinc-900 hover:bg-zinc-800/40 text-zinc-400'
-    }`}>
-      <button 
+      }`}>
+      <button
         onClick={onClick}
         className="flex-1 text-left flex items-center gap-1.5 truncate py-0.5 cursor-pointer outline-none group"
       >
@@ -32,7 +32,7 @@ const LayerRow = memo(({
           <Camera className="w-2.5 h-2.5 text-indigo-400" />
         </span>
       </button>
-      <button 
+      <button
         onClick={onDelete}
         title="Remove Instance"
         className="w-4 h-4 flex items-center justify-center rounded-md hover:bg-rose-950/50 text-zinc-650 hover:text-rose-400 transition-colors cursor-pointer select-none"
@@ -83,22 +83,22 @@ export const SystemModule = () => {
 
   return (
     <div className="flex flex-col gap-3 font-mono text-[9px]">
-      
+
       {/* Undo/Redo Controls */}
       <div className="flex flex-col gap-1">
         <span className="text-zinc-555 font-bold uppercase text-[7.5px] tracking-widest pl-0.5">Undo / Redo History</span>
         <div className="grid grid-cols-2 gap-1.5 text-[9px]">
-          <button 
-            onClick={undo} 
-            disabled={historyIndex <= 0} 
+          <button
+            onClick={undo}
+            disabled={historyIndex <= 0}
             className="flex items-center justify-center gap-1.5 py-1.5 bg-zinc-950 hover:bg-zinc-900 border border-zinc-850 disabled:opacity-25 text-zinc-350 rounded-xl transition-all font-bold uppercase tracking-wider cursor-pointer"
           >
             <Undo2 className="w-3 h-3" />
             Undo ({historyIndex})
           </button>
-          <button 
-            onClick={redo} 
-            disabled={historyIndex >= history.length - 1} 
+          <button
+            onClick={redo}
+            disabled={historyIndex >= history.length - 1}
             className="flex items-center justify-center gap-1.5 py-1.5 bg-zinc-950 hover:bg-zinc-900 border border-zinc-850 disabled:opacity-25 text-zinc-350 rounded-xl transition-all font-bold uppercase tracking-wider cursor-pointer"
           >
             <Redo2 className="w-3 h-3" />
@@ -111,18 +111,17 @@ export const SystemModule = () => {
       <div className="flex flex-col gap-1.5 border-t border-zinc-850 pt-2.5">
         <span className="text-zinc-555 font-bold uppercase text-[7.5px] tracking-widest pl-0.5">Active placed layers ({items.length})</span>
         <div className="max-h-48 overflow-y-auto pr-1 flex flex-col gap-1 custom-scrollbar bg-zinc-950/20 p-1.5 rounded-xl border border-zinc-900">
-          
+
           {/* Core Terrain */}
-          <div 
+          <div
             onClick={() => {
               setSelectedId('terrain');
               setCameraFocusTarget([0, 0, 0]);
             }}
-            className={`flex items-center justify-between px-2 py-0.5 rounded-lg border text-[9.5px] cursor-pointer transition-all font-mono duration-200 ${
-              selectedId === 'terrain' 
-                ? 'bg-indigo-950/60 border-indigo-500/80 text-white shadow-sm' 
+            className={`flex items-center justify-between px-2 py-0.5 rounded-lg border text-[9.5px] cursor-pointer transition-all font-mono duration-200 ${selectedId === 'terrain'
+                ? 'bg-indigo-950/60 border-indigo-500/80 text-white shadow-sm'
                 : 'bg-zinc-950/40 border-zinc-900 hover:bg-zinc-800/40 text-zinc-400'
-            }`}
+              }`}
           >
             <div className="flex items-center gap-1.5 py-0.5">
               <Mountain className={`w-3.5 h-3.5 ${selectedId === 'terrain' ? 'text-indigo-400' : 'text-zinc-550'}`} />
@@ -144,7 +143,7 @@ export const SystemModule = () => {
                 isSelected={isSelected}
                 onClick={(e) => {
                   if (activeAsset) setActiveAsset(null);
-                  
+
                   // Smoothly pan and focus camera onto the object!
                   setCameraFocusTarget(item.pos);
 
@@ -168,8 +167,8 @@ export const SystemModule = () => {
 
       {/* Copy / Export buttons */}
       <div className="flex flex-col gap-1.5 border-t border-zinc-850 pt-2.5">
-        <button 
-          onClick={copyMapCode} 
+        <button
+          onClick={copyMapCode}
           className="w-full py-2 bg-indigo-600/10 hover:bg-indigo-600 border border-indigo-500/20 text-indigo-400 hover:text-white rounded-xl text-[9px] font-bold uppercase transition-all flex items-center justify-center gap-1 shadow-sm active:scale-[0.98] cursor-pointer"
         >
           <Copy className="w-3.5 h-3.5" />

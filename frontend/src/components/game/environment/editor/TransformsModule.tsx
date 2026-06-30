@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Box, Trash2, Copy, ChevronDown, ChevronUp, Grid } from 'lucide-react';
-import { useEditorStore, MapItem } from '@/src/state/useEditorStore';
+import { useEditorStore } from '@/src/state/useEditorStore';
+import type { MapItem } from '@jagres/shared';
 
 export const TransformsModule = () => {
   const {
@@ -56,7 +57,7 @@ export const TransformsModule = () => {
 
   return (
     <div className="flex flex-col gap-3 font-sans text-[10px] text-zinc-350">
-      
+
       {/* Poin 3: Grid Snapping Panel di bagian atas */}
       <div className="p-3 bg-zinc-950/60 border border-zinc-900 rounded-xl flex flex-col gap-2 shadow-inner">
         <div className="flex justify-between items-center text-[8.5px] font-bold text-zinc-500">
@@ -65,7 +66,7 @@ export const TransformsModule = () => {
             Grid Snapping
           </span>
           <div className="flex items-center gap-2">
-            <input 
+            <input
               type="checkbox"
               checked={gridEnabled}
               onChange={(e) => setGridEnabled(e.target.checked)}
@@ -77,9 +78,9 @@ export const TransformsModule = () => {
           </div>
         </div>
         {gridEnabled && (
-          <input 
-            type="range" min="0.1" max="5" step="0.1" 
-            value={gridSize} 
+          <input
+            type="range" min="0.1" max="5" step="0.1"
+            value={gridSize}
             onChange={(e) => setGridSize(parseFloat(e.target.value))}
             className="w-full accent-blue-500 hover:accent-blue-400 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
           />
@@ -109,15 +110,15 @@ export const TransformsModule = () => {
 
           {/* Primary Actions for node management */}
           <div className="grid grid-cols-2 gap-2 mt-1">
-            <button 
-              onClick={duplicateSelected} 
+            <button
+              onClick={duplicateSelected}
               className="flex items-center justify-center gap-1.5 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-200 hover:text-white rounded-xl transition-all font-bold uppercase tracking-wider text-[9px] shadow cursor-pointer select-none active:scale-[0.98]"
             >
               <Copy className="w-3.5 h-3.5 text-zinc-400" />
               Clone Node
             </button>
-            <button 
-              onClick={deleteSelected} 
+            <button
+              onClick={deleteSelected}
               className="flex items-center justify-center gap-1.5 py-2.5 bg-rose-950/20 hover:bg-rose-900/40 border border-rose-900/30 hover:border-rose-950/40 text-rose-400 hover:text-rose-350 rounded-xl transition-all font-bold uppercase tracking-wider text-[9px] shadow cursor-pointer select-none active:scale-[0.98]"
             >
               <Trash2 className="w-3.5 h-3.5 text-rose-500" />
@@ -137,7 +138,7 @@ export const TransformsModule = () => {
 
             {showAdvanced && (
               <div className="flex flex-col gap-3.5 mt-3 p-3 bg-zinc-950/60 border border-zinc-900/50 rounded-xl font-mono text-[9px] animate-in slide-in-from-top-2 duration-200">
-                
+
                 {/* Global Position XYZ */}
                 <div className="flex flex-col gap-1">
                   <span className="text-zinc-500 font-bold uppercase text-[7.5px] tracking-widest pl-0.5">Global Position (X, Y, Z)</span>
@@ -272,7 +273,7 @@ export const TransformsModule = () => {
           </div>
 
           {/* Quick Deselect */}
-          <button 
+          <button
             onClick={() => setSelectedId(null)}
             className="w-full py-2 mt-1 bg-zinc-950 hover:bg-zinc-900 text-zinc-550 hover:text-zinc-350 border border-zinc-900 uppercase font-bold tracking-wider rounded-xl transition-all text-[8.5px] cursor-pointer"
           >

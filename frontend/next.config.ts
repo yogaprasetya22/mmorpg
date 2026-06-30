@@ -9,13 +9,25 @@ const nextConfig: NextConfig = {
         "192.168.13.2",
         "192.168.1.12",
     ],
-    // Set turbopack root to current directory
+    // Set turbopack root to parent directory (workspace root) to allow transpiling shared package
     turbopack: {
-        // path.resolve() will use current working directory, which in dev mode is the project root
-        root: path.resolve("."),
+        root: path.resolve(".."),
+        // Force ALL imports of these packages to resolve from a single location,
+        // preventing dual-instance problems (especially @react-three/fiber context mismatch).
+        // Using relative string paths (./node_modules/...) avoids Turbopack's
+        // "server relative imports" error that occurs with absolute paths (path.resolve).
+        resolveAlias: {
+            "three": ["./node_modules/three"],
+            "three-stdlib": ["./node_modules/three-stdlib"],
+            "three-mesh-bvh": ["./node_modules/three-mesh-bvh"],
+            "@react-three/fiber": ["./node_modules/@react-three/fiber"],
+            "@react-three/drei": ["./node_modules/@react-three/drei"],
+            "r3f-perf": ["./node_modules/r3f-perf"],
+        }
     },
     // Ensure that heavy three.js imports are optimized
     transpilePackages: [
+        "@jagres/shared",
         "three",
         "three-mesh-bvh",
         "bvhecctrl",
@@ -24,15 +36,14 @@ const nextConfig: NextConfig = {
         "r3f-perf",
     ],
     images: {
-        remotePatterns: [
-            { protocol: "https", hostname: "**.ftcdn.net" },
-        ],
+        remotePatterns: [{ protocol: "https", hostname: "**.ftcdn.net" }],
     },
     webpack: (config) => {
         config.resolve.alias = {
             ...config.resolve.alias,
-            'three': path.resolve('node_modules/three'),
-            'three-mesh-bvh': path.resolve('node_modules/three-mesh-bvh'),
+            three: path.resolve("node_modules/three"),
+            "three-mesh-bvh": path.resolve("node_modules/three-mesh-bvh"),
+            "@jagres/shared": path.resolve("../packages/shared/src/index.ts"),
         };
         return config;
     },

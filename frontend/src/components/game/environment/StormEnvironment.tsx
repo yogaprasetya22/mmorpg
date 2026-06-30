@@ -11,12 +11,9 @@ import { StaticCollider, characterStatus } from "bvhecctrl";
 import * as THREE from "three";
 import { useStore } from "@/src/state/useStore";
 import { useEditorStore } from "@/src/state/useEditorStore";
-import { getTerrainElevation } from "@/src/core/utils/terrainHeight";
-import { FULL_MATERIAL_LIBRARY } from "@/src/core/logic/environment/assetRegistry";
 import { useVFX } from "../systems/VFXManager";
-import { PainterlyShaderUtils, PainterlyWaterMaterial } from "../systems/effects/PainterlyMaterials";
 import { registerCollider, unregisterCollider } from "@/src/core/utils/globalRaycaster";
-import { API_BASE_URL } from "@/src/core/config";
+import { getTerrainElevation, FULL_MATERIAL_LIBRARY, PainterlyShaderUtils, PainterlyWaterMaterial, API_BASE_URL } from '@jagres/shared';
 
 // Add BVH support to THREE with any cast to avoid lint errors
 (THREE.BufferGeometry.prototype as any).computeBoundsTree = computeBoundsTree;
@@ -35,8 +32,8 @@ TerrainMaterial.uniforms = {
   uMap: { value: null },
   uUseMap: { value: 0.0 },
   // Multi-layer Splat: 4 RGBA channels → 4 material textures
-  uPaintMap:  { value: null }, // RGBA splat control map
-  uUsePaint:  { value: 0.0 },
+  uPaintMap: { value: null }, // RGBA splat control map
+  uUsePaint: { value: 0.0 },
   uSplatTex0: { value: null }, // Layer 0 texture (grass)
   uSplatTex1: { value: null }, // Layer 1 texture (rock)
   uSplatTex2: { value: null }, // Layer 2 texture (dirt)
@@ -156,7 +153,7 @@ const SCULPT_RES = 512; // Upgraded from 256 for smoother hills
 const globalSculptHeights = new Float32Array(SCULPT_RES * SCULPT_RES);
 
 const TERRAIN_SIZE = 1500;
-const GROUND_Y     = -0.3;
+const GROUND_Y = -0.3;
 const EMPTY_TEXTURE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
 
 // Module-level dirty flags to ensure they are never lost in hot-reloads or closures
@@ -170,12 +167,12 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
   onReady?: () => void;
   onSculptLoaded?: () => void;
 }) => {
-  const { 
-    terrainConfig, 
-    terrainMaterialId, 
-    terrainColor, 
-    paintMode, 
-    brushSize, 
+  const {
+    terrainConfig,
+    terrainMaterialId,
+    terrainColor,
+    paintMode,
+    brushSize,
     setPaintData,
     paintData,
     brushTextureId,
@@ -249,7 +246,7 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
     const handleGlobalPointerUp = () => {
       if (isDrawingRef.current) {
         isDrawingRef.current = false;
-        
+
         // Commit final state to store once drawing stroke has finished!
         if (terrainMode === 'paint') {
           const dataUrl = paintCanvas.toDataURL('image/png');
@@ -265,7 +262,7 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
     window.addEventListener('pointerup', handleGlobalPointerUp);
     return () => window.removeEventListener('pointerup', handleGlobalPointerUp);
   }, [terrainMode, paintCanvas, sculptCanvas, setPaintData, setSculptData]);
-  
+
   const paintTexture = useMemo(() => {
     const tex = new THREE.CanvasTexture(paintCanvas);
     tex.minFilter = THREE.LinearFilter;
@@ -305,10 +302,10 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
     if (!ctx) return;
 
     if (!sculptData) {
-    // Upgrade: clear to SCULPT_RES x SCULPT_RES
+      // Upgrade: clear to SCULPT_RES x SCULPT_RES
       ctx.fillStyle = '#808080';
       ctx.fillRect(0, 0, SCULPT_RES, SCULPT_RES);
-      
+
       const heights = sculptHeightsRef.current;
       heights.fill(0);
       if (typeof window !== 'undefined') {
@@ -325,7 +322,7 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
     img.onload = () => {
       ctx.clearRect(0, 0, SCULPT_RES, SCULPT_RES);
       ctx.drawImage(img, 0, 0, SCULPT_RES, SCULPT_RES);
-      
+
       // Update heights cache from 512x512 canvas
       const imgData = ctx.getImageData(0, 0, SCULPT_RES, SCULPT_RES).data;
       const heights = sculptHeightsRef.current;
@@ -360,7 +357,7 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
 
   const handlePaint = useCallback((uv: THREE.Vector2, isShiftPressed: boolean = false) => {
     if (!paintMode) return;
-    
+
     if (terrainMode === 'paint') {
       const ctx = paintCanvas.getContext('2d');
       if (ctx) {
@@ -481,19 +478,19 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
         const x = uv.x * SCULPT_RES;
         const y = (1 - uv.y) * SCULPT_RES;
         const scaledBrushSize = brushSize * (SCULPT_RES / 1024);
-        
+
         if (sculptTool === 'smooth') {
           const r = Math.ceil(scaledBrushSize);
           const startX = Math.max(0, Math.floor(x - r));
           const startY = Math.max(0, Math.floor(y - r));
           const width = Math.min(SCULPT_RES - startX, Math.ceil(r * 2));
           const height = Math.min(SCULPT_RES - startY, Math.ceil(r * 2));
-          
+
           if (width > 0 && height > 0) {
             const imgData = ctx.getImageData(startX, startY, width, height);
             const data = imgData.data;
             const originalData = new Uint8ClampedArray(data);
-            
+
             for (let dy = 0; dy < height; dy++) {
               for (let dx = 0; dx < width; dx++) {
                 const px = startX + dx;
@@ -527,7 +524,7 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
           ctx.globalAlpha = brushStrength;
           ctx.translate(x, y);
           ctx.rotate((brushRotation * Math.PI) / 180);
-          
+
           let color: string;
           if (sculptTool === 'flatten') {
             // Flatten to exact height: convert target height to grayscale value
@@ -536,15 +533,15 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
             const hex = clampedGray.toString(16).padStart(2, '0');
             color = `#${hex}${hex}${hex}`;
           } else {
-            color = 
-              (sculptTool === 'raise' && !isShiftPressed) || (sculptTool === 'lower' && isShiftPressed) ? '#ffffff' : 
-              (sculptTool === 'lower' && !isShiftPressed) || (sculptTool === 'raise' && isShiftPressed) ? '#000000' : 
-              '#808080';
+            color =
+              (sculptTool === 'raise' && !isShiftPressed) || (sculptTool === 'lower' && isShiftPressed) ? '#ffffff' :
+                (sculptTool === 'lower' && !isShiftPressed) || (sculptTool === 'raise' && isShiftPressed) ? '#000000' :
+                  '#808080';
           }
-            
+
           ctx.fillStyle = color;
           ctx.strokeStyle = color;
-          
+
           switch (brushMaskId) {
             case 'softCircle': {
               const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, scaledBrushSize);
@@ -606,17 +603,17 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
             default:
               break;
           }
-          
+
           ctx.restore();
         }
-        
+
         // Update heights array ONLY for the affected bounding box
         const r = Math.ceil(scaledBrushSize);
         const startX = Math.max(0, Math.floor(x - r - 2));
         const startY = Math.max(0, Math.floor(y - r - 2));
         const bw = Math.min(SCULPT_RES - startX, Math.ceil(r * 2 + 4));
         const bh = Math.min(SCULPT_RES - startY, Math.ceil(r * 2 + 4));
-        
+
         if (bw > 0 && bh > 0) {
           const imgData = ctx.getImageData(startX, startY, bw, bh).data;
           const heights = sculptHeightsRef.current;
@@ -630,11 +627,11 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
             }
           }
         }
-        
+
         if (typeof window !== 'undefined') {
           (window as any).sculptHeights = sculptHeightsRef.current;
         }
-        
+
         // ── Incremental vertex update: only vertices within brush world-radius ──
         const geo = meshRef.current?.geometry as THREE.BufferGeometry;
         if (geo) {
@@ -674,16 +671,16 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
       }
     }
   }, [
-    paintMode, 
-    terrainMode, 
-    sculptTool, 
-    brushSize, 
-    brushStrength, 
-    brushRotation, 
-    brushMaskId, 
-    paintCanvas, 
-    sculptCanvas, 
-    baseDistance, 
+    paintMode,
+    terrainMode,
+    sculptTool,
+    brushSize,
+    brushStrength,
+    brushRotation,
+    brushMaskId,
+    paintCanvas,
+    sculptCanvas,
+    baseDistance,
     terrainConfig,
     activePaintLayer,
     paintLayerColors,
@@ -704,13 +701,13 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
     if (matInfo?.normal) p.normalMap = matInfo.normal;
     if (matInfo?.roughness) p.roughnessMap = matInfo.roughness;
     if (matInfo?.displacement) p.displacementMap = matInfo.displacement;
-    
+
     // Add splat layer textures if defined
     if (splatMatInfos[0]?.diffuse) p.splat0 = splatMatInfos[0].diffuse;
     if (splatMatInfos[1]?.diffuse) p.splat1 = splatMatInfos[1].diffuse;
     if (splatMatInfos[2]?.diffuse) p.splat2 = splatMatInfos[2].diffuse;
     if (splatMatInfos[3]?.diffuse) p.splat3 = splatMatInfos[3].diffuse;
-    
+
     return p;
   }, [matInfo, splatMatInfos]);
 
@@ -798,13 +795,13 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
       paintTexture.needsUpdate = true;
       globalDirtyPaint = false;
     }
-    
+
     // Batch normal recomputation and BVH refitting to max once per frame
     if (globalDirtySculpt) {
       const geo = meshRef.current?.geometry as THREE.BufferGeometry;
       if (geo) {
         geo.computeVertexNormals();
-        
+
         // Async BVH refit
         const boundsTree = (geo as any).boundsTree;
         if (boundsTree) {
@@ -824,18 +821,18 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
     const geo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, segs, segs);
     const pos = geo.attributes.position;
     const heights = sculptHeightsRef.current;
-    
+
     for (let i = 0; i < pos.count; i++) {
-        const x = pos.getX(i);
-        const y = pos.getY(i);
-        const procElevation = getTerrainElevation(x, y, "STORM", baseDistance, terrainConfig, true);
-        const u = (x + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
-        const v = (y + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
-        const px = Math.max(0, Math.min(SCULPT_RES - 1, Math.round(u * (SCULPT_RES - 1))));
-        const py = Math.max(0, Math.min(SCULPT_RES - 1, Math.round((1 - v) * (SCULPT_RES - 1))));
-        const idx = py * SCULPT_RES + px;
-        const sculptOffset = heights[idx] || 0;
-        pos.setZ(i, procElevation + sculptOffset);
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const procElevation = getTerrainElevation(x, y, "STORM", baseDistance, terrainConfig, true);
+      const u = (x + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+      const v = (y + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+      const px = Math.max(0, Math.min(SCULPT_RES - 1, Math.round(u * (SCULPT_RES - 1))));
+      const py = Math.max(0, Math.min(SCULPT_RES - 1, Math.round((1 - v) * (SCULPT_RES - 1))));
+      const idx = py * SCULPT_RES + px;
+      const sculptOffset = heights[idx] || 0;
+      pos.setZ(i, procElevation + sculptOffset);
     }
     geo.computeVertexNormals();
     (geo as any).computeBoundsTree({ maxDepth: 64, maxLeafSize: 5 });
@@ -849,7 +846,7 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
   }, [terrainGeo, onReady]);
 
   const meshRef = useRef<THREE.Mesh>(null!);
-  
+
   useEffect(() => {
     if (meshRef.current) {
       registerCollider(meshRef.current);
@@ -861,7 +858,7 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
 
   return (
     <>
-      <StaticCollider 
+      <StaticCollider
         key={`terrain-sc-${sculptTrigger}`}
         debug={debug}
         restitution={0}
@@ -873,12 +870,12 @@ const Terrain = ({ baseDistance, potatoMode, debug, onReady, onSculptLoaded }: {
           verbose: false
         } as any}
       >
-        <mesh 
+        <mesh
           ref={meshRef}
           name="terrain"
-          geometry={terrainGeo} 
-          rotation={[-Math.PI / 2, 0, 0]} 
-          position={[0, GROUND_Y, 0]} 
+          geometry={terrainGeo}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[0, GROUND_Y, 0]}
           receiveShadow={!potatoMode || isEditorOpen}
           onPointerDown={(e: any) => {
             if (paintMode && e.button === 0) {
@@ -987,19 +984,19 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
 }) => {
   // ── ALL hooks must be unconditionally at the top (React Rules of Hooks) ──
   const [skyLoadFailed, setSkyLoadFailed] = useState(false);
-  const weather   = useStore(s => s.weather);
+  const weather = useStore(s => s.weather);
   const gameState = useStore(s => s.gameState);
-  const isSetup   = gameState === "SETUP";
+  const isSetup = gameState === "SETUP";
   const { spawnVFX } = useVFX();
   const lightRef = useRef<THREE.DirectionalLight>(null);
   const { scene } = useThree();
 
   // Editor store — specific selectors to minimise re-renders
   const isEditorOpen = useEditorStore(s => s.isEditorOpen);
-  const lightIntensity  = useEditorStore(s => s.lightIntensity);
+  const lightIntensity = useEditorStore(s => s.lightIntensity);
   const ambientIntensity = useEditorStore(s => s.ambientIntensity);
-  const sunAngle        = useEditorStore(s => s.sunAngle);
-  const fogDensity      = useEditorStore(s => s.fogDensity);
+  const sunAngle = useEditorStore(s => s.sunAngle);
+  const fogDensity = useEditorStore(s => s.fogDensity);
   const skyboxIntensity = useEditorStore(s => s.skyboxIntensity);
   const sky = useEditorStore(s => s.sky) || 'sunset';
 
@@ -1073,9 +1070,9 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
         const px = characterStatus.position.x;
         const pz = characterStatus.position.z;
         if (weather === "CLEAR") {
-          spawnVFX([px + (Math.random()-0.5)*60, 1+Math.random()*5, pz + (Math.random()-0.5)*60], "dust-mote", "#ffffff");
+          spawnVFX([px + (Math.random() - 0.5) * 60, 1 + Math.random() * 5, pz + (Math.random() - 0.5) * 60], "dust-mote", "#ffffff");
         } else if (weather === "THUNDER") {
-          spawnVFX([px + (Math.random()-0.5)*80, 0.5, pz + (Math.random()-0.5)*80], "environment-mist", "#a855f7");
+          spawnVFX([px + (Math.random() - 0.5) * 80, 0.5, pz + (Math.random() - 0.5) * 80], "environment-mist", "#a855f7");
         }
       }
     }
@@ -1129,18 +1126,18 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
         shadow-normalBias={isEditorOpen ? 0.15 : 0.06}
 
         shadow-camera-near={isEditorOpen ? 1 : 0.5}
-        shadow-camera-far={isEditorOpen ? 500 : 250}
-        shadow-camera-left={isEditorOpen ? -150 : -120}
-        shadow-camera-right={isEditorOpen ? 150 : 120}
-        shadow-camera-top={isEditorOpen ? 150 : 120}
-        shadow-camera-bottom={isEditorOpen ? -150 : -120}
+        shadow-camera-far={isEditorOpen ? 500 : 200}
+        shadow-camera-left={isEditorOpen ? -150 : -60}
+        shadow-camera-right={isEditorOpen ? 150 : 60}
+        shadow-camera-top={isEditorOpen ? 150 : 60}
+        shadow-camera-bottom={isEditorOpen ? -150 : -60}
       />
 
       <Terrain
         baseDistance={baseDistance}
         debug={debug}
         onReady={onReady}
-        onSculptLoaded={() => {}}
+        onSculptLoaded={() => { }}
       />
 
       {/* WATER PLANE (NO COLLIDER) */}

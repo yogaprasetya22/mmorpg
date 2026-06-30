@@ -44,7 +44,7 @@ export const AvatarAsset = ({
   const isHatEquipped = !!customization["Hat"]?.asset;
 
   useEffect(() => {
-    scene.traverse((child) => {
+    scene.traverse((child: import('three').Object3D) => {
       if ((child as Mesh).isMesh) {
         const mesh = child as Mesh;
         if (mesh.material) {
@@ -100,7 +100,7 @@ export const AvatarAsset = ({
 
   const attachedItems = useMemo<AttachedItem[]>(() => {
     const items: AttachedItem[] = [];
-    scene.traverse((child) => {
+    scene.traverse((child: import('three').Object3D) => {
       if ((child as Mesh).isMesh) {
         const mesh = child as Mesh;
         items.push({

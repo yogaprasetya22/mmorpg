@@ -63,5 +63,8 @@
   "resolutions": {
     "three": "^0.183.2",
     "three-mesh-bvh": "^0.9.9"
+  },
+  "patchedDependencies": {
+    "bvhecctrl@0.0.18": "patches/bvhecctrl@0.0.18.patch"
   }
 }

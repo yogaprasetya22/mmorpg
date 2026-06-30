@@ -35,7 +35,10 @@ export function useArenaGameState() {
   const [characters, setCharacters] = useState<any[]>([]);
   const [selectedCharacter, setSelectedCharacter] = useState<any>(null);
   const [gameConfig, setGameConfig] = useState<any>(null);
-  const [dpr] = useState(0.8); // Fixed DPR — dynamic scaling via PerformanceMonitor removed to reduce useFrame overhead
+  const [dpr] = useState(() => {
+    if (typeof window === 'undefined') return 1;
+    return window.matchMedia('(pointer: coarse)').matches ? 1.25 : 1.5;
+  }); // Optimized responsive DPR cap — coarse pointer (mobile/tablet) = 1.25, fine = 1.5
 
   // Customization & creation states
   const [isCreatingChar, setIsCreatingChar] = useState(false);
