@@ -14,14 +14,16 @@ PORT_KCP = 9999
 # Package Manager Detection for Frontend (bun preferred, npm as fallback)
 BUN := $(shell command -v bun 2> /dev/null)
 RUN_FRONTEND_CMD = $(if $(BUN),bun run dev,npm run dev)
+START_FRONTEND_CMD = $(if $(BUN),bun run start,npm run start)
 TSC_FRONTEND_CMD = $(if $(BUN),bunx tsc --noEmit,npx tsc --noEmit)
 BUILD_FRONTEND_CMD = $(if $(BUN),bun run build,npm run build)
 
 # Live Reload Tool Detection for Backend (air preferred, go run as fallback)
 AIR := $(shell command -v air 2> /dev/null)
 RUN_BACKEND_CMD = $(if $(AIR),air,go run cmd/server/main.go)
+PROD_BACKEND_CMD = ./build/server
 
-.PHONY: all help kill kill-backend-port kill-frontend-port run run-backend run-backend-heavy-monsters run-frontend seed-enemy check check-backend check-frontend clean build build-backend build-frontend loadtest loadtest-peaceful loadtest-extreme loadtest-fast-combat loadtest-massive-enemies loadtest-anim-stress loadtest-mixed accuracy-test
+.PHONY: all help kill kill-backend-port kill-frontend-port run run-backend run-backend-heavy-monsters run-frontend run-prod run-frontend-prod run-backend-prod seed-enemy check check-backend check-frontend clean build build-backend build-frontend build-shared ci loadtest loadtest-peaceful loadtest-extreme loadtest-fast-combat loadtest-massive-enemies loadtest-anim-stress loadtest-mixed accuracy-test
 
 # Default target displays the help menu
 all: help
@@ -106,16 +108,37 @@ run-frontend: kill-frontend-port
 	@echo "🚀 Booting React/Three Fiber Frontend ($(RUN_FRONTEND_CMD))..."
 	@cd frontend && $(RUN_FRONTEND_CMD)
 
-# Dual-Engine Live Session: Runs both backend and frontend concurrently
+# Dual-Engine Live Session: Runs both backend and frontend concurrently (DEV Mode)
 # Sets up trap listener on SIGINT (Ctrl+C) and SIGTERM to safely clean up both background subshells
 run: kill
-	@echo "🚀 Booting both engines concurrently..."
+	@echo "🚀 Booting both engines concurrently in DEVELOPMENT mode..."
 	@(cd backend && $(RUN_BACKEND_CMD)) & \
 	BACKEND_PID=$$! ; \
 	(cd frontend && $(RUN_FRONTEND_CMD)) & \
 	FRONTEND_PID=$$! ; \
 	trap 'echo -e "\n🛑 Gracefully shutting down MMORPG engines..."; kill $$BACKEND_PID $$FRONTEND_PID 2>/dev/null; wait $$BACKEND_PID $$FRONTEND_PID 2>/dev/null; echo "✅ Cleanup complete. Exited."' SIGINT SIGTERM; \
 	wait $$BACKEND_PID $$FRONTEND_PID
+
+# Run Frontend in Production Mode
+run-frontend-prod: kill-frontend-port
+	@echo "🚀 Starting Production React/Three Fiber Frontend ($(START_FRONTEND_CMD))..."
+	@cd frontend && $(START_FRONTEND_CMD)
+
+# Run Backend in Production Mode
+run-backend-prod: kill-backend-port
+	@echo "🚀 Starting Production Go Backend ($(PROD_BACKEND_CMD))..."
+	@cd backend && $(PROD_BACKEND_CMD)
+
+# Dual-Engine Live Session: Runs both backend and frontend concurrently (PRODUCTION Mode)
+run-prod: kill
+	@echo "🚀 Booting both engines concurrently in PRODUCTION mode..."
+	@(cd backend && $(PROD_BACKEND_CMD)) & \
+	BACKEND_PID=$$! ; \
+	(cd frontend && $(START_FRONTEND_CMD)) & \
+	FRONTEND_PID=$$! ; \
+	trap 'echo -e "\n🛑 Gracefully shutting down MMORPG production engines..."; kill $$BACKEND_PID $$FRONTEND_PID 2>/dev/null; wait $$BACKEND_PID $$FRONTEND_PID 2>/dev/null; echo "✅ Cleanup complete. Exited."' SIGINT SIGTERM; \
+	wait $$BACKEND_PID $$FRONTEND_PID
+
 
 # Dual-Engine Verification Protocol (SKILL.md adherence)
 check-backend:
@@ -151,8 +174,16 @@ build-frontend:
 	@cd frontend && $(BUILD_FRONTEND_CMD)
 	@echo "✅ Frontend Next.js build complete."
 
+build-shared:
+	@echo "🏗️ Building @jagres/shared TypeScript package..."
+	@cd packages/shared && bunx tsc --build
+	@echo "✅ @jagres/shared build complete (dist/ ready)."
+
 build: build-backend build-frontend
 	@echo "🎉 Production build completed for both engines!"
+
+ci: check build
+	@echo "✅ CI pipeline complete."
 
 loadtest:
 	@echo "🔥 Starting Game Server Load/Stress Test (50 simulated players)..."

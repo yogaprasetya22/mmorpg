@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, memo, MouseEvent } from 'react';
+import { useState, memo, useRef, useCallback, MouseEvent } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+
 import { Mountain, Box, Search, X, EyeOff, ChevronDown, ChevronRight } from 'lucide-react';
 import { useEditorStore } from '@/src/state/useEditorStore';
 import type { MapItem } from '@jagres/shared';
@@ -80,6 +82,21 @@ export const SceneHierarchy = () => {
     ? items.filter(i => i.type.toLowerCase().includes(search.toLowerCase()) || i.id.toLowerCase().includes(search.toLowerCase()))
     : items;
 
+  // Reversed list (newest on top) — stable reference for virtualizer
+  const reversedItems = [...filteredItems].reverse();
+
+  // Scroll container ref for virtualizer
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Virtualizer — 22px per row (py-[3px] + text-[9px] ≈ 22px)
+  const rowVirtualizer = useVirtualizer({
+    count: reversedItems.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: useCallback(() => 22, []),
+    overscan: 10,
+  });
+
+
   const handleSelectTerrain = () => {
     if (activeAsset) setActiveAsset(null);
     setSelectedId('terrain');
@@ -139,7 +156,7 @@ export const SceneHierarchy = () => {
       </div>
 
       {/* Scene Tree (scrollable) */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-1.5 pb-2 min-h-0">
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-1.5 pb-2 min-h-0" ref={scrollContainerRef}>
 
         {/* Root: Scene */}
         <div className="flex items-center gap-1 px-1 py-1 text-[8px] text-zinc-500 font-bold uppercase tracking-widest select-none">
@@ -173,16 +190,43 @@ export const SceneHierarchy = () => {
               <div className="pl-5 py-3 text-zinc-600 text-[8px] italic text-center">Empty scene — place assets from the Inspector →</div>
             )}
 
-            {/* Object rows (reversed: newest on top) */}
-            {[...filteredItems].reverse().map(item => (
-              <HierarchyRow
-                key={item.id}
-                item={item}
-                isSelected={selectedIds.includes(item.id)}
-                onClick={(e) => handleSelectItem(item, e)}
-                onDelete={() => handleDeleteItem(item)}
-              />
-            ))}
+            {/* Object rows — virtualized for large scenes (> 50 items), fallback for small */}
+            {filteredItems.length > 50 ? (
+              <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
+                {rowVirtualizer.getVirtualItems().map(virtualRow => {
+                  const item = reversedItems[virtualRow.index];
+                  return (
+                    <div
+                      key={item.id}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
+                      <HierarchyRow
+                        item={item}
+                        isSelected={selectedIds.includes(item.id)}
+                        onClick={(e) => handleSelectItem(item, e)}
+                        onDelete={() => handleDeleteItem(item)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              reversedItems.map(item => (
+                <HierarchyRow
+                  key={item.id}
+                  item={item}
+                  isSelected={selectedIds.includes(item.id)}
+                  onClick={(e) => handleSelectItem(item, e)}
+                  onDelete={() => handleDeleteItem(item)}
+                />
+              ))
+            )}
           </div>
         )}
       </div>

@@ -8,6 +8,15 @@ import { useControls, Leva, folder } from "leva";
 import dynamic from 'next/dynamic';
 
 const Perf = dynamic(() => import("r3f-perf").then((mod) => mod.Perf), { ssr: false });
+const WorldEditor = dynamic(
+  () => import("./environment/WorldEditor").then((mod) => mod.WorldEditor),
+  { ssr: false }
+);
+const WorldEditorUI = dynamic(
+  () => import("./environment/WorldEditorUI").then((mod) => mod.WorldEditorUI),
+  { ssr: false }
+);
+import { ModularMap } from "./environment/ModularMap";
 
 import { EnvironmentMultiGlobal } from "./environment/EnvironmentMultiGlobal";
 import { MapObstacle } from "@/src/core/domain/unit.types";
@@ -17,9 +26,6 @@ import { API_BASE_URL } from "@/src/core/config";
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { Activity, RefreshCw } from "lucide-react";
 import * as THREE from 'three';
-import { WorldEditor } from "./environment/WorldEditor";
-import { WorldEditorUI } from "./environment/WorldEditorUI";
-import { ModularMap } from "./environment/ModularMap";
 
 // Imported Standalone Components
 import { SceneAnalyzer } from "./SceneAnalyzer";

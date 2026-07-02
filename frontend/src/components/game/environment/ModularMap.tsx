@@ -11,13 +11,14 @@
  * 5. useRef + useMemo for stable references
  */
 
-import { useMemo, useEffect, useRef, Suspense, Component, ReactNode } from 'react';
+import { useMemo, useEffect, useState, useRef, Suspense, Component, ReactNode } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import { useEditorStore } from '@/src/state/useEditorStore';
 import { useStore } from '@/src/state/useStore';
 import { InstancedStaticCollider } from 'bvhecctrl';
 import * as THREE from 'three';
+import { registerCollider, unregisterCollider } from '@/src/core/utils/globalRaycaster';
 import { windUniforms } from '@jagres/shared';
 import { isGrassAssetPath, GrassField } from './GrassField';
 import { _charPos } from '../player/buffers';
@@ -68,10 +69,6 @@ class MapItemErrorBoundary extends Component<{ children: ReactNode }, { hasError
 export const ModularMap = ({ debug }: { debug?: boolean }) => {
   const { items, selectedMapId, loadFromDatabase, isEditorOpen } = useEditorStore();
 
-  useEffect(() => { loadFromDatabase(); }, [selectedMapId, loadFromDatabase]);
-
-  useFrame((state) => { windUniforms.time.value = state.clock.getElapsedTime(); });
-
   // Split grass vs non-grass
   const grassItems = useMemo(() => items.filter(i => isGrassAssetPath(i.path)), [items]);
   const nonGrassItems = useMemo(() => items.filter(i => !isGrassAssetPath(i.path)), [items]);
@@ -104,24 +101,90 @@ export const ModularMap = ({ debug }: { debug?: boolean }) => {
     return result;
   }, [nonGrassItems]);
 
+  const [activeSectorKeys, setActiveSectorKeys] = useState<Set<string>>(new Set());
+  const lastUpdateRef = useRef(0);
+
+  useEffect(() => { loadFromDatabase(); }, [selectedMapId, loadFromDatabase]);
+
+  useFrame((state) => {
+    windUniforms.time.value = state.clock.getElapsedTime();
+
+    // Run sector streaming check every 30 frames (~500ms) to prevent main-thread spikes
+    lastUpdateRef.current++;
+    if (lastUpdateRef.current % 30 !== 0) return;
+
+    const pos = useStore.getState().playerPosition;
+    if (!pos || sectorGroups.length === 0) return;
+
+    const STREAM_DIST_SQ = 210 * 210; // Stream/mount sectors within 210m
+    const nextSet = new Set<string>();
+
+    for (let i = 0; i < sectorGroups.length; i++) {
+      const sg = sectorGroups[i];
+      const dx = sg.center[0] - pos[0];
+      const dz = sg.center[1] - pos[2];
+      const distSq = dx * dx + dz * dz;
+      if (distSq < STREAM_DIST_SQ) {
+        nextSet.add(sg.sectorKey);
+      }
+    }
+
+    // Check if the set has actually changed to avoid triggering redundant React renders
+    let hasChanged = nextSet.size !== activeSectorKeys.size;
+    if (!hasChanged) {
+      for (const key of nextSet) {
+        if (!activeSectorKeys.has(key)) {
+          hasChanged = true;
+          break;
+        }
+      }
+    }
+
+    if (hasChanged) {
+      setActiveSectorKeys(nextSet);
+    }
+  });
+
+  // Populate active sectors immediately when sectorGroups loads (e.g. on teleport or initial map load)
+  useEffect(() => {
+    const pos = useStore.getState().playerPosition;
+    if (!pos || sectorGroups.length === 0) return;
+
+    const STREAM_DIST_SQ = 210 * 210;
+    const initialSet = new Set<string>();
+
+    for (let i = 0; i < sectorGroups.length; i++) {
+      const sg = sectorGroups[i];
+      const dx = sg.center[0] - pos[0];
+      const dz = sg.center[1] - pos[2];
+      const distSq = dx * dx + dz * dz;
+      if (distSq < STREAM_DIST_SQ) {
+        initialSet.add(sg.sectorKey);
+      }
+    }
+    setActiveSectorKeys(initialSet);
+  }, [sectorGroups]);
+
   if (items.length === 0 || isEditorOpen) return null;
 
   return (
     <>
       <GrassField items={grassItems} />
-      {sectorGroups.map(({ path, sectorKey: sk, items: instances, center }) => (
-        <MapItemErrorBoundary key={`${path}-${sk}`}>
-          <Suspense fallback={null}>
-            <InstancedModelGroup
-              key={`${path}-${sk}`}
-              path={path}
-              instances={instances}
-              sectorCenter={center}
-              debug={debug}
-            />
-          </Suspense>
-        </MapItemErrorBoundary>
-      ))}
+      {sectorGroups
+        .filter(sg => activeSectorKeys.has(sg.sectorKey))
+        .map(({ path, sectorKey: sk, items: instances, center }) => (
+          <MapItemErrorBoundary key={`${path}-${sk}`}>
+            <Suspense fallback={null}>
+              <InstancedModelGroup
+                key={`${path}-${sk}`}
+                path={path}
+                instances={instances}
+                sectorCenter={center}
+                debug={debug}
+              />
+            </Suspense>
+          </MapItemErrorBoundary>
+        ))}
     </>
   );
 };
@@ -230,6 +293,15 @@ const InstancedMeshPart = ({ meshData, instances }: {
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingSphere();
     mesh.computeBoundingBox();
+  }, [instances, meshData]);
+
+  useEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    registerCollider(mesh);
+    return () => {
+      unregisterCollider(mesh);
+    };
   }, [instances, meshData]);
 
   return (

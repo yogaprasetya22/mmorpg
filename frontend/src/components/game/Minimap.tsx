@@ -8,12 +8,12 @@ interface MinimapProps {
   mapId: string;
 }
 
-export const Minimap: React.FC<MinimapProps> = ({
+export const Minimap = React.memo(function Minimap({
   connectedPlayersRef,
   worldMonstersRef,
   localPlayerId,
   mapId,
-}) => {
+}: MinimapProps) {
   const playerArrowRef = useRef<SVGSVGElement>(null);
   const dotsContainerRef = useRef<HTMLDivElement>(null);
   const coordsRef = useRef<HTMLSpanElement>(null);
@@ -227,4 +227,5 @@ export const Minimap: React.FC<MinimapProps> = ({
       </div>
     </div>
   );
-};
+});
+Minimap.displayName = "Minimap";

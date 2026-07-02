@@ -4,6 +4,7 @@ import { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { applyPainterlyStyle, getTerrainElevation } from '@jagres/shared';
+import { registerCollider, unregisterCollider } from '@/src/core/utils/globalRaycaster';
 import { InstancedStaticCollider } from 'bvhecctrl';
 
 const TREE_COUNT = 120;
@@ -87,6 +88,13 @@ export const InstancedTrees = ({ mode, baseDistance = 24 }: { mode: 'DIORAMA' | 
         // Prevent disappearing from camera (Frustum culling fix)
         mesh.computeBoundingSphere();
     }, [mode, baseDistance]);
+
+    useEffect(() => {
+        if (meshRef.current) {
+            registerCollider(meshRef.current as any);
+            return () => unregisterCollider(meshRef.current as any);
+        }
+    }, []);
 
     return (
         <InstancedStaticCollider restitution={0} friction={1}>

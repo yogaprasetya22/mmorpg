@@ -54,7 +54,8 @@ export function updatePlayerCamera(camera: THREE.Camera, delta: number) {
   _raycaster.set(_rayOrigin, _rayDir);
   _raycaster.far = camZoom[0];
 
-  const colliders = (window as any).globalNonInstancedColliders || [];
+  const rawColliders = (window as any).globalNonInstancedColliders || [];
+  const colliders = rawColliders.filter((c: any) => c.name !== 'terrain');
   const intersects = _raycaster.intersectObjects(colliders, false);
 
   if (intersects.length > 0) {
@@ -69,7 +70,7 @@ export function updatePlayerCamera(camera: THREE.Camera, delta: number) {
   }
 
   // PREVENT UNDERWORLD CAMERA (Hard Floor)
-  if (colliders.length > 0) {
+  if (rawColliders.length > 0) {
     const terrainHeightAtCam = (window as any).getGroundHeight
       ? (window as any).getGroundHeight(_camDesired.x, _camDesired.z, -1)
       : -1;

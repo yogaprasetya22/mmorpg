@@ -11,6 +11,8 @@
         "declarationMap": true,
         "sourceMap": true,
         "outDir": "dist",
+        "rootDir": "src",
+        "composite": true,
         "typeRoots": ["../../frontend/node_modules/@types", "../../node_modules/@types"],
         "types": ["three", "node"]
     },
