@@ -8,7 +8,7 @@ import { PlayerNetworkState } from "@/src/hooks/useWebSocketGame";
 import { UnitRuntimeData } from "@/src/core/domain/unit.types";
 import { useStore } from "@/src/state/useStore";
 import { getTerrainElevation, getCachedTerrainHeight } from '@jagres/shared';
-import { useEditorStore } from "@/src/state/useEditorStore";
+import { useEditorStore } from "@/src/features/world-editor/store/useEditorStore";
 import { AvatarModel, AvatarHandle } from "./avatar/AvatarModel";
 import { classToWeaponCategory, classWeaponMap } from "./avatar/weaponConfigs";
 import { HpBarPlanes } from "./shared/HpBarPlanes";

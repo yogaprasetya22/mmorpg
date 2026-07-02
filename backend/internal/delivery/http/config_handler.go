@@ -14,9 +14,10 @@ import (
 	"strings"
 	"time"
 
+	"mmorpg-backend/internal/domain"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-	"mmorpg-backend/internal/domain"
 )
 
 type ConfigHandler struct {
@@ -299,11 +300,13 @@ type MapItemInput struct {
 }
 
 type MapSaveInput struct {
-	MapID      string           `json:"map_id"`
-	Items      []MapItemInput   `json:"items"`
-	Settings   MapSettingsInput `json:"settings"`
-	PaintData  string           `json:"paintData"`
-	SculptData string           `json:"sculptData"`
+	MapID               string           `json:"map_id"`
+	Items               []MapItemInput   `json:"items"`
+	Settings            MapSettingsInput `json:"settings"`
+	PaintData           string           `json:"paintData"`
+	SculptData          string           `json:"sculptData"`
+	PaintLayerMaterials string           `json:"paintLayerMaterials"`
+	PaintLayerColors    string           `json:"paintLayerColors"`
 }
 
 // SaveMap processes map-editor persistence updates into MapConfig and MapItem tables in GORM
@@ -356,8 +359,10 @@ func (h *ConfigHandler) SaveMap(c *gin.Context) {
 			BloomThreshold:    input.Settings.BloomThreshold,
 			BloomStrength:     input.Settings.BloomStrength,
 			BloomRadius:       input.Settings.BloomRadius,
-			PaintData:         input.PaintData,
-			SculptData:        input.SculptData,
+			PaintData:           input.PaintData,
+			SculptData:          input.SculptData,
+			PaintLayerMaterials: input.PaintLayerMaterials,
+			PaintLayerColors:    input.PaintLayerColors,
 		}
 
 		if err := tx.Save(&mapConfig).Error; err != nil {
@@ -456,33 +461,35 @@ func (h *ConfigHandler) LoadMap(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-			"map_id": mapConfig.ID,
-			"items":  itemsOut,
-			"settings": gin.H{
-				"gridSize":    mapConfig.GridSize,
-				"gridEnabled": mapConfig.GridEnabled,
-				"terrainConfig": gin.H{
-					"height":    mapConfig.TerrainHeight,
-					"scale":     mapConfig.TerrainScale,
-					"seed":      mapConfig.TerrainSeed,
-					"sharpness": mapConfig.TerrainSharpness,
-				},
-				"terrainMaterialId": mapConfig.TerrainMaterialID,
-				"terrainColor":      mapConfig.TerrainColor,
-				"sky":               mapConfig.Sky,
-				"environment":       mapConfig.Environment,
-				"lightIntensity":    mapConfig.LightIntensity,
-				"ambientIntensity":  mapConfig.AmbientIntensity,
-				"sunAngle":          mapConfig.SunAngle,
-				"fogDensity":        mapConfig.FogDensity,
-				"skyboxIntensity":   mapConfig.SkyboxIntensity,
-				"bloomThreshold":    mapConfig.BloomThreshold,
-				"bloomStrength":     mapConfig.BloomStrength,
-				"bloomRadius":       mapConfig.BloomRadius,
+		"map_id": mapConfig.ID,
+		"items":  itemsOut,
+		"settings": gin.H{
+			"gridSize":    mapConfig.GridSize,
+			"gridEnabled": mapConfig.GridEnabled,
+			"terrainConfig": gin.H{
+				"height":    mapConfig.TerrainHeight,
+				"scale":     mapConfig.TerrainScale,
+				"seed":      mapConfig.TerrainSeed,
+				"sharpness": mapConfig.TerrainSharpness,
 			},
-			"paintData":  mapConfig.PaintData,
-			"sculptData": mapConfig.SculptData,
-		})
+			"terrainMaterialId": mapConfig.TerrainMaterialID,
+			"terrainColor":      mapConfig.TerrainColor,
+			"sky":               mapConfig.Sky,
+			"environment":       mapConfig.Environment,
+			"lightIntensity":    mapConfig.LightIntensity,
+			"ambientIntensity":  mapConfig.AmbientIntensity,
+			"sunAngle":          mapConfig.SunAngle,
+			"fogDensity":        mapConfig.FogDensity,
+			"skyboxIntensity":   mapConfig.SkyboxIntensity,
+			"bloomThreshold":    mapConfig.BloomThreshold,
+			"bloomStrength":     mapConfig.BloomStrength,
+			"bloomRadius":       mapConfig.BloomRadius,
+		},
+		"paintData":           mapConfig.PaintData,
+		"sculptData":          mapConfig.SculptData,
+		"paintLayerMaterials": mapConfig.PaintLayerMaterials,
+		"paintLayerColors":    mapConfig.PaintLayerColors,
+	})
 }
 
 // ListMaps lists metadata for all existing maps saved inside GORM MapConfig
@@ -552,24 +559,24 @@ func (h *ConfigHandler) DeleteMap(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Peta berhasil dihapus", "map_id": mapID})
 }
 
-// DeepSeek integration structs
-type DeepSeekMessage struct {
+// LLM integration structs (OpenAI-compatible)
+type LLMMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-type DeepSeekRequest struct {
-	Model       string            `json:"model"`
-	Messages    []DeepSeekMessage `json:"messages"`
-	Temperature float64           `json:"temperature"`
+type LLMRequest struct {
+	Model       string       `json:"model"`
+	Messages    []LLMMessage `json:"messages"`
+	Temperature float64      `json:"temperature"`
 }
 
-type DeepSeekChoice struct {
-	Message DeepSeekMessage `json:"message"`
+type LLMChoice struct {
+	Message LLMMessage `json:"message"`
 }
 
-type DeepSeekResponse struct {
-	Choices []DeepSeekChoice `json:"choices"`
+type LLMResponse struct {
+	Choices []LLMChoice `json:"choices"`
 }
 
 type AIAssetInfo struct {
@@ -613,9 +620,9 @@ func (h *ConfigHandler) AIGenerateEnvironment(c *gin.Context) {
 		return
 	}
 
-	apiKey := os.Getenv("DEEPSEEK_API_KEY")
+	apiKey := os.Getenv("LLM_API_KEY")
 	if apiKey == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "DeepSeek API Key (DEEPSEEK_API_KEY) tidak ditemukan di konfigurasi env. Silakan tambahkan ke backend/.env"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "LLM API Key (LLM_API_KEY) tidak ditemukan di konfigurasi env. Silakan tambahkan ke backend/.env"})
 		return
 	}
 
@@ -679,16 +686,16 @@ You MUST respond ONLY with a raw JSON object containing these exact fields and m
 
 DO NOT include any markdown code blocks or triple backticks. Return ONLY the raw JSON string.`, assetsStr, currentItemsStr)
 
-	deepSeekReq := DeepSeekRequest{
-		Model: "deepseek-chat",
-		Messages: []DeepSeekMessage{
+	llmReq := LLMRequest{
+		Model: "mmorpg",
+		Messages: []LLMMessage{
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: req.Prompt},
 		},
 		Temperature: 0.6,
 	}
 
-	reqBytes, err := json.Marshal(deepSeekReq)
+	reqBytes, err := json.Marshal(llmReq)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyusun payload AI: " + err.Error()})
 		return
@@ -740,16 +747,16 @@ DO NOT include any markdown code blocks or triple backticks. Return ONLY the raw
 	// Robust Retry Loop (up to 3 times) for transient network or DNS timeouts
 	for attempt := 1; attempt <= 3; attempt++ {
 		// Re-instantiate request body buffer since it is consumed on each attempt
-		httpReq, err := http.NewRequestWithContext(ctx, "POST", "https://api.deepseek.com/v1/chat/completions", bytes.NewBuffer(reqBytes))
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", "http://localhost:20128/v1/chat/completions", bytes.NewBuffer(reqBytes))
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membuat request HTTP ke DeepSeek: " + err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membuat request HTTP ke LLM: " + err.Error()})
 			return
 		}
 
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
 
-		log.Printf("[AI GATEWAY] Mengirim request ke DeepSeek API (Percobaan %d/3)...", attempt)
+		log.Printf("[AI GATEWAY] Mengirim request ke LLM API (Percobaan %d/3)...", attempt)
 		resp, err = client.Do(httpReq)
 		if err == nil {
 			break
@@ -764,34 +771,34 @@ DO NOT include any markdown code blocks or triple backticks. Return ONLY the raw
 	}
 
 	if lastErr != nil && resp == nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal terhubung ke DeepSeek API setelah 3 percobaan: " + lastErr.Error()})
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Gagal terhubung ke LLM API setelah 3 percobaan: " + lastErr.Error()})
 		return
 	}
 	defer resp.Body.Close()
 
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membaca balasan dari DeepSeek API: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membaca balasan dari LLM API: " + err.Error()})
 		return
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("DeepSeek API mengembalikan error (%d): %s", resp.StatusCode, string(respBytes))})
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("LLM API mengembalikan error (%d): %s", resp.StatusCode, string(respBytes))})
 		return
 	}
 
-	var deepSeekResp DeepSeekResponse
-	if err := json.Unmarshal(respBytes, &deepSeekResp); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengurai respons JSON DeepSeek: " + err.Error()})
+	var llmResp LLMResponse
+	if err := json.Unmarshal(respBytes, &llmResp); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengurai respons JSON LLM: " + err.Error()})
 		return
 	}
 
-	if len(deepSeekResp.Choices) == 0 {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "DeepSeek API mengembalikan respons kosong"})
+	if len(llmResp.Choices) == 0 {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "LLM API mengembalikan respons kosong"})
 		return
 	}
 
-	content := deepSeekResp.Choices[0].Message.Content
+	content := llmResp.Choices[0].Message.Content
 
 	// Strip markdown code fences if DeepSeek returned them
 	content = strings.TrimSpace(content)
@@ -926,14 +933,14 @@ DO NOT include any markdown code blocks or triple backticks. Return ONLY the raw
 // findClosestAsset parses a hallucinated path from the LLM and maps it to the closest valid asset in the database.
 func findClosestAsset(aiPath string, availableAssets []AIAssetInfo) string {
 	aiPathClean := strings.ToLower(strings.TrimSpace(aiPath))
-	
+
 	// 1. Exact path match
 	for _, asset := range availableAssets {
 		if strings.ToLower(asset.Path) == aiPathClean {
 			return asset.Path
 		}
 	}
-	
+
 	// 2. Exact name match (AI used the filename/display name instead of the path)
 	for _, asset := range availableAssets {
 		if strings.ToLower(asset.Name) == aiPathClean {
@@ -953,7 +960,7 @@ func findClosestAsset(aiPath string, availableAssets []AIAssetInfo) string {
 	var bestPath string
 	bestScore := 0
 	aiWords := strings.Fields(strings.ReplaceAll(strings.ReplaceAll(aiPathClean, "/", " "), "-", " "))
-	
+
 	for _, asset := range availableAssets {
 		assetNameClean := strings.ToLower(asset.Name)
 		score := 0
@@ -973,7 +980,7 @@ func findClosestAsset(aiPath string, availableAssets []AIAssetInfo) string {
 			bestPath = asset.Path
 		}
 	}
-	
+
 	if bestScore > 0 {
 		return bestPath
 	}
@@ -987,7 +994,7 @@ func findClosestAsset(aiPath string, availableAssets []AIAssetInfo) string {
 	} else if strings.Contains(aiPathClean, "soldier") || strings.Contains(aiPathClean, "npc") || strings.Contains(aiPathClean, "chef") || strings.Contains(aiPathClean, "casual") || strings.Contains(aiPathClean, "character") || strings.Contains(aiPathClean, "zombie") || strings.Contains(aiPathClean, "ninja") {
 		aiCategory = "characters"
 	}
-	
+
 	for _, asset := range availableAssets {
 		if asset.Category == aiCategory {
 			return asset.Path
@@ -998,7 +1005,6 @@ func findClosestAsset(aiPath string, availableAssets []AIAssetInfo) string {
 	if len(availableAssets) > 0 {
 		return availableAssets[0].Path
 	}
-	
+
 	return aiPath
 }
-

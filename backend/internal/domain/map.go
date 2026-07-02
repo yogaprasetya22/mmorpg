@@ -23,8 +23,10 @@ type MapConfig struct {
 	BloomThreshold    *float64  `json:"bloom_threshold" gorm:"type:numeric"`
 	BloomStrength     *float64  `json:"bloom_strength" gorm:"type:numeric"`
 	BloomRadius       *float64  `json:"bloom_radius" gorm:"type:numeric"`
-	PaintData         string    `json:"paint_data" gorm:"type:text"`
-	SculptData        string    `json:"sculpt_data" gorm:"type:text"`
+	PaintData           string    `json:"paint_data" gorm:"type:text"`
+	SculptData          string    `json:"sculpt_data" gorm:"type:text"`
+	PaintLayerMaterials string    `json:"paint_layer_materials" gorm:"type:text;default:''"`
+	PaintLayerColors    string    `json:"paint_layer_colors" gorm:"type:text;default:''"`
 	Items             []MapItem `json:"items" gorm:"foreignKey:MapConfigID;constraint:OnDelete:CASCADE"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`

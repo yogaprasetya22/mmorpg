@@ -12,7 +12,7 @@ import { AvatarConfiguratorUI } from '@/src/components/game/avatar/AvatarConfigu
 
 import { KeyboardControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
-import { keyboardMap } from '@/src/components/game/PlayerController';
+import { keyboardMap } from '@/src/entities/player/ui/PlayerController';
 import { Minimap } from '@/src/components/game/Minimap';
 import { GameCanvas } from '@/src/components/game/GameCanvas';
 

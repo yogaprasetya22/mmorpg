@@ -1,0 +1,21 @@
+{
+    "name": "@jagres/mcp",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "bin": {
+        "world-mcp": "./dist/server.js"
+    },
+    "scripts": {
+        "build": "bun build src/server.ts --outdir dist --target node",
+        "dev": "bun run --watch src/server.ts",
+        "start": "bun run dist/server.js"
+    },
+    "dependencies": {
+        "zod": "^4.4.3"
+    },
+    "devDependencies": {
+        "@types/node": "^26.1.0",
+        "typescript": "^6.0.3"
+    }
+}

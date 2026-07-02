@@ -1,9 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useEditorStore } from '@/src/state/useEditorStore';
 import { StormEnvironment } from './StormEnvironment';
-import { WhimsicalDiorama } from './WhimsicalDiorama';
 
 interface EnvironmentMultiGlobalProps {
   settingsRef: React.RefObject<any>;
@@ -12,15 +10,7 @@ interface EnvironmentMultiGlobalProps {
 }
 
 export const EnvironmentMultiGlobal = ({ settingsRef, debug = false, onReady }: EnvironmentMultiGlobalProps) => {
-  const environment = useEditorStore((s) => s.environment);
-
-  return environment === 'DIORAMA' ? (
-    <WhimsicalDiorama
-      settingsRef={settingsRef}
-      debug={debug}
-      onReady={onReady}
-    />
-  ) : (
+  return (
     <StormEnvironment
       potatoMode={settingsRef?.current?.potatoMode}
       debug={debug}

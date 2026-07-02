@@ -8,7 +8,7 @@ import { SkeletonUtils } from 'three-stdlib';
 import { MeshoptDecoder } from 'meshoptimizer';
 import { MonsterNetworkState, PlayerNetworkState } from "@/src/hooks/useWebSocketGame";
 import { useStore } from "@/src/state/useStore";
-import { useEditorStore } from "@/src/state/useEditorStore";
+import { useEditorStore } from "@/src/features/world-editor/store/useEditorStore";
 import { HpBarPlanes } from "./shared/HpBarPlanes";
 import { API_BASE_URL } from "@/src/core/config";
 import { getTerrainElevation, getCachedTerrainHeight } from '@jagres/shared';

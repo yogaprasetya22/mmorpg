@@ -14,14 +14,14 @@
 import { useMemo, useEffect, useState, useRef, Suspense, Component, ReactNode } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
-import { useEditorStore } from '@/src/state/useEditorStore';
+import { useEditorStore } from '@/src/features/world-editor/store/useEditorStore';
 import { useStore } from '@/src/state/useStore';
 import { InstancedStaticCollider } from 'bvhecctrl';
 import * as THREE from 'three';
 import { registerCollider, unregisterCollider } from '@/src/core/utils/globalRaycaster';
 import { windUniforms } from '@jagres/shared';
 import { isGrassAssetPath, GrassField } from './GrassField';
-import { _charPos } from '../player/buffers';
+import { _charPos } from '@/src/entities/player/buffers';
 
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 

@@ -9,6 +9,7 @@ SHELL := /bin/bash
 # Configuration and Ports
 PORT_BACKEND = 8080
 PORT_FRONTEND = 3000
+PORT_MCP = 3001
 PORT_KCP = 9999
 
 # Package Manager Detection for Frontend (bun preferred, npm as fallback)
@@ -33,11 +34,12 @@ help:
 	@echo "                   🎮  MMORPG DUAL-ENGINE MATRIX  🎮              "
 	@echo "================================================================="
 	@echo "⚙️  CORE ENGINE SERVICES:"
-	@echo "  make run                       - Kill running ports and start BOTH services concurrently"
+	@echo "  make run                       - Kill running ports and start ALL services (backend + frontend + MCP)"
 	@echo "  make run-backend               - Kill port $(PORT_BACKEND) and start backend only"
 	@echo "  make run-backend-heavy-monsters- Kill port $(PORT_BACKEND) and start backend with 80 extra monsters"
 	@echo "  make run-frontend              - Kill port $(PORT_FRONTEND) and start frontend only"
-	@echo "  make kill                      - Terminate any running processes on ports $(PORT_BACKEND) & $(PORT_FRONTEND)"
+	@echo "  make run-mcp                   - Kill port $(PORT_MCP) and start MCP server only"
+	@echo "  make kill                      - Terminate any running processes on ports $(PORT_BACKEND), $(PORT_FRONTEND), $(PORT_MCP)"
 	@echo ""
 	@echo "💾 DATABASE & CONFIG SEEDERS:"
 	@echo "  make seed-enemy                - Force wipe and fresh seed all 10 varied enemy configurations"
@@ -64,7 +66,7 @@ help:
 	@echo "================================================================="
 
 # Clean ports target using multiple layers of process signal dispatching (fuser & lsof + kill)
-kill: kill-backend-port kill-frontend-port
+kill: kill-backend-port kill-frontend-port kill-mcp-port
 	@echo "✨ All target ports are clean and ready to bind."
 
 kill-backend-port:
@@ -92,6 +94,15 @@ kill-frontend-port:
 		kill -9 $$pid_frontend 2>/dev/null || true; \
 	fi
 
+kill-mcp-port:
+	@echo "🧹 Sweeping processes on MCP port $(PORT_MCP)..."
+	@fuser -k $(PORT_MCP)/tcp 2>/dev/null || true
+	@pid_mcp=$$(lsof -t -i:$(PORT_MCP) 2>/dev/null); \
+	if [ ! -z "$$pid_mcp" ]; then \
+		echo "Force killing MCP PID: $$pid_mcp"; \
+		kill -9 $$pid_mcp 2>/dev/null || true; \
+	fi
+
 # Runs the Go Backend exclusively
 run-backend: kill-backend-port
 	@echo "🚀 Booting Go Authoritative Backend..."
@@ -108,16 +119,23 @@ run-frontend: kill-frontend-port
 	@echo "🚀 Booting React/Three Fiber Frontend ($(RUN_FRONTEND_CMD))..."
 	@cd frontend && $(RUN_FRONTEND_CMD)
 
-# Dual-Engine Live Session: Runs both backend and frontend concurrently (DEV Mode)
-# Sets up trap listener on SIGINT (Ctrl+C) and SIGTERM to safely clean up both background subshells
+# Runs the MCP server exclusively
+run-mcp: kill-mcp-port
+	@echo "🚀 Booting MCP World Editor Server on port $(PORT_MCP)..."
+	@cd packages/mcp && bun run src/server.ts --http --port $(PORT_MCP)
+
+# Triple-Engine Live Session: Runs backend, frontend, and MCP server concurrently (DEV Mode)
+# Sets up trap listener on SIGINT (Ctrl+C) and SIGTERM to safely clean up all background subshells
 run: kill
-	@echo "🚀 Booting both engines concurrently in DEVELOPMENT mode..."
+	@echo "🚀 Booting all engines concurrently in DEVELOPMENT mode..."
 	@(cd backend && $(RUN_BACKEND_CMD)) & \
 	BACKEND_PID=$$! ; \
 	(cd frontend && $(RUN_FRONTEND_CMD)) & \
 	FRONTEND_PID=$$! ; \
-	trap 'echo -e "\n🛑 Gracefully shutting down MMORPG engines..."; kill $$BACKEND_PID $$FRONTEND_PID 2>/dev/null; wait $$BACKEND_PID $$FRONTEND_PID 2>/dev/null; echo "✅ Cleanup complete. Exited."' SIGINT SIGTERM; \
-	wait $$BACKEND_PID $$FRONTEND_PID
+	(cd packages/mcp && bun run src/server.ts --http --port $(PORT_MCP)) & \
+	MCP_PID=$$! ; \
+	trap 'echo -e "\n🛑 Gracefully shutting down MMORPG engines..."; kill $$BACKEND_PID $$FRONTEND_PID $$MCP_PID 2>/dev/null; wait $$BACKEND_PID $$FRONTEND_PID $$MCP_PID 2>/dev/null; echo "✅ Cleanup complete. Exited."' SIGINT SIGTERM; \
+	wait $$BACKEND_PID $$FRONTEND_PID $$MCP_PID
 
 # Run Frontend in Production Mode
 run-frontend-prod: kill-frontend-port

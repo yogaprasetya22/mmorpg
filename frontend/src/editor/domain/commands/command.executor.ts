@@ -10,8 +10,8 @@ import {
     assertNoDuplicateIds,
     assertFiniteTransform,
     assertNoHoles,
-} from "../../core/invariants";
-import { newItemId } from "../../core/ids";
+} from "@/src/features/world-editor/constants/invariants";
+import { newItemId } from "@/src/features/world-editor/utils/ids";
 import type {
     EditorCommand,
     CommandResult,
