@@ -11,7 +11,7 @@ import { buildProjectedCirclePoints, buildProjectedPolygonPoints, buildProjected
 // ─── HOLOGRAPHIC BRUSH PROJECTION ───
 
 interface HolographicProps {
-    maskId: 'softCircle' | 'hardCircle' | 'star' | 'hexagon' | 'starOutline' | 'square';
+    maskId: 'softCircle' | 'hardCircle' | 'star' | 'hexagon' | 'starOutline' | 'square' | 'triangle';
     size: number; strength: number;
     position: [number, number, number];
     environment: string; terrainConfig: any;
@@ -52,6 +52,11 @@ export const HolographicBrushProjection = memo((props: HolographicProps) => {
             ? buildProjectedStarPoints(cx, cy, cz, size, size * 0.45, 5, environment, terrainConfig) : null,
         [cx, cy, cz, size, environment, terrainConfig, maskId],
     );
+    const trianglePts = useMemo(
+        () => maskId === 'triangle'
+            ? buildProjectedPolygonPoints(cx, cy, cz, size, 3, 0, environment, terrainConfig) : null,
+        [cx, cy, cz, size, environment, terrainConfig, maskId],
+    );
 
     const lineMat = <lineBasicMaterial color="#3b82f6" linewidth={2} transparent opacity={0.9} depthWrite={false} />;
     const dimLineMat = <lineBasicMaterial color="#3b82f6" linewidth={1.5} transparent opacity={0.55} depthWrite={false} />;
@@ -77,6 +82,7 @@ export const HolographicBrushProjection = memo((props: HolographicProps) => {
             {maskId === 'star' && ptsToJSX(starPts)}
             {maskId === 'hexagon' && ptsToJSX(hexPts)}
             {maskId === 'square' && ptsToJSX(squarePts)}
+            {maskId === 'triangle' && ptsToJSX(trianglePts)}
             {maskId === 'starOutline' && outerPts && outerPts70 && (
                 <group>
                     {ptsToJSX(outerPts)}
@@ -167,6 +173,13 @@ export const PlacedMaskProjection = memo(({ item, isSelected, isHovered, onPoint
                 <group rotation-z={Math.PI / 4}>
                     <mesh><ringGeometry args={[radius - 0.05, radius, 4]} /><meshBasicMaterial color={outlineColor} transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} /></mesh>
                     <mesh><ringGeometry args={[0, radius, 4]} /><meshBasicMaterial color={filledColor} transparent opacity={0.15} side={THREE.DoubleSide} depthWrite={false} /></mesh>
+                </group>
+            )}
+
+            {maskId === 'triangle' && (
+                <group>
+                    <mesh><ringGeometry args={[radius - 0.05, radius, 3]} /><meshBasicMaterial color={outlineColor} transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} /></mesh>
+                    <mesh><ringGeometry args={[0, radius, 3]} /><meshBasicMaterial color={filledColor} transparent opacity={0.15} side={THREE.DoubleSide} depthWrite={false} /></mesh>
                 </group>
             )}
         </group>

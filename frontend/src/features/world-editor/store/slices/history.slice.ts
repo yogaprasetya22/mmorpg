@@ -7,15 +7,25 @@
 import type { StateCreator } from "zustand";
 import type { MapItem } from "@jagres/shared";
 
+export interface HistoryRecord {
+    items: MapItem[];
+    paintData: string | null;
+    sculptData: string | null;
+}
+
 export interface HistorySlice {
     items: MapItem[];
     setItems: (items: MapItem[]) => void;
 
-    history: MapItem[][];
+    history: HistoryRecord[];
     historyIndex: number;
 
     updateItemsWithHistory: (
         newItems: MapItem[] | ((prev: MapItem[]) => MapItem[]),
+    ) => void;
+    updateTerrainWithHistory: (
+        type: "paint" | "sculpt",
+        data: string | null,
     ) => void;
     undo: () => void;
     redo: () => void;
@@ -55,41 +65,73 @@ export const createHistorySlice: StateCreator<
     historyIndex: -1,
 
     updateItemsWithHistory: (newItems) => {
-        const { items, history, historyIndex } = get();
+        const { items, paintData, sculptData, history, historyIndex } = get() as any;
         const updated =
             typeof newItems === "function" ? newItems(items) : newItems;
 
         const nextH = history.slice(0, historyIndex + 1);
-        const newHistory = [...nextH, updated].slice(-50);
+        const newRecord = { items: updated, paintData, sculptData };
+        const newHistory = [...nextH, newRecord].slice(-50);
 
         set({
             items: updated,
             history: newHistory,
             historyIndex: newHistory.length - 1,
-        });
+        } as any);
+    },
+
+    updateTerrainWithHistory: (type, data) => {
+        const { items, paintData, sculptData, history, historyIndex } = get() as any;
+        const nextPaint = type === "paint" ? data : paintData;
+        const nextSculpt = type === "sculpt" ? data : sculptData;
+
+        const nextH = history.slice(0, historyIndex + 1);
+        const newRecord = { items, paintData: nextPaint, sculptData: nextSculpt };
+        const newHistory = [...nextH, newRecord].slice(-50);
+
+        set({
+            paintData: nextPaint,
+            sculptData: nextSculpt,
+            history: newHistory,
+            historyIndex: newHistory.length - 1,
+        } as any);
     },
 
     undo: () => {
-        const { history, historyIndex } = get();
+        const { history, historyIndex } = get() as any;
         if (historyIndex > 0) {
+            const prevRecord = history[historyIndex - 1];
             set({
-                items: history[historyIndex - 1],
+                items: prevRecord.items,
+                paintData: prevRecord.paintData,
+                sculptData: prevRecord.sculptData,
                 historyIndex: historyIndex - 1,
                 selectedId: null,
                 selectedIds: [],
             } as any);
+            if (typeof localStorage !== "undefined") {
+                localStorage.setItem("world_editor_paint", prevRecord.paintData || "");
+                localStorage.setItem("world_editor_sculpt", prevRecord.sculptData || "");
+            }
         }
     },
 
     redo: () => {
-        const { history, historyIndex } = get();
+        const { history, historyIndex } = get() as any;
         if (historyIndex < history.length - 1) {
+            const nextRecord = history[historyIndex + 1];
             set({
-                items: history[historyIndex + 1],
+                items: nextRecord.items,
+                paintData: nextRecord.paintData,
+                sculptData: nextRecord.sculptData,
                 historyIndex: historyIndex + 1,
                 selectedId: null,
                 selectedIds: [],
             } as any);
+            if (typeof localStorage !== "undefined") {
+                localStorage.setItem("world_editor_paint", nextRecord.paintData || "");
+                localStorage.setItem("world_editor_sculpt", nextRecord.sculptData || "");
+            }
         }
     },
 

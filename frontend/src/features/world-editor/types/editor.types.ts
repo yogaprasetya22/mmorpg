@@ -24,7 +24,8 @@ export type BrushMaskId =
     | "star"
     | "hexagon"
     | "starOutline"
-    | "square";
+    | "square"
+    | "triangle";
 
 export interface BrushProfile {
     size: number;

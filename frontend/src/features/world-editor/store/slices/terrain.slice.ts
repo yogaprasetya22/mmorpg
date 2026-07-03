@@ -107,7 +107,12 @@ export const createTerrainSlice: StateCreator<
     setBrushTextureId: (id) => set({ brushTextureId: id }),
     paintData: null,
     setPaintData: (paintData) => {
-        set({ paintData });
+        const state = get() as any;
+        if (state.updateTerrainWithHistory) {
+            state.updateTerrainWithHistory("paint", paintData);
+        } else {
+            set({ paintData });
+        }
         if (typeof localStorage !== "undefined") {
             localStorage.setItem("world_editor_paint", paintData || "");
         }
@@ -168,7 +173,12 @@ export const createTerrainSlice: StateCreator<
     },
     sculptData: null,
     setSculptData: (sculptData) => {
-        set({ sculptData });
+        const state = get() as any;
+        if (state.updateTerrainWithHistory) {
+            state.updateTerrainWithHistory("sculpt", sculptData);
+        } else {
+            set({ sculptData });
+        }
         if (typeof localStorage !== "undefined") {
             localStorage.setItem("world_editor_sculpt", sculptData || "");
         }

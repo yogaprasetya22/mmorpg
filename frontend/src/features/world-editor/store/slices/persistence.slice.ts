@@ -113,7 +113,7 @@ export const createPersistenceSlice: StateCreator<
             items: [] as MapItem[],
             paintData: null,
             sculptData: null,
-            history: [[]],
+            history: [{ items: [], paintData: null, sculptData: null }],
             historyIndex: 0,
         } as any);
         await (get() as any).saveToDatabase?.();
@@ -268,6 +268,15 @@ export const createPersistenceSlice: StateCreator<
             }
         }
 
+        const paint = sanitizeCanvasData(
+            localStorage.getItem("world_editor_paint"),
+        );
+        if (paint) set({ paintData: paint } as any);
+        const sculpt = sanitizeCanvasData(
+            localStorage.getItem("world_editor_sculpt"),
+        );
+        if (sculpt) set({ sculptData: sculpt } as any);
+
         if (saved) {
             try {
                 const parsed = JSON.parse(saved) as MapItem[];
@@ -277,22 +286,13 @@ export const createPersistenceSlice: StateCreator<
                 }));
                 set({
                     items: sanitized,
-                    history: [sanitized],
+                    history: [{ items: sanitized, paintData: paint, sculptData: sculpt }],
                     historyIndex: 0,
                 } as any);
             } catch (e) {
                 console.error("Failed to load map", e);
             }
         }
-
-        const paint = sanitizeCanvasData(
-            localStorage.getItem("world_editor_paint"),
-        );
-        if (paint) set({ paintData: paint } as any);
-        const sculpt = sanitizeCanvasData(
-            localStorage.getItem("world_editor_sculpt"),
-        );
-        if (sculpt) set({ sculptData: sculpt } as any);
     },
 
     saveToStorage: () => {
@@ -570,7 +570,11 @@ export const createPersistenceSlice: StateCreator<
                     paintLayerColors: data.paintLayerColors
                         ? data.paintLayerColors.split(",")
                         : ["#3d5c36", "#7c6a4a", "#5a4d3a", "#e8e0d0"],
-                    history: [sanitizedItems],
+                    history: [{
+                        items: sanitizedItems,
+                        paintData: sanitizeCanvasData(data.paintData) || null,
+                        sculptData: sanitizeCanvasData(data.sculptData) || null,
+                    }],
                     historyIndex: 0,
                 } as any);
             }

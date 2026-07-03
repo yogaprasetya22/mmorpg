@@ -329,6 +329,14 @@ export function useTerrainBrush(
           case 'square':
             tc.fillRect(-brushSize, -brushSize, brushSize * 2, brushSize * 2);
             break;
+          case 'triangle':
+            tc.beginPath();
+            tc.moveTo(0, -brushSize);
+            tc.lineTo(brushSize * 0.866, brushSize * 0.5);
+            tc.lineTo(-brushSize * 0.866, brushSize * 0.5);
+            tc.closePath();
+            tc.fill();
+            break;
         }
         tc.restore();
 

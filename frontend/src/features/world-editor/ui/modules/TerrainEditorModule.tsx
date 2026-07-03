@@ -56,6 +56,14 @@ const MASK_OPTIONS: { id: BrushMaskId; title: string; hotkey: string; icon: Reac
     id: 'square', title: 'Block Box Brush', hotkey: '6',
     icon: <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" /></svg>,
   },
+  {
+    id: 'triangle', title: 'Triangle Brush', hotkey: '7',
+    icon: (
+      <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+        <polygon points="12,3 2,21 22,21" />
+      </svg>
+    ),
+  },
 ];
 
 const BrushMaskSelector = ({ brushMaskId, setBrushMaskId, accentColor = 'blue' }: {
@@ -213,6 +221,8 @@ export const TerrainEditorModule = () => {
         return <svg className="w-3.5 h-3.5 text-white/80 stroke-current fill-none" viewBox="0 0 24 24" strokeWidth="3"><circle cx="12" cy="12" r="8" /></svg>;
       case 'square':
         return <svg className="w-3.5 h-3.5 text-white/80 drop-shadow" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" /></svg>;
+      case 'triangle':
+        return <svg className="w-3.5 h-3.5 text-white/80 drop-shadow" viewBox="0 0 24 24" fill="currentColor"><polygon points="12,3 2,21 22,21" /></svg>;
       default:
         return null;
     }
