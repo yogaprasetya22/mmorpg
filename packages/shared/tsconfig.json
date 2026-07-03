@@ -16,7 +16,8 @@
         "typeRoots": [
             "../../frontend/node_modules/@types",
             "../../node_modules/@types"
-        ]
+        ],
+        "types": ["node"]
     },
     "include": ["src"]
 }
