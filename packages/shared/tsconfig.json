@@ -13,8 +13,10 @@
         "outDir": "dist",
         "rootDir": "src",
         "composite": true,
-        "typeRoots": ["../../frontend/node_modules/@types", "../../node_modules/@types"],
-        "types": ["three", "node"]
+        "typeRoots": [
+            "../../frontend/node_modules/@types",
+            "../../node_modules/@types"
+        ]
     },
     "include": ["src"]
 }
