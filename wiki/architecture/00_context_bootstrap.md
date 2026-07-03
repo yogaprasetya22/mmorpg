@@ -1,7 +1,9 @@
 # 🚀 00. Global Architecture & Context Bootstrap
-> **Status**: Wajib dibaca oleh AI Agent atau pengembang baru untuk mem-bootstrap konteks proyek MMORPG ini dalam 3 detik.
 
-Dokumen ini menjelaskan rancangan arsitektur utuh proyek game MMORPG Anda, mencakup susunan direktori, teknologi yang digunakan, serta batasan-batasan teknis kritis (*critical guardrails*) yang tidak boleh dilanggar berdasarkan analisis performa mendalam.
+> **Status**: Wajib dibaca oleh AI Agent atau pengembang baru untuk mem-bootstrap konteks proyek ini dalam 3 detik.
+> 📖 **Konteks tambahan**: [`README.md`](../../README.md) · [`docs/Home.md`](../../docs/Home.md) · [`docs/Architecture.md`](../../docs/Architecture.md) · [`DONT_TOUCH.md`](../../DONT_TOUCH.md)
+
+Dokumen ini menjelaskan rancangan arsitektur utuh proyek game **Jagres: Battle Simulator**, mencakup susunan direktori, teknologi yang digunakan, serta batasan-batasan teknis kritis (_critical guardrails_) yang tidak boleh dilanggar berdasarkan analisis performa mendalam.
 
 ---
 
@@ -49,49 +51,51 @@ game mmorpg/                             <-- Root Repositori
 
 Game ini dibangun menggunakan teknologi mutakhir dengan arsitektur hibrida untuk latensi ultra-rendah:
 
-| Layer | Teknologi Utama | Dependensi Utama | Keterangan |
-|---|---|---|---|
-| **Backend** | Go (Golang 1.21+) | `gorm.io/gorm`, `redis/go-redis` | ECS architecture, lock-free AI state machines |
-| **Frontend** | React (Next.js 15) | `@react-three/fiber`, `@react-three/drei` | Engine 3D berbasis WebGL, pointer lock camera |
-| **Networking** | WebSocket + KCP | `@msgpack/msgpack` | Serialisasi data MessagePack biner (hemat bandwidth) |
-| **Database** | PostgreSQL 15 | GORM driver pgsql | Penyimpanan gigih data karakter (Quest, Inventory, Stats) |
-| **Caching** | Redis | go-redis | Koordinat spasial real-time & sinkronisasi multi-node |
+| Layer          | Teknologi Utama    | Dependensi Utama                          | Keterangan                                                |
+| -------------- | ------------------ | ----------------------------------------- | --------------------------------------------------------- |
+| **Backend**    | Go (Golang 1.21+)  | `gorm.io/gorm`, `redis/go-redis`          | ECS architecture, lock-free AI state machines             |
+| **Frontend**   | React (Next.js 15) | `@react-three/fiber`, `@react-three/drei` | Engine 3D berbasis WebGL, pointer lock camera             |
+| **Networking** | WebSocket + KCP    | `@msgpack/msgpack`                        | Serialisasi data MessagePack biner (hemat bandwidth)      |
+| **Database**   | PostgreSQL 15      | GORM driver pgsql                         | Penyimpanan gigih data karakter (Quest, Inventory, Stats) |
+| **Caching**    | Redis              | go-redis                                  | Koordinat spasial real-time & sinkronisasi multi-node     |
 
 ---
 
 ## 🚨 3. Batasan Desain & Aturan Optimasi Kritis (DONT_TOUCH Guardrails)
 
-Untuk menjaga kestabilan server pada beban 100+ entitas dan 60 FPS stabil di sisi client, aturan optimasi dari `DONT_TOUCH.md` berikut **harus dipatuhi secara absolut**. Saat ini terdapat **21 area kritis** yang tidak boleh diubah:
+Untuk menjaga kestabilan server pada beban 100+ entitas dan 60 FPS stabil di sisi client, aturan optimasi dari `DONT_TOUCH.md` berikut **harus dipatuhi secara absolut**. Saat ini terdapat **26 area kritis** yang tidak boleh diubah (lihat [DONT_TOUCH.md](../../DONT_TOUCH.md) untuk detail lengkap):
 
 ### A. Aturan Sisi Frontend (Client-Side Constraints)
-1.  **Zero-Allocation di `useFrame`**: 
-    Jangan pernah membuat instansiasi objek baru (seperti `new THREE.Vector3()`, `array.filter()`, `array.map()`) di dalam frame loop `useFrame()`. Gunakan deklarasi *scratch object* di level modul luar dan bersihkan dengan loop konvensional.
-2.  **Player Send Rate Cap (20Hz)**: 
+
+1.  **Zero-Allocation di `useFrame`**:
+    Jangan pernah membuat instansiasi objek baru (seperti `new THREE.Vector3()`, `array.filter()`, `array.map()`) di dalam frame loop `useFrame()`. Gunakan deklarasi _scratch object_ di level modul luar dan bersihkan dengan loop konvensional.
+2.  **Player Send Rate Cap (20Hz)**:
     Paket koordinat gerakan pemain dikirim maksimal setiap **50ms** dengan fitur deduping gerakan (tidak mengirim jika diam) untuk mencegah penumpukan buffer WebSocket.
-3.  **Ground Detection (SHAPECAST)**: 
+3.  **Ground Detection (SHAPECAST)**:
     Selalu gunakan `SHAPECAST` untuk deteksi tanah pada `<PlayerController>` di `GameCanvas.tsx`. Jangan ganti ke `RAYCAST` (bisa membuat tersangkut prop tipis) atau `BOTH` (membuat double-calculation FPS drop parah).
-4.  **Sort Throttle (10Hz)**: 
+4.  **Sort Throttle (10Hz)**:
     Loop pengurutan jarak monster terdekat di `RemoteMonstersRenderer.tsx` dibatasi maksimal berjalan setiap 100ms, bukan setiap frame (60Hz).
-5.  **Local MessagePack Decoder**: 
+5.  **Local MessagePack Decoder**:
     Decoding biner MessagePack berjalan langsung di Main Thread lewat file lokal `@msgpack/msgpack`. Jangan memindahkannya ke Web Worker karena diblokir oleh CSP (Content Security Policy) browser di production.
-6.  **Locomotion Root Motion Stripping** *(BARU)*:
+6.  **Locomotion Root Motion Stripping** _(BARU)_:
     Semua klip animasi locomotion (Walking, Jogging, Slow Run, Run With Sword, Fast Run, Jump With Sword) **wajib** di-strip track `mixamorig:Hips.position` dan `mixamorig:Hips.quaternion`. BVHEcctrl menangani semua pergerakan dan rotasi world-space. Track root yang tidak di-strip menyebabkan glitch snap-back saat loop.
-7.  **Two-Layer Rotation System** *(BARU)*:
+7.  **Two-Layer Rotation System** _(BARU)_:
     Rotasi karakter menggunakan sistem dua layer: **Parent** (BVHEcctrl model group) untuk rotasi gerakan + idle camera-facing, dan **Child** (characterRef) untuk rotasi target serangan. Rotasi child **wajib** di-lerp kembali ke 0 setelah serangan selesai. Jangan pernah memutar child saat tidak menyerang.
-8.  **Zero-Re-Render Architecture** *(BARU)*:
+8.  **Zero-Re-Render Architecture** _(BARU)_:
     Semua nilai per-frame remote player (pose, timescale, visibility) **wajib** menggunakan `useRef` + `AvatarHandle` imperative. Jangan gunakan `useState` untuk nilai yang berubah lebih dari sekali per detik per player.
-9.  **Terrain Height Spatial Cache** *(BARU)*:
+9.  **Terrain Height Spatial Cache** _(BARU)_:
     Semua entity **wajib** memanggil `getCachedTerrainHeight()` bukan `getGroundHeight()` langsung. Cache grid 1m dengan TTL 2s mengurangi 1.680 raycast/detik menjadi ~20 lookup/detik.
-10. **Exponential Smoothing** *(BARU)*:
+10. **Exponential Smoothing** _(BARU)_:
     Interpolasi posisi remote player menggunakan exponential smoothing (`SMOOTH_TAU = 0.08`) bukan buffer array. Ini menghilangkan 560 alokasi objek/detik.
 
 ### B. Aturan Sisi Backend (Server-Side Constraints)
-1.  **Lock-Free Monster AI State Machine**: 
+
+1.  **Lock-Free Monster AI State Machine**:
     Peralihan AIState monster dilakukan langsung lewat pengubahan field struct, tanpa memanggil mutex lock global atau pustaka State Machine eksternal untuk menghindari lonjakan alokasi memori GC (Garbage Collector).
-2.  **O(1) Spatial Hash Grid**: 
+2.  **O(1) Spatial Hash Grid**:
     Pencarian target monster (aggro) menggunakan 2D Spatial Hash Grid berukuran cell 10.0 unit. Jangan kembalikan ke loop linear $O(N^2)$ yang dapat membekukan CPU server saat monster bertambah.
-3.  **Buffered Non-Blocking WS Hub Fan-Out**: 
-    Penyebaran paket *broadcast* koordinat pemain di `delivery/ws/hub.go` menggunakan buffered channel non-blocking. Klien yang lambat langsung di-drop untuk menghindari hambatan pada klien lain.
+3.  **Buffered Non-Blocking WS Hub Fan-Out**:
+    Penyebaran paket _broadcast_ koordinat pemain di `delivery/ws/hub.go` menggunakan buffered channel non-blocking. Klien yang lambat langsung di-drop untuk menghindari hambatan pada klien lain.
 
 ---
 
@@ -132,13 +136,14 @@ Dengan mengasimilasi panduan global arsitektur ini, Anda sekarang memiliki kenda
 ---
 
 🏆 **Indeks Wiki Lengkap**:
-*   [01. Tahap 1: Backend Domain & Recalculate Logic](01_backend_domain.md)
-*   [02. Tahap 2: Backend Combat Usecase & Accuracy Checks](02_backend_combat.md)
-*   [03. Tahap 3: Frontend Client State & WebSocket Allocation](03_frontend_state.md)
-*   [04. Tahap 4: Frontend Combat UI & Animations](04_frontend_combat_ui.md)
-*   [05. Tahap 5: Database Migrations & Data Seeding](05_database_migrations.md)
-*   [06. Tahap 6: Lembar Rumus Matematika Combat](06_combat_formula_ref.md)
-*   [07. Tahap 7: Protokol WebSocket & Skema JSON](07_network_sync_protocol.md)
-*   [08. Tahap 8: Integrasi & Optimasi Modul Kustomisasi Avatar](08_avatar_configurator_integration.md)
-*   [09. Tahap 9: Sistem Animasi FBX & Rotasi Karakter](09_animation_system.md)
-*   [10. Tahap 10: Arsitektur Optimasi Performa 60 FPS](10_performance_optimization.md)
+
+- [01. Tahap 1: Backend Domain & Recalculate Logic](01_backend_domain.md)
+- [02. Tahap 2: Backend Combat Usecase & Accuracy Checks](02_backend_combat.md)
+- [03. Tahap 3: Frontend Client State & WebSocket Allocation](03_frontend_state.md)
+- [04. Tahap 4: Frontend Combat UI & Animations](04_frontend_combat_ui.md)
+- [05. Tahap 5: Database Migrations & Data Seeding](05_database_migrations.md)
+- [06. Tahap 6: Lembar Rumus Matematika Combat](06_combat_formula_ref.md)
+- [07. Tahap 7: Protokol WebSocket & Skema JSON](07_network_sync_protocol.md)
+- [08. Tahap 8: Integrasi & Optimasi Modul Kustomisasi Avatar](08_avatar_configurator_integration.md)
+- [09. Tahap 9: Sistem Animasi FBX & Rotasi Karakter](09_animation_system.md)
+- [10. Tahap 10: Arsitektur Optimasi Performa 60 FPS](10_performance_optimization.md)

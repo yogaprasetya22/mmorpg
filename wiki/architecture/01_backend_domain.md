@@ -1,7 +1,8 @@
 # 01. Backend Domain & Struct Modifications
+
 > **Tujuan**: Mengintegrasikan Talent Stats (POW, STA, WIS, SPL, CON, CRT) ke domain player Go dan merefaktor formula `RecalculateStats` agar sesuai iRO Renewal.
 
-Sistem statistik dasar Go backend saat ini berada di file `@[/home/yoga/Dokumen/game mmorpg/backend/internal/domain/player.go]`. Pada tahap pertama ini, kita akan menambahkan field Talent Stats baru serta memperbarui alur kalkulasi statistik in-memory character.
+Sistem statistik dasar Go backend saat ini berada di file `@[backend/internal/domain/player.go]`. Pada tahap pertama ini, kita akan menambahkan field Talent Stats baru serta memperbarui alur kalkulasi statistik in-memory character.
 
 ---
 
@@ -9,7 +10,7 @@ Sistem statistik dasar Go backend saat ini berada di file `@[/home/yoga/Dokumen/
 
 ### Langkah 1: Menambahkan Field Atribut Baru pada Struct `Player`
 
-Buka file `@[/home/yoga/Dokumen/game mmorpg/backend/internal/domain/player.go]`. Kita perlu memodifikasi struct `Player` untuk menambahkan kolom penyimpanan database (GORM) dan in-memory variables.
+Buka file `@[backend/internal/domain/player.go]`. Kita perlu memodifikasi struct `Player` untuk menambahkan kolom penyimpanan database (GORM) dan in-memory variables.
 
 Cari bagian di mana statistik dasar STR-LUK berada (sekitar baris 28-51), lalu tambahkan baris-baris kode berikut:
 
@@ -47,6 +48,7 @@ Cari bagian di mana statistik dasar STR-LUK berada (sekitar baris 28-51), lalu t
 ### Langkah 2: Mengimplementasikan Logika Reset & Alokasi pada `RecalculateStats()`
 
 Temukan method `func (p *Player) RecalculateStats()` pada baris 147. Kita perlu memperbaruinya agar:
+
 1.  Menyediakan pengaman batas nilai minimum poin Talent Stats.
 2.  Menghitung akumulasi in-memory Talent Stats.
 3.  Mengintegrasikan pengaruh Talent Stats ke status pertempuran dasar.
@@ -74,7 +76,7 @@ Modifikasi method tersebut seperti potongan kode berikut:
  	if p.BaseLUK < 10 {
  		p.BaseLUK = 10
  	}
- 
+
 +	// Safety check: ensure base talent stats are non-negative
 +	if p.BasePOW < 0 {
 +		p.BasePOW = 0
@@ -102,7 +104,7 @@ Modifikasi method tersebut seperti potongan kode berikut:
  	p.BonusINT = 0
  	p.BonusDEX = 0
  	p.BonusLUK = 0
- 
+
  	// Apply class job bonuses
  	switch p.Class {
  	case "Warrior":
@@ -117,7 +119,7 @@ Modifikasi method tersebut seperti potongan kode berikut:
  	case "Thief":
  		p.BonusAGI += 8
  	}
- 
+
  	// Calculate final attributes (Base + Bonus)
  	p.STR = p.BaseSTR + p.BonusSTR
  	p.AGI = p.BaseAGI + p.BonusAGI
@@ -125,7 +127,7 @@ Modifikasi method tersebut seperti potongan kode berikut:
  	p.INT = p.BaseINT + p.BonusINT
  	p.DEX = p.BaseDEX + p.BonusDEX
  	p.LUK = p.BaseLUK + p.BonusLUK
- 
+
 +	// Calculate final talent attributes (Base + Item/Buff Bonus if any)
 +	p.POW = p.BasePOW
 +	p.STA = p.BaseSTA
@@ -172,7 +174,7 @@ Di dalam `RecalculateStats()`, perbarui bagian perhitungan `p.HIT` dan `p.FLEE` 
 
 ### Langkah 4: Sinkronisasi Database Migrasi (GORM)
 
-Agar kolom baru (`pow`, `sta`, `wis`, `spl`, `con`, `crt`, `talent_points`) ditambahkan secara otomatis pada tabel database PostgreSQL Anda saat server dijalankan, pastikan file inisialisasi server `@[/home/yoga/Dokumen/game mmorpg/backend/internal/repository/postgres/connection.go]` memanggil auto-migrate untuk entitas player:
+Agar kolom baru (`pow`, `sta`, `wis`, `spl`, `con`, `crt`, `talent_points`) ditambahkan secara otomatis pada tabel database PostgreSQL Anda saat server dijalankan, pastikan file inisialisasi server `@[backend/internal/repository/postgres/connection.go]` memanggil auto-migrate untuk entitas player:
 
 ```go
 // Contoh potongan kode setup di repository postgres
@@ -183,4 +185,8 @@ Dengan langkah-langkah di atas, fondasi arsitektur stat di backend telah siap un
 
 ---
 
-➡️ **Langkah Berikutnya**: Lanjutkan ke [Tahap 2: Backend Combat Usecase](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/02_backend_combat.md) untuk menerapkan formula pertahanan fisik Hard/Soft DEF dan validasi akurasi *authoritative*!
+➡️ **Langkah Berikutnya**: Lanjutkan ke [Tahap 2: Backend Combat Usecase](02_backend_combat.md) untuk menerapkan formula pertahanan fisik Hard/Soft DEF dan validasi akurasi _authoritative_!
+
+---
+
+**📚 Dokumen Terkait**: [README.md](../../README.md) · [docs/Home.md](../../docs/Home.md) · [docs/Architecture.md](../../docs/Architecture.md) · [DONT_TOUCH.md](../../DONT_TOUCH.md)

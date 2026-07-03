@@ -1,5 +1,6 @@
 # 06. Combat Formula Reference Sheet
-> **Tujuan**: Lembar spesifikasi matematika absolut (*mathematical reference cheat-sheet*) untuk seluruh perhitungan kalkulasi pertarungan di server MMORPG.
+
+> **Tujuan**: Lembar spesifikasi matematika absolut (_mathematical reference cheat-sheet_) untuk seluruh perhitungan kalkulasi pertarungan di server MMORPG.
 
 Dokumen ini mendokumentasikan persamaan matematika formal yang digunakan oleh backend Go di `Player.RecalculateStats()` dan combat usecases.
 
@@ -19,7 +20,7 @@ $$\text{Status ATK (Ranged)} = \text{DEX} + \lfloor\text{STR} \div 5\rfloor + \l
 
 ### B. Status MATK (Magis)
 
-MATK digunakan penuh untuk serangan sihir (misal: kelas *Mage*):
+MATK digunakan penuh untuk serangan sihir (misal: kelas _Mage_):
 
 $$\text{Status MATK} = \text{INT} + \lfloor\text{DEX} \div 5\rfloor + \lfloor\text{LUK} \div 3\rfloor + \lfloor\text{BaseLevel} \div 4\rfloor + (5 \times \text{SPL}) + (1 \times \text{CON})$$
 
@@ -27,7 +28,7 @@ $$\text{Status MATK} = \text{INT} + \lfloor\text{DEX} \div 5\rfloor + \lfloor\te
 
 ## 🛡️ 2. Pertahanan, Resistensi, & Pengurangan Kerusakan ($A + B$)
 
-Total pengurangan kerusakan (*damage mitigation*) memadukan pertahanan fisik baju besi/gear (**Hard DEF**) dengan pertahanan ketahanan stat internal tubuh (**Soft DEF**).
+Total pengurangan kerusakan (_damage mitigation_) memadukan pertahanan fisik baju besi/gear (**Hard DEF**) dengan pertahanan ketahanan stat internal tubuh (**Soft DEF**).
 
 ### A. Pertahanan Fisik Dasar (DEF)
 
@@ -55,7 +56,7 @@ Total pengurangan kerusakan (*damage mitigation*) memadukan pertahanan fisik baj
 
 ### A. Peluang Hit Fisik (HIT vs FLEE)
 
-Serangan fisik biasa dapat meleset (*Miss*) berdasarkan rasio perbandingan statistik akurasi penyerang (**HIT**) vs hindaran target (**FLEE**):
+Serangan fisik biasa dapat meleset (_Miss_) berdasarkan rasio perbandingan statistik akurasi penyerang (**HIT**) vs hindaran target (**FLEE**):
 
 $$\text{Attacker HIT} = 175 + \text{BaseLevel} + \text{DEX} + \lfloor\text{LUK} \div 3\rfloor + (2 \times \text{CON})$$
 
@@ -95,8 +96,12 @@ ASPD berskala 0 hingga 200 dengan batas maksimal di angka 193:
 
 $$\text{ASPD} = 200 - (200 - \text{BaseASPD}) \times \left(1.0 - \frac{\text{AGI} \times 4 + \text{DEX}}{1000}\right)$$
 
-Lembar rumus ini menjadi fondasi validasi seluruh data logika combat demi menjamin keseimbangan (*balance*) pertarungan jangka panjang di game Anda!
+Lembar rumus ini menjadi fondasi validasi seluruh data logika combat demi menjamin keseimbangan (_balance_) pertarungan jangka panjang di game Anda!
 
 ---
 
-➡️ **Langkah Berikutnya**: Lanjutkan ke [Tahap 7: Network Sync Protocol](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/07_network_sync_protocol.md) untuk mempelajari struktur payload paket WebSocket!
+➡️ **Langkah Berikutnya**: Lanjutkan ke [Tahap 7: Network Sync Protocol](07_network_sync_protocol.md) untuk mempelajari struktur payload paket WebSocket!
+
+---
+
+**📚 Dokumen Terkait**: [README.md](../../README.md) · [docs/Home.md](../../docs/Home.md) · [docs/Architecture.md](../../docs/Architecture.md) · [DONT_TOUCH.md](../../DONT_TOUCH.md)

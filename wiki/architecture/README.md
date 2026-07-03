@@ -1,10 +1,13 @@
-# 🏛️ Ragnarok: The New World — Architecture Wiki
+# 🏛️ Jagres: Battle Simulator — Architecture Wiki
 
 > **Project**: Server-authoritative 3D web MMORPG sandbox inspired by Ragnarok Online (iRO Renewal).
 > **Stack**: Go backend (30Hz tick) + Next.js/React Three Fiber frontend (60 FPS).
 > **Scale**: Targets 50 concurrent players + 35 monsters at 60 FPS on mid-range hardware.
+> **Also known as**: "Ragnarok: The New World" (development codename).
 
-Welcome to the internal architecture wiki for **Ragnarok: The New World**. This documentation covers the complete data flow from server-authoritative combat calculations through WebSocket synchronization to 3D rendering and animation playback.
+Welcome to the internal architecture wiki for **Jagres: Battle Simulator**. This documentation covers the complete data flow from server-authoritative combat calculations through WebSocket synchronization to 3D rendering and animation playback.
+
+> 📖 **High-level context:** [README.md](../../README.md) · [docs/Home.md](../../docs/Home.md) · [docs/Architecture.md](../../docs/Architecture.md) · [DONT_TOUCH.md](../../DONT_TOUCH.md)
 
 ---
 
@@ -42,13 +45,13 @@ wiki/architecture/
 
 ### Character Classes
 
-| Class | Role | Attack Animation | Skill Animation |
-|---|---|---|---|
-| Warrior | Melee DPS | Stable Sword Outward Slash | Magic Heal (cyclone VFX) |
-| Mage | Ranged Caster | Magic Heal | Magic Heal (meteor VFX) |
-| Priest | Support/Tank | Magic Heal | Magic Heal (sanctuary VFX) |
-| Thief | Melee Assassin | Stable Sword Outward Slash | Magic Heal (teleport VFX) |
-| Beginner | Ranged MM | Stable Sword Outward Slash | Magic Heal (bullet storm VFX) |
+| Class    | Role           | Attack Animation           | Skill Animation               |
+| -------- | -------------- | -------------------------- | ----------------------------- |
+| Warrior  | Melee DPS      | Stable Sword Outward Slash | Magic Heal (cyclone VFX)      |
+| Mage     | Ranged Caster  | Magic Heal                 | Magic Heal (meteor VFX)       |
+| Priest   | Support/Tank   | Magic Heal                 | Magic Heal (sanctuary VFX)    |
+| Thief    | Melee Assassin | Stable Sword Outward Slash | Magic Heal (teleport VFX)     |
+| Beginner | Ranged MM      | Stable Sword Outward Slash | Magic Heal (bullet storm VFX) |
 
 ---
 
@@ -87,26 +90,26 @@ The following systems have been deeply optimized and **must not be modified** wi
 
 ### Red Zone — Never Change
 
-| # | System | Location | Risk |
-|---|---|---|---|
-| 1 | Ground Detection (SHAPECAST) | `GameCanvas.tsx` | Character stuck on stairs |
-| 2 | MessagePack Decoder (main thread) | `useWebSocketGame.ts` | CSP block, game dies |
-| 3 | Monster AI (lock-free FSM) | `monster_ai.go` | GC spike, server freeze |
-| 4 | Spatial Hash Grid (O(1) aggro) | `game_usecase.go` | CPU overload at 100+ monsters |
-| 5 | Player Send Rate (20Hz cap) | `PlayerController.tsx` | Network overload, rubberband |
+| #   | System                            | Location               | Risk                          |
+| --- | --------------------------------- | ---------------------- | ----------------------------- |
+| 1   | Ground Detection (SHAPECAST)      | `GameCanvas.tsx`       | Character stuck on stairs     |
+| 2   | MessagePack Decoder (main thread) | `useWebSocketGame.ts`  | CSP block, game dies          |
+| 3   | Monster AI (lock-free FSM)        | `monster_ai.go`        | GC spike, server freeze       |
+| 4   | Spatial Hash Grid (O(1) aggro)    | `game_usecase.go`      | CPU overload at 100+ monsters |
+| 5   | Player Send Rate (20Hz cap)       | `PlayerController.tsx` | Network overload, rubberband  |
 
 ### Orange Zone — Change With Extreme Caution
 
-| # | System | Location | Risk |
-|---|---|---|---|
-| 6 | useFrame zero-allocation | All renderers | GC spike, FPS → 15 |
-| 7 | Sort throttle (10Hz) | Remote renderers | Frame budget overrun |
-| 8 | Object pool reuse | Remote renderers | Heap fragmentation |
-| 9 | Locomotion root motion stripping | `AvatarModel.tsx` | Animation snap-back glitch |
-| 10 | Two-layer rotation system | `PlayerController.tsx` | Character faces wrong direction |
-| 11 | Zero-re-render architecture | `RemotePlayersRenderer.tsx` | React reconciliation storm |
-| 12 | Terrain height cache | `terrainCache.ts` | 1,680 raycasts/sec |
-| 13 | Exponential smoothing | Both remote renderers | Object allocation storm |
+| #   | System                           | Location                    | Risk                            |
+| --- | -------------------------------- | --------------------------- | ------------------------------- |
+| 6   | useFrame zero-allocation         | All renderers               | GC spike, FPS → 15              |
+| 7   | Sort throttle (10Hz)             | Remote renderers            | Frame budget overrun            |
+| 8   | Object pool reuse                | Remote renderers            | Heap fragmentation              |
+| 9   | Locomotion root motion stripping | `AvatarModel.tsx`           | Animation snap-back glitch      |
+| 10  | Two-layer rotation system        | `PlayerController.tsx`      | Character faces wrong direction |
+| 11  | Zero-re-render architecture      | `RemotePlayersRenderer.tsx` | React reconciliation storm      |
+| 12  | Terrain height cache             | `terrainCache.ts`           | 1,680 raycasts/sec              |
+| 13  | Exponential smoothing            | Both remote renderers       | Object allocation storm         |
 
 ### Green Zone — Safe to Modify
 
@@ -122,36 +125,47 @@ The following systems have been deeply optimized and **must not be modified** wi
 ## 📚 Stage-by-Stage Implementation Guide
 
 ### [Stage 0: Global Architecture](00_context_bootstrap.md)
+
 Directory structure, tech stack, dependency map, and DONT_TOUCH guardrails.
 
 ### [Stage 1: Backend Domain](01_backend_domain.md)
+
 Player stat structs (STR-LUK + POW-CRT talents), `RecalculateStats()`, GORM auto-migration.
 
 ### [Stage 2: Backend Combat](02_backend_combat.md)
+
 ASPD rate-limiting, HIT vs FLEE accuracy rolls, Critical Hit Shield, Hard + Soft DEF mitigation.
 
 ### [Stage 3: Frontend State](03_frontend_state.md)
+
 Client stat allocation UI, WebSocket payload sync, `requestIdleCallback` polling.
 
 ### [Stage 4: Frontend Combat UI](04_frontend_combat_ui.md)
+
 ASPD animation timescale sync, Variable/Fixed Cast Time bars, batched Damage HUD popups.
 
 ### [Stage 5: Database Migrations](05_database_migrations.md)
+
 GORM auto-migration, column alias safety, seed data for new characters.
 
 ### [Stage 6: Formula Reference](06_combat_formula_ref.md)
+
 Complete iRO Renewal math: Status ATK/MATK, DEF A+B, RES/MRES, HIT/FLEE, Perfect Dodge, VCT reduction.
 
 ### [Stage 7: Network Protocol](07_network_sync_protocol.md)
+
 C2S packets (STAT_ALLOCATE, PLAYER_ATTACK), S2C packets (GAME_STATE_UPDATE, COMBAT_DAMAGE_EVENT), 30Hz broadcast cycle.
 
 ### [Stage 8: Avatar Configurator](08_avatar_configurator_integration.md)
+
 Modular character creator, baked GLB pipeline for remote players, Draco + WebP compression.
 
 ### [Stage 9: Animation System](09_animation_system.md)
+
 14 Mixamo FBX clips, root motion stripping, crossfade transitions, two-layer rotation system, idle camera-facing recovery.
 
 ### [Stage 10: Performance Optimization](10_performance_optimization.md)
+
 Zero-re-render architecture, terrain cache, exponential smoothing, shared geometry, shadow culling, load testing.
 
 ---
@@ -170,4 +184,4 @@ make loadtest-extreme     # 120 players, maximum stress
 
 ---
 
-*Last updated: 2026-06-10. For critical area details, see [DONT_TOUCH.md](../../DONT_TOUCH.md).*
+_Last updated: 2026-06-10. For critical area details, see [DONT_TOUCH.md](../../DONT_TOUCH.md)._

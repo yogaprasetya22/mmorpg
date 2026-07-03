@@ -37,22 +37,22 @@ The animation system loads Mixamo FBX clips, processes them for compatibility wi
 
 ## 📁 2. Animation Clip Inventory
 
-| Name | Category | File Path | Root Motion |
-|---|---|---|---|
-| `Idle` | Locomotion | `locomotion/idle.fbx` | **Stripped** |
-| `Walking` | Locomotion | `locomotion/walking.fbx` | **Stripped** |
-| `Jogging` | Locomotion | `locomotion/jogging.fbx` | **Stripped** |
-| `Slow Run` | Locomotion | `locomotion/slow_run.fbx` | **Stripped** |
-| `Run With Sword` | Locomotion | `locomotion/run_with_sword.fbx` | **Stripped** |
-| `Fast Run` | Locomotion | `locomotion/fast_run.fbx` | **Stripped** |
-| `Jump With Sword` | Locomotion | `locomotion/jump_with_sword.fbx` | **Stripped** |
-| `Stable Sword Outward Slash` | Combat | `combat/stable_sword_outward_slash.fbx` | Kept |
-| `Magic Heal` | Combat | `combat/magic_heal.fbx` | Kept |
-| `Light Hit To Head` | Damage | `damage/light_hit_to_head.fbx` | Kept |
-| `Stunned` | Debuff | `locomotion/stunned.fbx` | **Stripped** |
-| `Dizzy` | Debuff | `locomotion/dizzy.fbx` | **Stripped** |
-| `Standing React Death Right` | Death | `damage/standing_react_death_right.fbx` | Kept |
-| `Sword And Shield Death` | Death | `damage/sword_and_shield_death.fbx` | Kept |
+| Name                         | Category   | File Path                               | Root Motion  |
+| ---------------------------- | ---------- | --------------------------------------- | ------------ |
+| `Idle`                       | Locomotion | `locomotion/idle.fbx`                   | **Stripped** |
+| `Walking`                    | Locomotion | `locomotion/walking.fbx`                | **Stripped** |
+| `Jogging`                    | Locomotion | `locomotion/jogging.fbx`                | **Stripped** |
+| `Slow Run`                   | Locomotion | `locomotion/slow_run.fbx`               | **Stripped** |
+| `Run With Sword`             | Locomotion | `locomotion/run_with_sword.fbx`         | **Stripped** |
+| `Fast Run`                   | Locomotion | `locomotion/fast_run.fbx`               | **Stripped** |
+| `Jump With Sword`            | Locomotion | `locomotion/jump_with_sword.fbx`        | **Stripped** |
+| `Stable Sword Outward Slash` | Combat     | `combat/stable_sword_outward_slash.fbx` | Kept         |
+| `Magic Heal`                 | Combat     | `combat/magic_heal.fbx`                 | Kept         |
+| `Light Hit To Head`          | Damage     | `damage/light_hit_to_head.fbx`          | Kept         |
+| `Stunned`                    | Debuff     | `locomotion/stunned.fbx`                | **Stripped** |
+| `Dizzy`                      | Debuff     | `locomotion/dizzy.fbx`                  | **Stripped** |
+| `Standing React Death Right` | Death      | `damage/standing_react_death_right.fbx` | Kept         |
+| `Sword And Shield Death`     | Death      | `damage/sword_and_shield_death.fbx`     | Kept         |
 
 ### Why Strip Root Motion from Locomotion?
 
@@ -63,10 +63,18 @@ Mixamo FBX locomotion clips contain **Hips position tracks** that move the chara
 ```typescript
 // Locomotion clips: strip root tracks
 clip.tracks = clip.tracks.filter((t) => {
-  if (t.name.startsWith("Armature.")) return false;
-  if (t.name === "mixamorigHips.position" || t.name === "mixamorig:Hips.position") return false;
-  if (t.name === "mixamorigHips.quaternion" || t.name === "mixamorig:Hips.quaternion") return false;
-  return true;
+    if (t.name.startsWith("Armature.")) return false;
+    if (
+        t.name === "mixamorigHips.position" ||
+        t.name === "mixamorig:Hips.position"
+    )
+        return false;
+    if (
+        t.name === "mixamorigHips.quaternion" ||
+        t.name === "mixamorig:Hips.quaternion"
+    )
+        return false;
+    return true;
 });
 ```
 
@@ -78,36 +86,45 @@ Animation transitions use Three.js `crossFadeTo` with an `activeActionRef` track
 
 ### Transition Durations
 
-| Transition Type | Duration | Rationale |
-|---|---|---|
-| Locomotion ↔ Locomotion | **0.25s** | Longer blend avoids "stiff standing pose" artifact |
-| Combat ↔ Any | **0.12s** | Snappy response for attack/damage feedback |
-| First animation | **0.15s** fadeIn | Gentle initial appearance |
+| Transition Type         | Duration         | Rationale                                          |
+| ----------------------- | ---------------- | -------------------------------------------------- |
+| Locomotion ↔ Locomotion | **0.25s**        | Longer blend avoids "stiff standing pose" artifact |
+| Combat ↔ Any            | **0.12s**        | Snappy response for attack/damage feedback         |
+| First animation         | **0.15s** fadeIn | Gentle initial appearance                          |
 
 ### Transition Code Pattern (AvatarModel.tsx)
 
 ```typescript
-useImperativeHandle(controlRef, () => ({
-  setPose: (newPose: string) => {
-    if (prevPoseRef.current === newPose) return;
-    const nextAction = actions[newPose];
-    const currentAction = activeActionRef.current;
-    
-    if (currentAction && currentAction !== nextAction) {
-      const isLoco = locomotionPoses.has(prevPoseRef.current) && locomotionPoses.has(newPose);
-      const dur = isLoco ? 0.25 : 0.12;
-      nextAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1);
-      currentAction.crossFadeTo(nextAction, dur, true);
-      nextAction.fadeIn(dur).play();
-    } else if (!currentAction) {
-      nextAction.reset().fadeIn(0.15).play();
-    }
-    
-    activeActionRef.current = nextAction;
-    prevPoseRef.current = newPose;
-  },
-  // ...
-}), [actions]);
+useImperativeHandle(
+    controlRef,
+    () => ({
+        setPose: (newPose: string) => {
+            if (prevPoseRef.current === newPose) return;
+            const nextAction = actions[newPose];
+            const currentAction = activeActionRef.current;
+
+            if (currentAction && currentAction !== nextAction) {
+                const isLoco =
+                    locomotionPoses.has(prevPoseRef.current) &&
+                    locomotionPoses.has(newPose);
+                const dur = isLoco ? 0.25 : 0.12;
+                nextAction
+                    .reset()
+                    .setEffectiveTimeScale(1)
+                    .setEffectiveWeight(1);
+                currentAction.crossFadeTo(nextAction, dur, true);
+                nextAction.fadeIn(dur).play();
+            } else if (!currentAction) {
+                nextAction.reset().fadeIn(0.15).play();
+            }
+
+            activeActionRef.current = nextAction;
+            prevPoseRef.current = newPose;
+        },
+        // ...
+    }),
+    [actions],
+);
 ```
 
 ---
@@ -148,12 +165,12 @@ Remote players receive animation state strings from the server and map them via 
 
 Locomotion animation speed is dynamically synced to the character's physics velocity:
 
-| Pose | Timescale Formula |
-|---|---|
-| Walking | `max(0.3, min(1.4, speed / 1.8))` |
-| Jogging | `max(0.4, min(1.2, speed / 3.0))` |
-| Slow Run / Run With Sword | `max(0.4, min(2.8, speed / 3.2))` |
-| Attack (Sword Slash) | `hitsPerSecond * 1.2` (synced to ASPD) |
+| Pose                      | Timescale Formula                      |
+| ------------------------- | -------------------------------------- |
+| Walking                   | `max(0.3, min(1.4, speed / 1.8))`      |
+| Jogging                   | `max(0.4, min(1.2, speed / 3.0))`      |
+| Slow Run / Run With Sword | `max(0.4, min(2.8, speed / 3.2))`      |
+| Attack (Sword Slash)      | `hitsPerSecond * 1.2` (synced to ASPD) |
 
 All timescale changes use smooth interpolation: `currentLerp += (target - current) * 0.15`.
 
@@ -171,10 +188,10 @@ BVHEcctrl "Model" group (PARENT)     ← Movement rotation + Idle camera-facing
 
 ### Layer Responsibilities
 
-| Layer | Controller | When Active | Rotation Axis |
-|---|---|---|---|
-| **Parent** (model group) | BVHEcctrl + idle slerp | Moving + Idle | Y-axis quaternion |
-| **Child** (characterRef) | usePlayerTargeting | Attacking only | Y-axis Euler |
+| Layer                    | Controller             | When Active    | Rotation Axis     |
+| ------------------------ | ---------------------- | -------------- | ----------------- |
+| **Parent** (model group) | BVHEcctrl + idle slerp | Moving + Idle  | Y-axis quaternion |
+| **Child** (characterRef) | usePlayerTargeting     | Attacking only | Y-axis Euler      |
 
 ### Idle Camera-Facing Recovery
 
@@ -213,4 +230,4 @@ if (Math.abs(childRotY) > 0.001) {
 
 ---
 
-🏆 **Wiki Index**: [README.md](README.md) · [10. Performance Optimization](10_performance_optimization.md)
+🏆 **Wiki Index**: [README.md](README.md) · [10. Performance Optimization](10_performance_optimization.md) · 📖 [docs/Home.md](../../docs/Home.md)

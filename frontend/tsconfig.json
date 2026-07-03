@@ -28,7 +28,6 @@
             "@jagres/shared/*": ["../packages/shared/src/*"]
         }
     },
-    "references": [{ "path": "../packages/shared" }],
     "include": [
         "next-env.d.ts",
         "**/*.ts",

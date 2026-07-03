@@ -1,7 +1,8 @@
 # 05. GORM Database Migrations & Seeding
+
 > **Tujuan**: Detailing langkah-langkah migrasi skema database GORM untuk PostgreSQL dan mekanisme seeding stat awal saat server booting.
 
-Untuk memastikan penambahan variabel stat baru (termasuk pemisahan `BaseSTR` vs `STR` dan integrasi kolom Talent Stats) bertahan secara gigih (*persistent*) di PostgreSQL, backend menggunakan GORM AutoMigration.
+Untuk memastikan penambahan variabel stat baru (termasuk pemisahan `BaseSTR` vs `STR` dan integrasi kolom Talent Stats) bertahan secara gigih (_persistent_) di PostgreSQL, backend menggunakan GORM AutoMigration.
 
 ---
 
@@ -42,7 +43,7 @@ Setiap akun pemain memetakan satu baris data pada tabel `players`. GORM secara o
 
 ### Langkah 1: Registrasi Struct di Driver PostgreSQL
 
-Buka file inisialisasi koneksi DB Anda di `@[/home/yoga/Dokumen/game mmorpg/backend/internal/repository/postgres/connection.go]`. GORM memerlukan pendaftaran entitas struct untuk memetakan kolom baru.
+Buka file inisialisasi koneksi DB Anda di `@[backend/internal/repository/postgres/connection.go]`. GORM memerlukan pendaftaran entitas struct untuk memetakan kolom baru.
 
 Pastikan fungsi AutoMigrate memuat daftarnya seperti ini:
 
@@ -81,13 +82,13 @@ Karena kolom `str`, `agi`, `vit`, `int`, `dex`, dan `luk` pada versi lama menyim
 	BaseLUK    int `json:"base_luk" gorm:"column:luk;default:10"`
 ```
 
-*   **Keuntungan**: Nama kolom fisik di database PostgreSQL tetap berupa `str`, `agi`, dll., namun dibaca ke dalam struct in-memory Go sebagai `BaseSTR`, `BaseAGI` untuk menghindari hilangnya data karakter pemain lama.
+- **Keuntungan**: Nama kolom fisik di database PostgreSQL tetap berupa `str`, `agi`, dll., namun dibaca ke dalam struct in-memory Go sebagai `BaseSTR`, `BaseAGI` untuk menghindari hilangnya data karakter pemain lama.
 
 ---
 
 ## 🧬 3. Mekanisme Seeding Stat Karakter Baru
 
-Saat pemain mendaftar atau membuat karakter pertama kali, backend Go harus menyuntikkan statistik default di file `@[/home/yoga/Dokumen/game mmorpg/backend/internal/usecase/game/game_usecase.go]`.
+Saat pemain mendaftar atau membuat karakter pertama kali, backend Go harus menyuntikkan statistik default di file `@[backend/internal/usecase/game/game_usecase.go]`.
 
 Cari method `RegisterPlayer` (sekitar baris 330), pastikan pembuatan karakter default mengikuti data inisialisasi presisi berikut:
 
@@ -123,8 +124,41 @@ Cari method `RegisterPlayer` (sekitar baris 330), pastikan pembuatan karakter de
 		}
 ```
 
-Mekanisme ini menjamin transisi data skema database aman dari error ketiadaan kolom (*null columns constraint errors*) saat fitur tempur baru diaktifkan!
+Mekanisme ini menjamin transisi data skema database aman dari error ketiadaan kolom (_null columns constraint errors_) saat fitur tempur baru diaktifkan!
 
 ---
 
-➡️ **Langkah Berikutnya**: Lanjutkan ke [Tahap 6: Combat Formula Reference Sheet](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/06_combat_formula_ref.md) untuk mempelajari seluruh lembar contekan formula matematika pertempuran!
+## 🧱 4. Skema & Seeding `assets` (Dynamic Assets & WebP Thumbnails)
+
+Untuk mendukung dynamic assets rendering dan loading thumbnail WebP ringan di front-end, GORM mengelola tabel `assets`:
+
+### Struct Model `Asset` (Go)
+
+```go
+type Asset struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Name      string    `gorm:"uniqueIndex" json:"name"`
+	Path      string    `json:"path"`
+	Category  string    `json:"category"` // "trees", "vegetation", "rocks", etc.
+	Thumbnail string    `json:"thumbnail"` // Path ke /assets/thumbs/[modelName].webp
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+```
+
+### Seeder Dinamis `backend/internal/repository/postgres/seeder.go`
+
+Ketika server melakukan bootstrap (atau dijalankan via `make seed-enemy`), seeder memindai folder `.glb` di backend. Secara simultan, seeder melakukan lookup berkas `.webp` dengan nama yang sama di subdirektori `assets/thumbs/`:
+
+1. Pemindaian rekursif file `.glb` di `./assets/environment/`.
+2. Pencarian file thumbnail pendukung di `./assets/thumbs/[glbName].webp`.
+3. Jika ditemukan, kolom `Thumbnail` akan diisi dengan path relatif `/assets/thumbs/[glbName].webp` sebelum disimpan ke PostgreSQL DB.
+4. Data thumbnail ini disajikan oleh REST API `/api/config/assets` untuk mempercepat render UI grid di editor secara signifikan tanpa membebani memori dengan WebGL Canvas instansiasi dini.
+
+---
+
+➡️ **Langkah Berikutnya**: Lanjutkan ke [Tahap 6: Combat Formula Reference Sheet](06_combat_formula_ref.md) untuk mempelajari seluruh lembar contekan formula matematika pertempuran!
+
+---
+
+**📚 Dokumen Terkait**: [README.md](../../README.md) · [docs/Home.md](../../docs/Home.md) · [docs/Architecture.md](../../docs/Architecture.md) · [DONT_TOUCH.md](../../DONT_TOUCH.md)

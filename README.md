@@ -1,186 +1,328 @@
-# 🎮 Real-Time 3D Multiplayer MMORPG Sandbox
+# Jagres: Battle Simulator
 
-Welcome to the official repository of your high-performance, server-authoritative 3D multiplayer MMORPG sandbox! This project is built using a modern, reactive tech stack featuring a fast Go-based simulation server and an interactive 3D web-browser viewport.
+Simulasi pertarungan 3D multipemain berbasis browser. Pemain bertarung melawan monster di arena real-time, lengkap dengan sistem kelas, skill, perlengkapan, dan editor peta 3D.
 
----
-
-## 🚀 1. The Core Vision
-
-This project is a **Next-Generation 3D Web MMORPG and Sandbox World Editor**. The entire experience runs directly inside any modern browser without plugins, powered by hardware-accelerated 3D graphics and low-latency client-server synchronization.
-
-### Key Pillars:
-1. **Server-Authoritative Real-Time Simulation**: Position updates, AI states, threat calculations, and health bars are verified and computed on the Go server at a **30Hz fixed tick rate** and synchronized via low-latency WebSockets.
-2. **Dynamic World Editor (No Re-deploys)**: Developers and creators can build worlds in real-time by painting terrain elevations, styling ground textures, placing architectural props, and configuring monster spawners directly inside the browser. Changes are persisted in a PostgreSQL database and immediately visible to all active players.
-3. **High-Performance Rendering Engine**: Implements an **Entity-Component System (ECS)** in React Three Fiber to pool SkinnedMesh objects lazily. This allows rendering hundreds of active combatants, players, and terrain props smoothly at 60+ FPS, even on low-end hardware.
+[![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React-19-61DAFB)](https://react.dev)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8)](https://go.dev)
+[![Three.js](https://img.shields.io/badge/Three.js-r183-000000)](https://threejs.org)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 
-## 🛠️ 2. Comprehensive Tech Stack
+## Fitur Utama
 
-The architecture is divided into a high-concurrency server and a reactive, interactive 3D client:
+| Fitur                   | Deskripsi                                                                        |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| **Arena Multipemain**   | Pertarungan real-time WebSocket antara pemain vs monster                         |
+| **Sistem Kelas**        | Beginner → Mage, Warrior, Archer, Assassin, Priest — tiap kelas punya skill unik |
+| **Sistem ECS**          | Entity Component System di backend Go untuk ribuan unit                          |
+| **World Editor**        | Editor peta 3D langsung di browser — tempatkan objek, vegetasi, terrain          |
+| **Avatar Configurator** | Kostumisasi penampilan karakter (rambut, pakaian, senjata)                       |
+| **Environment Dinamis** | Cuaca storm, angin, efek painterly grass                                         |
+| **Inventory & Shop**    | Sistem perlengkapan, jual-beli antar pemain, refining item                       |
+
+---
+
+## Arsitektur Repository
 
 ```
-+-----------------------------------------------------------+
-|               React Three Fiber / ECS Client              |
-+-----------------------------+-----------------------------+
-                              |
-             (HTTP REST)      |      (WebSockets JSON)
-       +----------------------+----------------------+
-       |                                             |
-       v                                             v
-+------+----------------------+             +--------+------+
-|     Go Gin API Server       |             | Go WS Tick Hub|
-+--------------+--------------+             +--------+------+
-               |                                     |
-               | (GORM Migrations)                   | (Session States)
-               v                                     v
-+--------------+--------------+             +--------+------+
-|        PostgreSQL DB        |             |  Redis Cache  |
-+-----------------------------+             +---------------+
+mmorpg/
+├── frontend/             # Next.js 16 + React 19 + Three.js (web client)
+│   ├── app/              # Pages & routing
+│   │   ├── arena/        # Mode pertarungan multipemain
+│   │   ├── world-editor/ # Editor peta 3D
+│   │   └── character-creation/ # Pembuatan karakter
+│   ├── src/
+│   │   ├── components/   # Komponen 3D (avatar, environment, systems)
+│   │   ├── features/     # Fitur besar (terrain, world-editor)
+│   │   ├── entities/     # Player controller, physics
+│   │   ├── core/         # Combat engine, damage calculator, class strategies
+│   │   ├── hooks/        # WebSocket game hooks
+│   │   └── state/        # Zustand stores
+│   └── packages/         # Shared package (types, terrain, materials)
+│
+├── backend/              # Go server (Gin + WebSocket + ECS)
+│   ├── cmd/              # Entry points (server, seeder, loadtest)
+│   ├── internal/
+│   │   ├── domain/       # Entity definitions, ECS components
+│   │   ├── usecase/game/ # Game logic (combat, AI, spawn, inventory)
+│   │   ├── delivery/     # Transport layer (HTTP, WebSocket, KCP)
+│   │   └── repository/   # Database layer (PostgreSQL, Redis)
+│   └── pkg/config/       # Konfigurasi server
+│
+├── packages/shared/      # @jagres/shared — tipe bersama, terrain, material
+│
+├── data/worlds/          # Data peta editor (file JSON)
+├── wiki/                 # Dokumentasi arsitektur
+└── .github/workflows/    # CI pipeline
 ```
 
-### 🔹 The Backend (Go Engine)
-* **Gin Gonic**: High-speed, lightweight HTTP routing engine serving dynamic config REST APIs.
-* **WebSocket Hub**: Full-duplex communication channel handling client-server message serialization at 33.3ms ticks (30Hz).
-* **GORM (ORM)**: Auto-migrates SQL schemas and handles deep queries for players, map layouts, item coordinates, and monster spawns.
-* **PostgreSQL**: Hard persistence layer storing player positions, persistent maps, terrain structures, and item states.
-* **Redis**: In-memory cache layer for player session states, dynamic spatial grids, and fast state replication.
+## 📚 Documentation
 
-### 🔹 The Frontend (Next.js 3D Viewport)
-* **Next.js (App Router)**: Modern React skeleton providing client-side page routing, server-rendered layouts, and API proxy routes.
-* **React Three Fiber (R3F) & Three.js**: Canvas renderer managing three-dimensional vectors, painterly post-processing shaders, shadows, and materials.
-* **Zustand**: Clean, centralized client-side state machine managing active editor tools, items, map loads, and UI options.
-* **Bitecs (ECS)**: A flat-array, high-performance Entity-Component System that drives massive crowd animations and coordinate updates in the rendering loop.
+Project has **4 documentation hubs**. New AI agents should read **all 4** for full context:
+
+| Hub                    | Path                                                         | Purpose                                                         |
+| ---------------------- | ------------------------------------------------------------ | --------------------------------------------------------------- |
+| **README.md**          | [`README.md`](README.md)                                     | This file — overview, setup, key files                          |
+| **DONT_TOUCH.md**      | [`DONT_TOUCH.md`](DONT_TOUCH.md)                             | 26 critical zones — performance, safety, error lookup           |
+| **docs/**              | [`docs/Home.md`](docs/Home.md)                               | Wiki-style docs — architecture, dev guide, FAQ, troubleshooting |
+| **wiki/architecture/** | [`wiki/architecture/README.md`](wiki/architecture/README.md) | Deep architecture for AI codegen context                        |
 
 ---
 
-## 💾 3. Database Schema Blueprint
+## Separation of Concerns
 
-The PostgreSQL relational database is structured to support dynamic mapping and persistent player locations:
-
-### 👤 `characters` (Player Records)
-Tracks individual players, their leveling states, and their persistent physical presence:
-* `id` (Primary Key)
-* `username` / `character_name`
-* `class` (Fighter, Tank, Mage, Marksman, Assassin)
-* `x`, `y`, `z` (Coordinates) — **Saves player spawn coordinates on logout so they respawn exactly where they exited**
-* `hp`, `max_hp`, `level`, `exp`
-
-### 🗺️ `map_configs` (Map Configuration Layer)
-Stores the physical properties of multi-map zones:
-* `id` / `map_id` (e.g., `"Starter Zone"`, `"Castle Arena"`)
-* `name` (Readable title)
-* `paint_data` (Base64 string representing dynamic painted ground textures)
-* `sculpt_data` (Base64 heightmap image string representing dynamic terrain elevations)
-* `terrain_color` (Hex or color index for background thematic blending)
-
-### 🧱 `map_items` (Placed Dynamic World Objects)
-Tracks every 3D model placed in the sandbox:
-* `id` (Primary Key)
-* `map_config_id` (Foreign Key referencing `map_configs`)
-* `path` (Pristine relative pathway, e.g., `/assets/environment/trees/Pine_1.glb`)
-* `pos_x`, `pos_y`, `pos_z` (Position coordinates)
-* `rot_x`, `rot_y`, `rot_z` (Rotation quaternions or Euler angles)
-* `scale_x`, `scale_y`, `scale_z` (Scale vectors)
-
-### 👾 `monster_configs` (Monster Attributes)
-Maintains individual stats of monster classes:
-* `type` (Primary Key, e.g., `"enemy_grunt"`, `"enemy_boss"`)
-* `base_hp`, `speed`, `damage`
-* `leash_range` (Max distance before returning spawn point)
+| Modul                  | Tanggung Jawab                                              |
+| ---------------------- | ----------------------------------------------------------- |
+| **Frontend (Next.js)** | Rendering 3D, input pemain, UI/HUD, WebSocket client        |
+| **Backend (Go)**       | Server game, ECS engine, AI monster, otorisasi, persistensi |
+| **@jagres/shared**     | Tipe data bersama, fungsi terrain, material registry        |
+| **World Editor**       | Visual scene builder dalam browser (Zustand store)          |
+| **Combat Engine**      | Damage formulas, class strategies, skill execution          |
 
 ---
 
-## 🌟 4. Advanced Systems Already Built
+## Core Concepts
 
-1. **Dynamic Asset Scanner**: The backend recursively crawls `./backend/assets/environment` to dynamically deliver available `.glb` files over an API. This allows developers to add new assets by just putting a file in a folder.
-2. **Authoritative AI State Machine**: Monsters operate on a server-controlled AI cycle:
-   * **Patrolling**: Wandering around spawn points.
-   * **Chasing**: Locking onto target players using a robust aggro system (first strike generates lock).
-   * **Returning Home**: If a player runs too far (violating `leash_range`), the monster walks smoothly back to its spawn anchor at 85% speed, ignoring further threat until reset.
-3. **Persistent World Coordinates**: The server saves player positions on exit, meaning players return to their last exact coordinates upon logging back in.
-4. **Painterly Aesthetics**: The custom rendering pipeline uses painterly outline styling, soft shadows, and instanced ground shaders, creating a beautiful and premium stylized fantasy visual.
-5. **Deterministic GORM 10-Enemy Spawner & Seeder**: Replaced randomized monster spawns with a strategic, hard-coded layout of 10 distinct monster types at fixed coordinates. Integrated a standalone seeder tool in `backend/cmd/seeder/main.go` and mapped it to a clean `make seed-enemy` CLI workflow.
-6. **High-Performance Tactical Minimap**: A state-of-the-art `<Minimap />` component built with DOM pooling and a `requestAnimationFrame` render loop to track up to 35 monsters and 12 players at 60 FPS without React lifecycle re-rendering overhead.
-7. **Ultra-Low Latency HP & Death Sync**: Synchronizes player health authoritatively over 20Hz WebSocket updates. On death, characters have their physics capsule movements completely paused to eliminate sliding bugs, while the camera smoothly maintains focus on the fallen player.
+### Frontend — Scene & R3F
+
+Arena dan World Editor sama-sama pakai [`GameCanvas`](frontend/src/components/game/GameCanvas.tsx) sebagai root Three.js. Komponen 3D menggunakan React Three Fiber dengan pola:
+
+```
+GameCanvas
+├── Environment (StormEnvironment / EnvironmentMultiGlobal)
+├── Terrain (StormTerrain + TerrainMaterial)
+├── Player (PlayerController → ECController + animasi)
+├── RemotePlayersRenderer
+├── RemoteMonstersRenderer
+└── Systems (FrameLimiter, PostProcessing, VFXManager, dll)
+```
+
+State global dikelola dengan Zustand store yang terpisah per domain:
+
+- [`useEditorStore`](frontend/src/features/world-editor/store/useEditorStore.ts) — state editor peta (6 slices: selection, terrain, vegetation, environment, history, persistence)
+- [`useAvatarConfiguratorStore`](frontend/src/state/useAvatarConfiguratorStore.ts) — state kostumisasi avatar
+- [`useSceneStore`](frontend/src/store/useSceneStore.ts) — state scene 3D umum
+
+### Backend — ECS & Game Loop
+
+Backend memakai ECS (Entity Component System) via library [`donburi`](https://github.com/yohamta/donburi):
+
+```
+Game Loop (20 tick/detik)
+├── UpdatePlayerMovement
+├── ProcessMonsterAI (pathfinding + attack)
+├── HandlePlayerAttack (damage calculation)
+├── SpawnMonster (respawn logic)
+└── BroadcastState → WebSocket → Semua client
+```
+
+Komponen ECS inti: `PositionComponent`, `HealthComponent`, `PlayerComponent`, `MonsterComponent`, `CombatComponent`.
+
+### Combat Engine
+
+Sistem pertarungan menggunakan pola Strategy untuk tiap kelas:
+
+```
+DamageCalculator.calculate(attacker, defender, skill)
+    ↓
+ClassStrategy.getDamageModifier()
+    ├── WarriorStrategy  → +damage, stun chance
+    ├── MageStrategy     → AoE, elemental
+    ├── ArcherStrategy   → critical, range
+    ├── AssassinStrategy → poison, backstab
+    └── PriestStrategy   → heal, buff
+```
 
 ---
 
-> [!TIP]
-> **To add new maps, assets, or monsters**: Simply drop new `.glb` files into the backend `assets` folder under the appropriate environment subfolder, configure a spawn point using the World Editor, and the server will automatically distribute them across the multiplayer canvas!
+## Data Flow
+
+### Arena — Pertarungan Real-Time
+
+```
+User Input (keyboard/mouse)
+       ↓
+PlayerController (useFrame)
+       ↓
+WebSocket → Backend
+       ↓
+GameUsecase.HandlePlayerAttack()
+       ↓
+DamageCalculator → ECS update
+       ↓
+WebSocket ← State Broadcast (setiap tick)
+       ↓
+RemotePlayersRenderer / RemoteMonstersRenderer (interpolasi posisi)
+```
+
+### World Editor — Map Building
+
+```
+Pointer Event (click/drag)
+       ↓
+WorldEditor (raycaster → hover/select/place)
+       ↓
+useEditorStore (Zustand)
+       ├── updateItemsWithHistory (undo/redo via history slice)
+       ├── setBrushHoverPos (visual feedback)
+       └── persistToStorage (auto-save ke localStorage)
+       ↓
+InstancedVegetationRenderer / GrassField / EditorItem (render ulang)
+```
 
 ---
 
-## ⚙️ 5. Unified Command-Line (CLI) Interface
+## Technology Stack
 
-The repository features an authoritative `Makefile` to simplify all development, verification, seeding, and production build tasks:
+### Frontend
 
-### Development & Simulation
+| Teknologi         | Versi | Fungsi                             |
+| ----------------- | ----- | ---------------------------------- |
+| Next.js           | 16.2  | Framework React SSR                |
+| React             | 19.2  | UI library                         |
+| Three.js          | 0.183 | WebGL 3D engine                    |
+| React Three Fiber | 9.5   | React renderer untuk Three.js      |
+| @react-three/drei | 10.7  | Utilities R3F                      |
+| Zustand           | 5.0   | State management                   |
+| Tailwind CSS      | 4.0   | Styling utility                    |
+| msgpack           | 3.1   | Serialisasi binary untuk WebSocket |
+
+### Backend
+
+| Teknologi         | Versi | Fungsi                 |
+| ----------------- | ----- | ---------------------- |
+| Go                | 1.25  | Server language        |
+| Gin               | 1.12  | HTTP framework         |
+| gorilla/websocket | 1.5   | WebSocket              |
+| donburi           | 1.15  | ECS framework          |
+| PostgreSQL (GORM) | -     | Database utama         |
+| Redis             | 9.19  | Caching & session      |
+| KCP               | 5.6   | Reliable UDP transport |
+| Prometheus        | 1.23  | Metrics                |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- [Bun](https://bun.sh) ≥ 1.2 (package manager & runtime)
+- [Go](https://go.dev) ≥ 1.25
+- PostgreSQL running di `localhost:5432`
+- Redis running di `localhost:6379`
+
+### Setup
+
 ```bash
-# Start both Go backend and Next.js frontend concurrently
-make run
+# 1. Clone repo & masuk direktori
+cd mmorpg
 
-# Start only the authoritative Go backend
-make run-backend
+# 2. Install dependensi frontend
+cd frontend && bun install && cd ..
 
-# Start only the React/Three Fiber frontend
-make run-frontend
+# 3. Copy environment
+cp .env.example frontend/.env.local
 
-# Cleanly terminate any running processes on ports 8080 or 3000
-make kill
+# 4. Setup database
+createdb jagres
+cd backend && go run ./cmd/seeder && cd ..
+
+# 5. Jalankan backend
+cd backend && go run ./cmd/server &
+cd ..
+
+# 6. Jalankan frontend
+cd frontend && bun dev
 ```
 
-### Seeding & Data Setup
+Buka [http://localhost:3000](http://localhost:3000).
+
+### Docker
+
 ```bash
-# Force wipe and freshly seed the 10 varied enemy configurations
-make seed-enemy
+docker build -t jagres-frontend ./frontend
+docker run -p 3000:3000 jagres-frontend
 ```
 
-### Verification & Testing
-```bash
-# Execute dual-engine compilation and Next.js TypeScript type-safety check
-make check
-```
+### CI/CD
 
-### Production Builds
-```bash
-# Build both Go backend and Next.js frontend for production
-make build
+Pipeline GitHub Actions (`.github/workflows/ci.yml`):
 
-# Compile the Go backend binary into backend/build/server
-make build-backend
-
-# Generate the Next.js frontend production bundle
-make build-frontend
-
-# Remove all compiled binary artifacts
-make clean
-```
+1. Install dependensi
+2. Build `@jagres/shared` (`bunx tsc --build`)
+3. Typecheck frontend (`bunx tsc --noEmit`)
+4. Lint frontend (`bun run lint`)
+5. Build backend (`go build`)
 
 ---
 
-## 🤖 6. AI Assistant Pair-Programming Guide
-If you are developing this codebase alongside an AI assistant, ensure that the agent reads and strictly adheres to the authoritative compilation, performance guidelines, and critical warnings specified in:
-👉 **[AI Assistant Pairing Rules & Instructions (SKILL.md)](SKILL.md)**
+## Key Files
 
-### 🏛️ Ragnarok Online Combat & Stats Architecture Wiki
-Untuk memandu implementasi sistem statistik 4th class dan formula combat iRO Renewal, tim pengembang dan AI Agent wajib membaca panduan arsitektur modular di bawah ini:
-👉 **[Master Navigasi Arsitektur (wiki/architecture/README.md)](wiki/architecture/README.md)**
-*   [Stage 0: Global Architecture & Context Bootstrap](wiki/architecture/00_context_bootstrap.md) - Struktur direktori workspace, dependencies, dan integrasi pengaman DONT_TOUCH.
-*   [Stage 1: Backend Domain & Recalculate Logic](wiki/architecture/01_backend_domain.md) - Integrasi Talent Stats primer dan derived substats in-memory Go.
-*   [Stage 2: Backend Combat Authoritative Validation](wiki/architecture/02_backend_combat.md) - Hit vs Flee rolls, mitigasi A+B DEF, dan Critical Hit Shield.
-*   [Stage 3: Frontend Client State & WebSocket Allocation](wiki/architecture/03_frontend_state.md) - Panel alokasi stat TSX dan payload sinkronisasi WebSocket.
-*   [Stage 4: Frontend Combat UI & Animation Sync](wiki/architecture/04_frontend_combat_ui.md) - Dynamic ASPD anim timeScale, VCT/FCT casting split, dan Damage HUD.
-*   [Stage 5: GORM Database Migrations & Seeding](wiki/architecture/05_database_migrations.md) - Konfigurasi auto-migrasi schema PostgreSQL dan seeds data default.
-*   [Stage 6: Combat Formula Reference Sheet](wiki/architecture/06_combat_formula_ref.md) - Persamaan matematika murni iRO Renewal terperinci.
-*   [Stage 7: Network Sync Protocol & JSON Schema](wiki/architecture/07_network_sync_protocol.md) - Definisi spesifikasi payload WebSocket C2S/S2C lengkap.
+### Frontend
 
-> [!WARNING]
-> **DONT-TOUCH ZONE (ZONA SUCI PERFORMA):**
-> Ada 5 komponen kritis arsitektur (termasuk ground physics `SHAPECAST`, decoding MsgPack di main-thread, lock-free Go FSM, 2D Spatial Hash Grid, dan 20Hz WS player send rate) yang **TIDAK BOLEH** diubah demi kestabilan 60 FPS. Panduan lengkap larangan ini wajib dibaca di **[SKILL.md (Bab 10)](SKILL.md#10-dont-touch-zone-sistem-kritis-yang-haram-disenggol)** sebelum menyentuh kode!
+| Path                                                                                                                             | Fungsi                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| [`frontend/app/arena/ArenaClient.tsx`](frontend/app/arena/ArenaClient.tsx)                                                       | Halaman utama arena — compose semua komponen game      |
+| [`frontend/src/components/game/GameCanvas.tsx`](frontend/src/components/game/GameCanvas.tsx)                                     | Root R3F Canvas — setup scene, camera, controls        |
+| [`frontend/src/components/game/environment/StormEnvironment.tsx`](frontend/src/components/game/environment/StormEnvironment.tsx) | Environment storm dengan dynamic weather               |
+| [`frontend/src/features/world-editor/ui/WorldEditor.tsx`](frontend/src/features/world-editor/ui/WorldEditor.tsx)                 | Editor peta 3D — raycaster, drag, spray, wheel handler |
+| [`frontend/src/features/world-editor/store/useEditorStore.ts`](frontend/src/features/world-editor/store/useEditorStore.ts)       | Zustand store editor (6 slices)                        |
+| [`frontend/src/core/combat/ClassCombatEngine.ts`](frontend/src/core/combat/ClassCombatEngine.ts)                                 | Combat engine dengan class strategies                  |
+| [`frontend/src/entities/player/ui/PlayerController.tsx`](frontend/src/entities/player/ui/PlayerController.tsx)                   | Kontrol pemain (keyboard → ECController)               |
+| [`frontend/src/entities/player/hooks/usePlayerPhysics.ts`](frontend/src/entities/player/hooks/usePlayerPhysics.ts)               | Fisika pemain (Rapier physics)                         |
 
-> [!CAUTION]
-> **REFERENSI LENGKAP ZONA KRITIS:**
-> Lihat **[DONT_TOUCH.md](DONT_TOUCH.md)** untuk dokumentasi komprehensif mencakup **16 area kritis** (tidak hanya 5) yang tidak boleh diubah — termasuk Three.js patches, ErrorBoundary, LOD thresholds, Object Pools, dan quick-reference tabel error → penyebab.
+### Backend
 
+| Path                                                                                             | Fungsi                         |
+| ------------------------------------------------------------------------------------------------ | ------------------------------ |
+| [`backend/cmd/server/main.go`](backend/cmd/server/main.go)                                       | Entry point server             |
+| [`backend/internal/domain/ecs.go`](backend/internal/domain/ecs.go)                               | Definisi ECS components        |
+| [`backend/internal/usecase/game/game_usecase.go`](backend/internal/usecase/game/game_usecase.go) | Game loop & use case interface |
+| [`backend/internal/usecase/game/combat.go`](backend/internal/usecase/game/combat.go)             | Logika pertarungan             |
+| [`backend/internal/usecase/game/monster_ai.go`](backend/internal/usecase/game/monster_ai.go)     | AI monster                     |
+| [`backend/internal/delivery/ws/game_handler.go`](backend/internal/delivery/ws/game_handler.go)   | WebSocket handler              |
+| [`backend/internal/delivery/http/router.go`](backend/internal/delivery/http/router.go)           | HTTP router (auth, config)     |
 
+### Shared
+
+| Path                                                                             | Fungsi                                      |
+| -------------------------------------------------------------------------------- | ------------------------------------------- |
+| [`packages/shared/src/index.ts`](packages/shared/src/index.ts)                   | Entry point — export semua tipe & fungsi    |
+| [`packages/shared/src/map-item.ts`](packages/shared/src/map-item.ts)             | Tipe `MapItem` + fungsi `sanitizeAssetPath` |
+| [`packages/shared/src/asset-registry.ts`](packages/shared/src/asset-registry.ts) | Registry aset (500+ item) & material        |
+| [`packages/shared/src/terrain-height.ts`](packages/shared/src/terrain-height.ts) | Fungsi ketinggian terrain                   |
+| [`packages/shared/src/wind.ts`](packages/shared/src/wind.ts)                     | Shader uniforms untuk efek angin            |
+
+---
+
+## Roadmap
+
+- [x] Arena multipemain dasar (movement, attack, monster AI)
+- [x] Sistem kelas dengan 5 job
+- [x] World Editor — place, drag, spray, undo/redo
+- [x] Avatar configurator
+- [x] Inventory & equipment system
+- [ ] Quest system lengkap
+- [ ] Raid boss mekanik
+- [ ] Mobile support (responsive UI)
+- [ ] Steam / Tauri desktop build
+
+---
+
+## Kontribusi
+
+1. Fork repo
+2. Buat branch fitur: `git checkout -b feat/fitur-keren`
+3. Commit perubahan: `git commit -m 'feat: tambah fitur keren'`
+4. Push: `git push origin feat/fitur-keren`
+5. Buka Pull Request
+
+Pastikan `bunx tsc --noEmit` dan `bun run lint` lulus sebelum PR.
+
+---
+
+## Lisensi
+
+MIT License — lihat file [LICENSE](LICENSE) untuk detail.

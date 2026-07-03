@@ -1,7 +1,8 @@
 # 02. Backend Combat Usecase & Authoritative Validation
-> **Tujuan**: Menerapkan validasi rate-limit dynamic ASPD, perhitungan akurasi fisik (HIT vs FLEE), *Critical Hit Shield*, dan formula mitigasi Hard DEF vs. Soft DEF ($A + B$) secara authoritative di sisi server.
 
-Semua logika pemrosesan combat server berada di file `@[/home/yoga/Dokumen/game mmorpg/backend/internal/usecase/game/combat.go]`. Pada tahap kedua ini, kita akan merefaktor alur penanganan serangan pemain agar 100% aman dan akurat secara matematis.
+> **Tujuan**: Menerapkan validasi rate-limit dynamic ASPD, perhitungan akurasi fisik (HIT vs FLEE), _Critical Hit Shield_, dan formula mitigasi Hard DEF vs. Soft DEF ($A + B$) secara authoritative di sisi server.
+
+Semua logika pemrosesan combat server berada di file `@[backend/internal/usecase/game/combat.go]`. Pada tahap kedua ini, kita akan merefaktor alur penanganan serangan pemain agar 100% aman dan akurat secara matematis.
 
 ---
 
@@ -9,7 +10,7 @@ Semua logika pemrosesan combat server berada di file `@[/home/yoga/Dokumen/game 
 
 ### Langkah 1: Refaktor Authoritative Attack Cooldown (Rate-Limiting)
 
-Backend membutuhkan sistem anti-speedhack yang handal namun tetap fleksibel terhadap toleransi latensi jaringan (*network jitter*).
+Backend membutuhkan sistem anti-speedhack yang handal namun tetap fleksibel terhadap toleransi latensi jaringan (_network jitter_).
 
 Cari baris kode penanganan cooldown di dalam method `HandlePlayerAttack` (sekitar baris 43-63):
 
@@ -26,7 +27,7 @@ Pastikan backend mencatat `LastBasicAttackTime` dengan menyertakan toleransi `bu
 
 ### Langkah 2: Mengintegrasikan Authoritative Hit vs. Flee Roll (Akurasi)
 
-Saat ini, server langsung memproses damage tanpa memeriksa apakah serangan tersebut berhasil mendarat (*Hit*) atau meleset (*Miss*). Kita akan menerapkan dadu acak peluang akurasi fisik.
+Saat ini, server langsung memproses damage tanpa memeriksa apakah serangan tersebut berhasil mendarat (_Hit_) atau meleset (_Miss_). Kita akan menerapkan dadu acak peluang akurasi fisik.
 
 Tambahkan potongan logika di bawah ini sebelum perhitungan damage akhir (sekitar baris 94):
 
@@ -64,21 +65,21 @@ Tambahkan potongan logika di bawah ini sebelum perhitungan damage akhir (sekitar
 
 ### Langkah 3: Menerapkan Pengaruh Critical Hit Shield & C.RATE
 
-Statistik `LUK` target berfungsi memberikan resistensi critical. Kita harus mengurangi peluang critical penyerang dengan *Critical Hit Shield* pertahanan musuh sebelum melakukan roll dadu critical.
+Statistik `LUK` target berfungsi memberikan resistensi critical. Kita harus mengurangi peluang critical penyerang dengan _Critical Hit Shield_ pertahanan musuh sebelum melakukan roll dadu critical.
 
-Modifikasi method `CalculateDamageTo` di file `@[/home/yoga/Dokumen/game mmorpg/backend/internal/domain/player.go]` (baris 313):
+Modifikasi method `CalculateDamageTo` di file `@[backend/internal/domain/player.go]` (baris 313):
 
 ```diff
 -func (p *Player) CalculateDamageTo(targetDefense float32) (float32, bool) {
 +func (p *Player) CalculateDamageTo(targetDefense float32, targetLUK int, targetLevel int, targetCRatePlus int) (float32, bool) {
  	isCrit := false
  	dmg := p.Attack
- 
+
  	// Mage deals damage derived from MagicAttack instead of physical Attack!
  	if p.Class == "Mage" {
  		dmg = p.MagicAttack
  	}
- 
+
 -	// Critical roll using global rand
 -	if rand.Float32() < p.CriticalRate {
 +	// Hitung Critical Hit Shield milik target
@@ -100,7 +101,7 @@ Modifikasi method `CalculateDamageTo` di file `@[/home/yoga/Dokumen/game mmorpg/
 
 ### Langkah 4: Menerapkan Formula Pengurangan Kerusakan Hard vs. Soft DEF ($A + B$)
 
-Modifikasi bagian kalkulasi pengurangan damage di file `@[/home/yoga/Dokumen/game mmorpg/backend/internal/domain/player.go]` agar mendukung pembagian **Soft DEF ($A$)** dan **Hard DEF ($B$)** secara nyata:
+Modifikasi bagian kalkulasi pengurangan damage di file `@[backend/internal/domain/player.go]` agar mendukung pembagian **Soft DEF ($A$)** dan **Hard DEF ($B$)** secara nyata:
 
 ```go
 	// =========================================================================
@@ -108,10 +109,10 @@ Modifikasi bagian kalkulasi pengurangan damage di file `@[/home/yoga/Dokumen/gam
 	// =========================================================================
 	// Target Defense dilewatkan sebagai Hard DEF (berasal dari perlengkapan/armor)
 	hardDEF := targetDefense
-	
+
 	// Soft DEF (berasal dari VIT stat internal target)
 	softDEF := float32(p.VIT)/2.0 + float32(p.AGI)/5.0
-	
+
 	// 1. Terapkan pengurangan persentase Hard DEF
 	var damageMultiplier float32 = 1.0
 	if hardDEF > 0 {
@@ -142,4 +143,8 @@ Dengan mengintegrasikan logika tempur tingkat lanjut ini, server game Anda sekar
 
 ---
 
-➡️ **Langkah Berikutnya**: Lanjutkan ke [Tahap 3: Frontend State & WebSocket Sync](file:///home/yoga/Dokumen/game%20mmorpg/wiki/architecture/03_frontend_state.md) untuk mendesain visualisasi antarmuka stat baru dan payload sinkronisasi WebSocket!
+➡️ **Langkah Berikutnya**: Lanjutkan ke [Tahap 3: Frontend State & WebSocket Sync](03_frontend_state.md) untuk mendesain visualisasi antarmuka stat baru dan payload sinkronisasi WebSocket!
+
+---
+
+**📚 Dokumen Terkait**: [README.md](../../README.md) · [docs/Home.md](../../docs/Home.md) · [docs/Architecture.md](../../docs/Architecture.md) · [DONT_TOUCH.md](../../DONT_TOUCH.md)
