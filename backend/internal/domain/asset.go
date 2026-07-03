@@ -7,6 +7,7 @@ type Asset struct {
 	Name      string    `json:"name"`
 	Path      string    `json:"path" gorm:"uniqueIndex"`
 	Category  string    `json:"category"` // kingdom, env, tree
+	Thumbnail string    `json:"thumbnail"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

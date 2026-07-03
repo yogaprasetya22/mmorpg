@@ -396,6 +396,14 @@ func SeedAssets(db *gorm.DB) error {
 				nameWithoutExt := strings.TrimSuffix(info.Name(), filepath.Ext(info.Name()))
 				prettifiedName := strings.Title(strings.ReplaceAll(strings.ReplaceAll(nameWithoutExt, "-", " "), "_", " "))
 
+				// Check if thumbnail exists in backend/assets/thumbs/[nameWithoutExt].webp
+				thumbFilename := nameWithoutExt + ".webp"
+				thumbLocalPath := filepath.Join(assetsModelPath, "thumbs", thumbFilename)
+				webThumbPath := ""
+				if _, err := os.Stat(thumbLocalPath); err == nil {
+					webThumbPath = "/assets/thumbs/" + thumbFilename
+				}
+
 				// Save or update in database
 				var existing domain.Asset
 				err = db.Where("path = ?", webPath).First(&existing).Error
@@ -403,9 +411,10 @@ func SeedAssets(db *gorm.DB) error {
 					if err == gorm.ErrRecordNotFound {
 						// Create new asset
 						newAsset := domain.Asset{
-							Name:     prettifiedName,
-							Path:     webPath,
-							Category: target.category,
+							Name:      prettifiedName,
+							Path:      webPath,
+							Category:  target.category,
+							Thumbnail: webThumbPath,
 						}
 						if err := db.Create(&newAsset).Error; err == nil {
 							seededCount++
@@ -415,6 +424,7 @@ func SeedAssets(db *gorm.DB) error {
 					// Update existing asset properties
 					existing.Name = prettifiedName
 					existing.Category = target.category
+					existing.Thumbnail = webThumbPath
 					db.Save(&existing)
 				}
 			}

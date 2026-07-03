@@ -469,15 +469,15 @@ export const WorldEditorUI = () => {
 
           {/* ─── CONTENT ─── */}
           <div className="flex-1 flex min-h-0 overflow-hidden">
-            {/* Hierarchy sidebar */}
-            <div className="w-[135px] flex-shrink-0 border-r border-zinc-800/40 overflow-hidden flex flex-col">
-              <SceneHierarchy />
-            </div>
             {/* Module panel */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
               <div className="flex-1 min-h-0">
                 {renderModule()}
               </div>
+            </div>
+            {/* Hierarchy sidebar (moved to right) */}
+            <div className="w-[135px] flex-shrink-0 border-l border-zinc-800/40 overflow-hidden flex flex-col">
+              <SceneHierarchy />
             </div>
           </div>
 

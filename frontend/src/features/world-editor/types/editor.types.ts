@@ -41,6 +41,58 @@ export interface TerrainConfig {
 }
 
 // ─── Vegetation ───
+export interface VegetationPrototype {
+    id: string;
+    name: string;
+    assetUrl: string;
+    thumbnailUrl?: string;
+    category: "trees" | "grass" | "rocks" | "custom";
+    defaultScaleMin: number;
+    defaultScaleMax: number;
+    defaultRandomYaw: boolean;
+    alignToSurfaceNormal: boolean;
+    slopeMin?: number;
+    slopeMax?: number;
+    heightMin?: number;
+    heightMax?: number;
+    cullDistance?: number;
+}
+
+export interface VegetationInstance {
+    id: string;
+    prototypeId: string;
+    pos: [number, number, number];
+    rot: [number, number, number];
+    sca: [number, number, number];
+    color?: string;
+    chunkId?: string;
+    createdAt?: number;
+    updatedAt?: number;
+}
+
+export type VegetationBrushMode = "Paint" | "Erase" | "Select" | "Single" | "Reapply";
+
+export interface VegetationBrushState {
+    mode: VegetationBrushMode;
+    radius: number;
+    density: number;
+    scaleRange: [number, number];
+    selectedPrototypeIds: string[];
+    weights: Record<string, number>;
+    alignToNormal: boolean;
+    slopeFilterEnabled: boolean;
+    slopeRange: [number, number];
+    heightFilterEnabled: boolean;
+    heightRange: [number, number];
+    randomSeed: number;
+}
+
+export interface VegetationDocument {
+    version: number;
+    prototypes: VegetationPrototype[];
+    instances: VegetationInstance[];
+}
+
 export type VegetationTheme =
     | "pine"
     | "cherry"
@@ -110,4 +162,23 @@ export interface EditorSceneSnapshot {
     readonly vegetationAssetOverrides: Record<string, string | null>;
     readonly lastUsedScales: Record<string, [number, number, number]>;
     readonly lastUsedRotations: Record<string, [number, number, number]>;
+}
+
+// ─── Asset Library & Caching ───
+export interface AssetBlueprint {
+    id: string;
+    name: string;
+    category: "trees" | "vegetation" | "rocks" | "characters" | "materials" | "all";
+    modelUrl: string;
+    thumbnailUrl?: string;
+    polycountHint?: number;
+    tags?: string[];
+}
+
+export interface AssetLibraryState {
+    blueprints: AssetBlueprint[];
+    selectedBlueprintId: string | null;
+    filterText: string;
+    activeCategory: AssetBlueprint["category"];
+    isLoading: boolean;
 }

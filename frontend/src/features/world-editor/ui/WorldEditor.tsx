@@ -21,7 +21,6 @@ import type { MapItem } from '@jagres/shared';
 import { getTerrainElevation, API_BASE_URL, windUniforms } from '@jagres/shared';
 import { GrassField, isGrassAssetPath } from '@/src/components/game/environment/GrassField';
 import { _charPos as _ghostPreviewPos } from '@/src/entities/player/buffers';
-import { THEME_ASSETS } from './modules/VegetationModule';
 import { getCachedTerrainHeight } from '@jagres/shared';
 
 // Extracted sub-components
@@ -172,7 +171,17 @@ export const WorldEditor = () => {
     if (!flushImmediate && now - lastSprayTimeRef.current < 90) return;
     lastSprayTimeRef.current = now;
     const [cx, , cz] = center;
-    const { vegetationRadius } = useEditorStore.getState();
+    const {
+      vegetationRadius,
+      selectedPrototypeIds,
+      vegetationPrototypes,
+      vegetationBrushWeights,
+      vegetationAlignToNormal,
+      vegetationSlopeFilterEnabled,
+      vegetationSlopeRange,
+      vegetationHeightFilterEnabled,
+      vegetationHeightRange,
+    } = useEditorStore.getState();
     const radius = vegetationRadius;
 
     if (isShiftPressed) {
@@ -185,11 +194,12 @@ export const WorldEditor = () => {
       return;
     }
 
+    if (selectedPrototypeIds.length === 0) return;
+
     const count = Math.max(1, Math.round(vegetationDensity / 12));
-    const { vegetationAssetOverrides: overrides } = useEditorStore.getState();
-    const theme = THEME_ASSETS[vegetationTheme] || THEME_ASSETS.pine;
-    const overridePath = overrides[vegetationTheme] ?? null;
     const newTrees: MapItem[] = [];
+
+    const totalWeight = selectedPrototypeIds.reduce((sum, id) => sum + (vegetationBrushWeights[id] || 0), 0);
 
     for (let i = 0; i < count; i++) {
       const r = Math.sqrt(Math.random()) * radius;
@@ -205,16 +215,63 @@ export const WorldEditor = () => {
         return h;
       });
 
-      const resolvedPath = overridePath || theme.paths[Math.floor(Math.random() * theme.paths.length)];
+      // Height filter validation
+      if (vegetationHeightFilterEnabled) {
+        if (py < vegetationHeightRange[0] || py > vegetationHeightRange[1]) continue;
+      }
+
+      // Slope calculations
+      const eps = 0.1;
+      const hL = getTerrainElevation(px - eps, pz, environment, 24, terrainConfig);
+      const hR = getTerrainElevation(px + eps, pz, environment, 24, terrainConfig);
+      const hD = getTerrainElevation(px, pz - eps, environment, 24, terrainConfig);
+      const hU = getTerrainElevation(px, pz + eps, environment, 24, terrainConfig);
+      const nx = -(hR - hL) / (2 * eps);
+      const nz = -(hU - hD) / (2 * eps);
+      const ny = 1.0;
+      const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+      const normal = [nx / len, ny / len, nz / len];
+      const slopeDegrees = Math.acos(ny / len) * (180 / Math.PI);
+
+      // Slope filter validation
+      if (vegetationSlopeFilterEnabled) {
+        if (slopeDegrees < vegetationSlopeRange[0] || slopeDegrees > vegetationSlopeRange[1]) continue;
+      }
+
+      // Pick weighted prototype
+      let chosenProto = vegetationPrototypes.find(p => p.id === selectedPrototypeIds[0])!;
+      if (totalWeight > 0) {
+        let randomVal = Math.random() * totalWeight;
+        for (const protoId of selectedPrototypeIds) {
+          const weight = vegetationBrushWeights[protoId] || 0;
+          randomVal -= weight;
+          if (randomVal <= 0) {
+            chosenProto = vegetationPrototypes.find(p => p.id === protoId) || chosenProto;
+            break;
+          }
+        }
+      }
+
+      const resolvedPath = chosenProto.assetUrl;
       const modelPath = resolvedPath.startsWith('http') ? resolvedPath : `${API_BASE_URL}${resolvedPath}`;
-      const color = theme.colors ? theme.colors[Math.floor(Math.random() * theme.colors.length)] : undefined;
-      const scaleRatio = vegetationFixedScale > 0 ? vegetationFixedScale : 0.55 + Math.random() * 0.9;
+      const scaleRatio = vegetationFixedScale > 0 ? vegetationFixedScale : chosenProto.defaultScaleMin + Math.random() * (chosenProto.defaultScaleMax - chosenProto.defaultScaleMin);
       const rotY = Math.random() * Math.PI * 2;
 
+      let rot: [number, number, number] = [0, rotY, 0];
+      if (vegetationAlignToNormal || chosenProto.alignToSurfaceNormal) {
+        const upVec = new THREE.Vector3(0, 1, 0);
+        const normVec = new THREE.Vector3(normal[0], normal[1], normal[2]).normalize();
+        const quat = new THREE.Quaternion().setFromUnitVectors(upVec, normVec);
+        const yawQuat = new THREE.Quaternion().setFromAxisAngle(upVec, rotY);
+        quat.multiply(yawQuat);
+        const euler = new THREE.Euler().setFromQuaternion(quat, 'YXZ');
+        rot = [euler.x, euler.y, euler.z];
+      }
+
       newTrees.push({
-        id: `procedural-veg-${vegetationTheme}-${now}-${i}-${Math.random()}`,
+        id: `procedural-veg-${chosenProto.id}-${now}-${i}-${Math.random()}`,
         type: 'procedural-vegetation', path: modelPath,
-        pos: [px, py, pz], rot: [0, rotY, 0], sca: [scaleRatio, scaleRatio, scaleRatio], color,
+        pos: [px, py, pz], rot, sca: [scaleRatio, scaleRatio, scaleRatio],
       });
     }
 
@@ -225,7 +282,7 @@ export const WorldEditor = () => {
       if (!sprayBufferRef.current) sprayBufferRef.current = [];
       sprayBufferRef.current.push(...newTrees);
     }
-  }, [vegetationDensity, vegetationTheme, environment, terrainConfig, items, updateItemsWithHistory, isShiftPressed, vegetationFixedScale]);
+  }, [vegetationDensity, environment, terrainConfig, items, updateItemsWithHistory, isShiftPressed, vegetationFixedScale]);
 
   // ─── POINTER EVENTS ───
   useEffect(() => {

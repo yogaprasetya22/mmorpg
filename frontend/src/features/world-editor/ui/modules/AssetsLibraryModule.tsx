@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, Suspense, useMemo, useRef } from 'react';
+import React, { useState, Suspense, useMemo, useRef, Component, type ReactNode } from 'react';
 import { useGLTF, Center, OrbitControls, Environment } from '@react-three/drei';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { useInView } from 'react-intersection-observer';
@@ -8,12 +8,28 @@ import { Search, Package, Eye, RotateCw } from 'lucide-react';
 import * as THREE from 'three';
 import { useEditorStore } from "@/src/features/world-editor/store/useEditorStore";
 import { FULL_ASSET_LIBRARY } from "@jagres/shared";
-// '@/src/features/world-editor/store/useEditorStore';
 import { FULL_MATERIAL_LIBRARY } from '@jagres/shared';
+import { API_BASE_URL } from '@/src/core/config';
+
+// ─── CANVAS ERROR BOUNDARY (catches GLTF parsing/loading failures gracefully) ───
+class CanvasErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("Canvas Error Boundary caught:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
+}
 
 // ─── SINGLE 3D PREVIEW MODEL (rotates smoothly, one GLB at a time) ───
 const PreviewModel = ({ path }: { path: string }) => {
-  const { scene } = useGLTF(path);
+  const resolvedPath = path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
+  const { scene } = useGLTF(resolvedPath);
   const cloned = useMemo(() => scene.clone(), [scene]);
   const groupRef = useRef<THREE.Group>(null);
 
@@ -89,6 +105,12 @@ const AssetCard = React.memo(({ asset, isActive, onClick, onHover }: {
 
   const visual = resolveVisual(asset);
 
+  const thumbUrl = asset.thumbnail 
+    ? (asset.thumbnail.startsWith('http') ? asset.thumbnail : `${API_BASE_URL}${asset.thumbnail}`)
+    : (asset.thumbnailUrl 
+       ? (asset.thumbnailUrl.startsWith('http') ? asset.thumbnailUrl : `${API_BASE_URL}${asset.thumbnailUrl}`)
+       : null);
+
   return (
     <button
       ref={ref}
@@ -102,9 +124,13 @@ const AssetCard = React.memo(({ asset, isActive, onClick, onHover }: {
     >
       {inView ? (
         <>
-          {/* Thumbnail: gradient bg + emoji icon (zero WebGL cost) */}
+          {/* Thumbnail: gradient bg + WebP or emoji icon */}
           <div className={`aspect-square w-full rounded-lg bg-gradient-to-br ${visual.gradient} flex items-center justify-center ring-1 ${visual.ring} relative overflow-hidden`}>
-            <span className="text-xl filter drop-shadow-md select-none">{visual.emoji}</span>
+            {thumbUrl ? (
+              <img src={thumbUrl} alt={asset.name} className="w-full h-full object-contain pointer-events-none" />
+            ) : (
+              <span className="text-xl filter drop-shadow-md select-none">{visual.emoji}</span>
+            )}
             {/* Hover glow overlay */}
             <div className="absolute inset-0 bg-indigo-500/0 group-hover:bg-indigo-500/8 transition-colors pointer-events-none" />
             {/* Active indicator dot */}
@@ -131,58 +157,66 @@ const AssetCard = React.memo(({ asset, isActive, onClick, onHover }: {
 
 AssetCard.displayName = 'AssetCard';
 
-// ─── 3D PREVIEW VIEWPORT (single Canvas, single GLB loaded) ───
-const PreviewViewport = ({ asset }: { asset: any | null }) => {
-  if (!asset?.path) {
-    return (
-      <div className="w-full h-32 rounded-xl bg-zinc-950/60 border border-zinc-800/40 flex flex-col items-center justify-center gap-2">
-        <Eye className="w-4 h-4 text-zinc-700" />
-        <span className="text-[8px] text-zinc-600 font-mono uppercase tracking-widest">Select a blueprint to preview</span>
-      </div>
-    );
-  }
-
+// ─── 3D PREVIEW VIEWPORT (single Canvas, always mounted to prevent resize bugs) ───
+const PreviewViewport = ({ asset, ready }: { asset: any | null; ready: boolean }) => {
   return (
     <div className="w-full h-36 rounded-xl bg-zinc-950 border border-zinc-800/40 overflow-hidden relative shadow-inner">
-      {/* Asset name badge */}
-      <div className="absolute top-2 left-2 z-10 bg-zinc-950/80 backdrop-blur-sm border border-zinc-800/50 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
-        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-        <span className="text-[8px] font-mono font-bold text-zinc-300 tracking-tight">{asset.name}</span>
-      </div>
+      {/* Asset name badge or placeholder overlay */}
+      {asset?.path ? (
+        <div className="absolute top-2 left-2 z-10 bg-zinc-950/80 backdrop-blur-sm border border-zinc-800/50 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-[8px] font-mono font-bold text-zinc-300 tracking-tight">{asset.name}</span>
+        </div>
+      ) : (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-zinc-950/50 backdrop-blur-xs pointer-events-none">
+          <Eye className="w-4 h-4 text-zinc-700" />
+          <span className="text-[8px] text-zinc-650 font-mono uppercase tracking-widest">Select a blueprint to preview</span>
+        </div>
+      )}
+
       {/* Rotation hint */}
-      <div className="absolute top-2 right-2 z-10 text-zinc-600 flex items-center gap-1">
-        <RotateCw className="w-3 h-3" />
-        <span className="text-[7px] font-mono uppercase">Drag to orbit</span>
-      </div>
-      {/* Single WebGL Canvas — one GLB loaded at a time */}
-      <Canvas
-        camera={{ position: [2.5, 1.8, 2.5], fov: 35, near: 0.1, far: 100 }}
-        gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
-        dpr={[1, 1.5]}
-      >
-        <ambientLight intensity={1.2} />
-        <directionalLight position={[4, 5, 3]} intensity={2.5} />
-        <directionalLight position={[-2, 3, -4]} intensity={1.0} color="#93c5fd" />
-        <Suspense fallback={null}>
-          <Center>
-            <PreviewModel path={asset.path} />
-          </Center>
-        </Suspense>
-        <OrbitControls
-          enablePan={false}
-          enableZoom={true}
-          minDistance={1.5}
-          maxDistance={8}
-          autoRotate={false}
-          target={[0, 0, 0]}
-        />
-        <Environment preset="sunset" environmentIntensity={0.2} />
-        {/* Ground shadow disc */}
-        <mesh rotation-x={-Math.PI / 2} position-y={-0.01} receiveShadow>
-          <circleGeometry args={[2, 32]} />
-          <meshStandardMaterial color="#1a1a2e" roughness={1} transparent opacity={0.3} />
-        </mesh>
-      </Canvas>
+      {asset?.path && (
+        <div className="absolute top-2 right-2 z-10 text-zinc-600 flex items-center gap-1">
+          <RotateCw className="w-3 h-3" />
+          <span className="text-[7px] font-mono uppercase">Drag to orbit</span>
+        </div>
+      )}
+
+      {/* Single WebGL Canvas — always mounted to prevent sizing/resize bugs, delayed until layout stabilizes */}
+      {ready && (
+        <Canvas
+          camera={{ position: [2.5, 1.8, 2.5], fov: 35, near: 0.1, far: 100 }}
+          gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+          dpr={[1, 1.5]}
+        >
+          <ambientLight intensity={1.2} />
+          <directionalLight position={[4, 5, 3]} intensity={2.5} />
+          <directionalLight position={[-2, 3, -4]} intensity={1.0} color="#93c5fd" />
+          {asset?.path && (
+            <Suspense fallback={null}>
+              <CanvasErrorBoundary fallback={<mesh><boxGeometry args={[0.5, 0.5, 0.5]} /><meshBasicMaterial color="#e11d48" wireframe /></mesh>}>
+                <Center>
+                  <PreviewModel path={asset.path} />
+                </Center>
+              </CanvasErrorBoundary>
+            </Suspense>
+          )}
+          <OrbitControls
+            enablePan={false}
+            enableZoom={true}
+            minDistance={1.5}
+            maxDistance={8}
+            autoRotate={false}
+            target={[0, 0, 0]}
+          />
+          <Environment preset="sunset" environmentIntensity={0.2} />
+          {/* Ground shadow disc */}
+          <mesh rotation-x={-Math.PI / 2} position-y={-0.01} receiveShadow>
+            <circleGeometry args={[2, 32]} />
+            <meshStandardMaterial color="#1a1a2e" roughness={1} transparent opacity={0.3} />
+          </mesh>
+        </Canvas>
+      )}
     </div>
   );
 };
@@ -200,11 +234,18 @@ export const AssetsLibraryModule = () => {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [previewAsset, setPreviewAsset] = useState<any>(activeAsset);
+  const [ready, setReady] = useState(false);
 
   // Sync preview with active asset changes
   React.useEffect(() => {
     if (activeAsset) setPreviewAsset(activeAsset);
   }, [activeAsset]);
+
+  // Delay mounting canvas until initial loading overlay has vanished and layout is completed
+  React.useEffect(() => {
+    const timer = setTimeout(() => setReady(true), 1200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const filteredAssets = selectedCategory === 'materials'
     ? FULL_MATERIAL_LIBRARY
@@ -222,7 +263,7 @@ export const AssetsLibraryModule = () => {
 
       {/* ─── 3D PREVIEW VIEWPORT (single Canvas, shows selected/hovered GLB) ─── */}
       {selectedCategory !== 'materials' && (
-        <PreviewViewport asset={currentPreview} />
+        <PreviewViewport asset={currentPreview} ready={ready} />
       )}
 
       {/* Material preview (image-based for textures) */}
@@ -286,7 +327,8 @@ export const AssetsLibraryModule = () => {
               onHover={() => {
                 // Preload GLB on hover for instant preview
                 if (asset.path) {
-                  useGLTF.preload(asset.path);
+                  const resolved = asset.path.startsWith('http') ? asset.path : `${API_BASE_URL}${asset.path}`;
+                  useGLTF.preload(resolved);
                 }
                 setPreviewAsset(asset);
               }}

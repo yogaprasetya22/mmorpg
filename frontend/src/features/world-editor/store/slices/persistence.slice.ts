@@ -176,6 +176,7 @@ export const createPersistenceSlice: StateCreator<
                     name: string;
                     path: string;
                     category?: string;
+                    thumbnail?: string;
                 }[] = await res.json();
                 const mapped: AssetInfo[] = assets.map((item) => {
                     let category: AssetInfo["category"] = "rocks";
@@ -194,7 +195,8 @@ export const createPersistenceSlice: StateCreator<
                     const name = item.name
                         .replace(/\.[^/.]+$/, "")
                         .replace(/[-_]/g, " ");
-                    return { name, path, category };
+                    const thumbnail = item.thumbnail ? item.thumbnail : undefined;
+                    return { name, path, category, thumbnail };
                 });
                 set({ dynamicAssets: mapped });
                 setAssetLibrary(
