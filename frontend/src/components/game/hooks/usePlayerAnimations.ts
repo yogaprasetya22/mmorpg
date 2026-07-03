@@ -3,7 +3,7 @@
 import { useRef } from 'react';
 import * as THREE from 'three';
 import { useAnimationStore, characterStatus } from 'bvhecctrl';
-import { charState, ATTACK_DURATION, attackTimer } from '../PlayerController.buffers';
+import { charState, ATTACK_DURATION, attackTimer } from '@/src/entities/player/buffers';
 
 export const animationSet = {
   idle:  'Idle',

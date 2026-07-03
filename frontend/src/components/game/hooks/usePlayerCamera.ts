@@ -26,7 +26,7 @@ import {
   ZOOM_LERP,
   SHOULDER_OFFSET,
   EYE_HEIGHT,
-} from '../PlayerController.buffers';
+} from '@/src/entities/player/buffers';
 
 export function usePlayerCamera(camera: THREE.Camera) {
   // Ensure cameraShake registration exists on window

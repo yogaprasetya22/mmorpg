@@ -7,7 +7,7 @@ import {
   isLeftClick,
   ZOOM_MIN,
   ZOOM_MAX,
-} from '../PlayerController.buffers';
+} from '@/src/entities/player/buffers';
 
 export function usePlayerInput(settingsRef: React.RefObject<any>) {
   useEffect(() => {

@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useWebSocketGame, GameStatePayload } from '@/src/hooks/useWebSocketGame';
-import { useEditorStore } from '@/src/state/useEditorStore';
+import { useEditorStore } from '@/src/features/world-editor/store/useEditorStore';
 import { battleGrid } from '@/src/core/logic/combat/spatialGrid';
 import { UnitRuntimeData } from '@/src/core/domain/unit.types';
 import { CLASS_CONFIG, INITIAL_SETTINGS } from '@/src/core/logic/combat/constants';

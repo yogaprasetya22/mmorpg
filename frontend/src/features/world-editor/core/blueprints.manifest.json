@@ -1,0 +1,1773 @@
+[
+  {
+    "id": "battle-axe",
+    "name": "Battle Axe",
+    "modelUrl": "/assets/items/weapons/Battle_Axe.glb",
+    "thumbnailUrl": "/assets/thumbs/Battle_Axe.webp",
+    "category": "all"
+  },
+  {
+    "id": "battle-scythe",
+    "name": "Battle Scythe",
+    "modelUrl": "/assets/items/weapons/Battle_Scythe.glb",
+    "thumbnailUrl": "/assets/thumbs/Battle_Scythe.webp",
+    "category": "all"
+  },
+  {
+    "id": "arrow",
+    "name": "arrow",
+    "modelUrl": "/assets/items/weapons/arrow.glb",
+    "thumbnailUrl": "/assets/thumbs/arrow.svg",
+    "category": "all"
+  },
+  {
+    "id": "arrows",
+    "name": "arrows",
+    "modelUrl": "/assets/items/weapons/arrows.glb",
+    "thumbnailUrl": "/assets/thumbs/arrows.svg",
+    "category": "all"
+  },
+  {
+    "id": "arrow",
+    "name": "Arrow",
+    "modelUrl": "/assets/items/weapons/Arrow.glb",
+    "thumbnailUrl": "/assets/thumbs/Arrow.webp",
+    "category": "all"
+  },
+  {
+    "id": "battle-bow",
+    "name": "Battle Bow",
+    "modelUrl": "/assets/items/weapons/Battle_Bow.glb",
+    "thumbnailUrl": "/assets/thumbs/Battle_Bow.webp",
+    "category": "all"
+  },
+  {
+    "id": "battle-hammer",
+    "name": "Battle Hammer",
+    "modelUrl": "/assets/items/weapons/Battle_Hammer.glb",
+    "thumbnailUrl": "/assets/thumbs/Battle_Hammer.webp",
+    "category": "all"
+  },
+  {
+    "id": "sword",
+    "name": "Sword",
+    "modelUrl": "/assets/items/weapons/Sword.glb",
+    "thumbnailUrl": "/assets/thumbs/Sword.webp",
+    "category": "all"
+  },
+  {
+    "id": "coin-silver",
+    "name": "coin silver",
+    "modelUrl": "/assets/items/pickups/coin-silver.glb",
+    "thumbnailUrl": "/assets/thumbs/coin-silver.webp",
+    "category": "all"
+  },
+  {
+    "id": "jewel",
+    "name": "jewel",
+    "modelUrl": "/assets/items/pickups/jewel.glb",
+    "thumbnailUrl": "/assets/thumbs/jewel.webp",
+    "category": "all"
+  },
+  {
+    "id": "heart",
+    "name": "heart",
+    "modelUrl": "/assets/items/pickups/heart.glb",
+    "thumbnailUrl": "/assets/thumbs/heart.webp",
+    "category": "all"
+  },
+  {
+    "id": "star",
+    "name": "star",
+    "modelUrl": "/assets/items/pickups/star.glb",
+    "thumbnailUrl": "/assets/thumbs/star.webp",
+    "category": "all"
+  },
+  {
+    "id": "coin-gold",
+    "name": "coin gold",
+    "modelUrl": "/assets/items/pickups/coin-gold.glb",
+    "thumbnailUrl": "/assets/thumbs/coin-gold.webp",
+    "category": "all"
+  },
+  {
+    "id": "chest",
+    "name": "chest",
+    "modelUrl": "/assets/items/pickups/chest.glb",
+    "thumbnailUrl": "/assets/thumbs/chest.webp",
+    "category": "all"
+  },
+  {
+    "id": "key",
+    "name": "key",
+    "modelUrl": "/assets/items/pickups/key.glb",
+    "thumbnailUrl": "/assets/thumbs/key.webp",
+    "category": "all"
+  },
+  {
+    "id": "coin-bronze",
+    "name": "coin bronze",
+    "modelUrl": "/assets/items/pickups/coin-bronze.glb",
+    "thumbnailUrl": "/assets/thumbs/coin-bronze.webp",
+    "category": "all"
+  },
+  {
+    "id": "pumpkinhead",
+    "name": "PumpkinHead",
+    "modelUrl": "/assets/characters/modular/heads/PumpkinHead.glb",
+    "thumbnailUrl": "/assets/thumbs/PumpkinHead.webp",
+    "category": "characters"
+  },
+  {
+    "id": "head-003",
+    "name": "Head.003",
+    "modelUrl": "/assets/characters/modular/heads/Head.003.glb",
+    "thumbnailUrl": "/assets/thumbs/Head.003.webp",
+    "category": "characters"
+  },
+  {
+    "id": "head-004",
+    "name": "Head.004",
+    "modelUrl": "/assets/characters/modular/heads/Head.004.glb",
+    "thumbnailUrl": "/assets/thumbs/Head.004.webp",
+    "category": "characters"
+  },
+  {
+    "id": "head-002",
+    "name": "Head.002",
+    "modelUrl": "/assets/characters/modular/heads/Head.002.glb",
+    "thumbnailUrl": "/assets/thumbs/Head.002.webp",
+    "category": "characters"
+  },
+  {
+    "id": "facemask",
+    "name": "FaceMask",
+    "modelUrl": "/assets/characters/modular/heads/FaceMask.glb",
+    "thumbnailUrl": "/assets/thumbs/FaceMask.webp",
+    "category": "characters"
+  },
+  {
+    "id": "head-001",
+    "name": "Head.001",
+    "modelUrl": "/assets/characters/modular/heads/Head.001.glb",
+    "thumbnailUrl": "/assets/thumbs/Head.001.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hair-009",
+    "name": "Hair.009",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hair.009.glb",
+    "thumbnailUrl": "/assets/thumbs/Hair.009.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hair-004",
+    "name": "Hair.004",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hair.004.glb",
+    "thumbnailUrl": "/assets/thumbs/Hair.004.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hair-011",
+    "name": "Hair.011",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hair.011.glb",
+    "thumbnailUrl": "/assets/thumbs/Hair.011.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hat-006",
+    "name": "Hat.006",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hat.006.glb",
+    "thumbnailUrl": "/assets/thumbs/Hat.006.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hat-001",
+    "name": "Hat.001",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hat.001.glb",
+    "thumbnailUrl": "/assets/thumbs/Hat.001.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hat-004",
+    "name": "Hat.004",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hat.004.glb",
+    "thumbnailUrl": "/assets/thumbs/Hat.004.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hair-008",
+    "name": "Hair.008",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hair.008.glb",
+    "thumbnailUrl": "/assets/thumbs/Hair.008.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hair-010",
+    "name": "Hair.010",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hair.010.glb",
+    "thumbnailUrl": "/assets/thumbs/Hair.010.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hair-006",
+    "name": "Hair.006",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hair.006.glb",
+    "thumbnailUrl": "/assets/thumbs/Hair.006.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hair-005",
+    "name": "Hair.005",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hair.005.glb",
+    "thumbnailUrl": "/assets/thumbs/Hair.005.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hair-002",
+    "name": "Hair.002",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hair.002.glb",
+    "thumbnailUrl": "/assets/thumbs/Hair.002.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hat-003",
+    "name": "Hat.003",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hat.003.glb",
+    "thumbnailUrl": "/assets/thumbs/Hat.003.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hat-007",
+    "name": "Hat.007",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hat.007.glb",
+    "thumbnailUrl": "/assets/thumbs/Hat.007.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hair-003",
+    "name": "Hair.003",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hair.003.glb",
+    "thumbnailUrl": "/assets/thumbs/Hair.003.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hat-002",
+    "name": "Hat.002",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hat.002.glb",
+    "thumbnailUrl": "/assets/thumbs/Hat.002.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hair-007",
+    "name": "Hair.007",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hair.007.glb",
+    "thumbnailUrl": "/assets/thumbs/Hair.007.webp",
+    "category": "characters"
+  },
+  {
+    "id": "hair-001",
+    "name": "Hair.001",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hair.001.glb",
+    "thumbnailUrl": "/assets/thumbs/Hair.001.webp",
+    "category": "characters"
+  },
+  {
+    "id": "vikinghelmet",
+    "name": "VikingHelmet",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/VikingHelmet.glb",
+    "thumbnailUrl": "/assets/thumbs/VikingHelmet.svg",
+    "category": "characters"
+  },
+  {
+    "id": "hat-005",
+    "name": "Hat.005",
+    "modelUrl": "/assets/characters/modular/hair_and_hats/Hat.005.glb",
+    "thumbnailUrl": "/assets/thumbs/Hat.005.webp",
+    "category": "characters"
+  },
+  {
+    "id": "bottom-001",
+    "name": "Bottom.001",
+    "modelUrl": "/assets/characters/modular/bottoms/Bottom.001.glb",
+    "thumbnailUrl": "/assets/thumbs/Bottom.001.webp",
+    "category": "characters"
+  },
+  {
+    "id": "bottom-002",
+    "name": "Bottom.002",
+    "modelUrl": "/assets/characters/modular/bottoms/Bottom.002.glb",
+    "thumbnailUrl": "/assets/thumbs/Bottom.002.webp",
+    "category": "characters"
+  },
+  {
+    "id": "bottom-003",
+    "name": "Bottom.003",
+    "modelUrl": "/assets/characters/modular/bottoms/Bottom.003.glb",
+    "thumbnailUrl": "/assets/thumbs/Bottom.003.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyebrow-006",
+    "name": "EyeBrow.006",
+    "modelUrl": "/assets/characters/modular/faces/EyeBrow.006.glb",
+    "thumbnailUrl": "/assets/thumbs/EyeBrow.006.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyebrow-010",
+    "name": "EyeBrow.010",
+    "modelUrl": "/assets/characters/modular/faces/EyeBrow.010.glb",
+    "thumbnailUrl": "/assets/thumbs/EyeBrow.010.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyebrow-004",
+    "name": "EyeBrow.004",
+    "modelUrl": "/assets/characters/modular/faces/EyeBrow.004.glb",
+    "thumbnailUrl": "/assets/thumbs/EyeBrow.004.webp",
+    "category": "characters"
+  },
+  {
+    "id": "facialhair-003",
+    "name": "FacialHair.003",
+    "modelUrl": "/assets/characters/modular/faces/FacialHair.003.glb",
+    "thumbnailUrl": "/assets/thumbs/FacialHair.003.webp",
+    "category": "characters"
+  },
+  {
+    "id": "facialhair-005",
+    "name": "FacialHair.005",
+    "modelUrl": "/assets/characters/modular/faces/FacialHair.005.glb",
+    "thumbnailUrl": "/assets/thumbs/FacialHair.005.webp",
+    "category": "characters"
+  },
+  {
+    "id": "facialhair-006",
+    "name": "FacialHair.006",
+    "modelUrl": "/assets/characters/modular/faces/FacialHair.006.glb",
+    "thumbnailUrl": "/assets/thumbs/FacialHair.006.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyebrow-001",
+    "name": "EyeBrow.001",
+    "modelUrl": "/assets/characters/modular/faces/EyeBrow.001.glb",
+    "thumbnailUrl": "/assets/thumbs/EyeBrow.001.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyes-001",
+    "name": "Eyes.001",
+    "modelUrl": "/assets/characters/modular/faces/Eyes.001.glb",
+    "thumbnailUrl": "/assets/thumbs/Eyes.001.webp",
+    "category": "characters"
+  },
+  {
+    "id": "facialhair-007",
+    "name": "FacialHair.007",
+    "modelUrl": "/assets/characters/modular/faces/FacialHair.007.glb",
+    "thumbnailUrl": "/assets/thumbs/FacialHair.007.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyes-011",
+    "name": "Eyes.011",
+    "modelUrl": "/assets/characters/modular/faces/Eyes.011.glb",
+    "thumbnailUrl": "/assets/thumbs/Eyes.011.webp",
+    "category": "characters"
+  },
+  {
+    "id": "nose-004",
+    "name": "Nose.004",
+    "modelUrl": "/assets/characters/modular/faces/Nose.004.glb",
+    "thumbnailUrl": "/assets/thumbs/Nose.004.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyebrow-003",
+    "name": "EyeBrow.003",
+    "modelUrl": "/assets/characters/modular/faces/EyeBrow.003.glb",
+    "thumbnailUrl": "/assets/thumbs/EyeBrow.003.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyes-006",
+    "name": "Eyes.006",
+    "modelUrl": "/assets/characters/modular/faces/Eyes.006.glb",
+    "thumbnailUrl": "/assets/thumbs/Eyes.006.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyebrow-009",
+    "name": "EyeBrow.009",
+    "modelUrl": "/assets/characters/modular/faces/EyeBrow.009.glb",
+    "thumbnailUrl": "/assets/thumbs/EyeBrow.009.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyes-012",
+    "name": "Eyes.012",
+    "modelUrl": "/assets/characters/modular/faces/Eyes.012.glb",
+    "thumbnailUrl": "/assets/thumbs/Eyes.012.webp",
+    "category": "characters"
+  },
+  {
+    "id": "facialhair-002",
+    "name": "FacialHair.002",
+    "modelUrl": "/assets/characters/modular/faces/FacialHair.002.glb",
+    "thumbnailUrl": "/assets/thumbs/FacialHair.002.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyebrow-002",
+    "name": "EyeBrow.002",
+    "modelUrl": "/assets/characters/modular/faces/EyeBrow.002.glb",
+    "thumbnailUrl": "/assets/thumbs/EyeBrow.002.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyes-003",
+    "name": "Eyes.003",
+    "modelUrl": "/assets/characters/modular/faces/Eyes.003.glb",
+    "thumbnailUrl": "/assets/thumbs/Eyes.003.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyebrow-005",
+    "name": "EyeBrow.005",
+    "modelUrl": "/assets/characters/modular/faces/EyeBrow.005.glb",
+    "thumbnailUrl": "/assets/thumbs/EyeBrow.005.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyes-010",
+    "name": "Eyes.010",
+    "modelUrl": "/assets/characters/modular/faces/Eyes.010.glb",
+    "thumbnailUrl": "/assets/thumbs/Eyes.010.webp",
+    "category": "characters"
+  },
+  {
+    "id": "nose-001",
+    "name": "Nose.001",
+    "modelUrl": "/assets/characters/modular/faces/Nose.001.glb",
+    "thumbnailUrl": "/assets/thumbs/Nose.001.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyes-009",
+    "name": "Eyes.009",
+    "modelUrl": "/assets/characters/modular/faces/Eyes.009.glb",
+    "thumbnailUrl": "/assets/thumbs/Eyes.009.webp",
+    "category": "characters"
+  },
+  {
+    "id": "facialhair-001",
+    "name": "FacialHair.001",
+    "modelUrl": "/assets/characters/modular/faces/FacialHair.001.glb",
+    "thumbnailUrl": "/assets/thumbs/FacialHair.001.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyebrow-008",
+    "name": "EyeBrow.008",
+    "modelUrl": "/assets/characters/modular/faces/EyeBrow.008.glb",
+    "thumbnailUrl": "/assets/thumbs/EyeBrow.008.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyes-005",
+    "name": "Eyes.005",
+    "modelUrl": "/assets/characters/modular/faces/Eyes.005.glb",
+    "thumbnailUrl": "/assets/thumbs/Eyes.005.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyes-007",
+    "name": "Eyes.007",
+    "modelUrl": "/assets/characters/modular/faces/Eyes.007.glb",
+    "thumbnailUrl": "/assets/thumbs/Eyes.007.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyebrow-007",
+    "name": "EyeBrow.007",
+    "modelUrl": "/assets/characters/modular/faces/EyeBrow.007.glb",
+    "thumbnailUrl": "/assets/thumbs/EyeBrow.007.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyes-002",
+    "name": "Eyes.002",
+    "modelUrl": "/assets/characters/modular/faces/Eyes.002.glb",
+    "thumbnailUrl": "/assets/thumbs/Eyes.002.webp",
+    "category": "characters"
+  },
+  {
+    "id": "nose-002",
+    "name": "Nose.002",
+    "modelUrl": "/assets/characters/modular/faces/Nose.002.glb",
+    "thumbnailUrl": "/assets/thumbs/Nose.002.webp",
+    "category": "characters"
+  },
+  {
+    "id": "nose-003",
+    "name": "Nose.003",
+    "modelUrl": "/assets/characters/modular/faces/Nose.003.glb",
+    "thumbnailUrl": "/assets/thumbs/Nose.003.webp",
+    "category": "characters"
+  },
+  {
+    "id": "facialhair-004",
+    "name": "FacialHair.004",
+    "modelUrl": "/assets/characters/modular/faces/FacialHair.004.glb",
+    "thumbnailUrl": "/assets/thumbs/FacialHair.004.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyes-004",
+    "name": "Eyes.004",
+    "modelUrl": "/assets/characters/modular/faces/Eyes.004.glb",
+    "thumbnailUrl": "/assets/thumbs/Eyes.004.webp",
+    "category": "characters"
+  },
+  {
+    "id": "eyes-008",
+    "name": "Eyes.008",
+    "modelUrl": "/assets/characters/modular/faces/Eyes.008.glb",
+    "thumbnailUrl": "/assets/thumbs/Eyes.008.webp",
+    "category": "characters"
+  },
+  {
+    "id": "shoes-003",
+    "name": "Shoes.003",
+    "modelUrl": "/assets/characters/modular/accessories/Shoes.003.glb",
+    "thumbnailUrl": "/assets/thumbs/Shoes.003.webp",
+    "category": "characters"
+  },
+  {
+    "id": "shoes-001",
+    "name": "Shoes.001",
+    "modelUrl": "/assets/characters/modular/accessories/Shoes.001.glb",
+    "thumbnailUrl": "/assets/thumbs/Shoes.001.webp",
+    "category": "characters"
+  },
+  {
+    "id": "earring-001",
+    "name": "Earring.001",
+    "modelUrl": "/assets/characters/modular/accessories/Earring.001.glb",
+    "thumbnailUrl": "/assets/thumbs/Earring.001.webp",
+    "category": "characters"
+  },
+  {
+    "id": "glasses-004",
+    "name": "Glasses.004",
+    "modelUrl": "/assets/characters/modular/accessories/Glasses.004.glb",
+    "thumbnailUrl": "/assets/thumbs/Glasses.004.webp",
+    "category": "characters"
+  },
+  {
+    "id": "earring-003",
+    "name": "Earring.003",
+    "modelUrl": "/assets/characters/modular/accessories/Earring.003.glb",
+    "thumbnailUrl": "/assets/thumbs/Earring.003.webp",
+    "category": "characters"
+  },
+  {
+    "id": "earring-006",
+    "name": "Earring.006",
+    "modelUrl": "/assets/characters/modular/accessories/Earring.006.glb",
+    "thumbnailUrl": "/assets/thumbs/Earring.006.webp",
+    "category": "characters"
+  },
+  {
+    "id": "earring-004",
+    "name": "Earring.004",
+    "modelUrl": "/assets/characters/modular/accessories/Earring.004.glb",
+    "thumbnailUrl": "/assets/thumbs/Earring.004.webp",
+    "category": "characters"
+  },
+  {
+    "id": "glasses-001",
+    "name": "Glasses.001",
+    "modelUrl": "/assets/characters/modular/accessories/Glasses.001.glb",
+    "thumbnailUrl": "/assets/thumbs/Glasses.001.webp",
+    "category": "characters"
+  },
+  {
+    "id": "glasses-002",
+    "name": "Glasses.002",
+    "modelUrl": "/assets/characters/modular/accessories/Glasses.002.glb",
+    "thumbnailUrl": "/assets/thumbs/Glasses.002.webp",
+    "category": "characters"
+  },
+  {
+    "id": "glasses-003",
+    "name": "Glasses.003",
+    "modelUrl": "/assets/characters/modular/accessories/Glasses.003.glb",
+    "thumbnailUrl": "/assets/thumbs/Glasses.003.webp",
+    "category": "characters"
+  },
+  {
+    "id": "shoes-002",
+    "name": "Shoes.002",
+    "modelUrl": "/assets/characters/modular/accessories/Shoes.002.glb",
+    "thumbnailUrl": "/assets/thumbs/Shoes.002.webp",
+    "category": "characters"
+  },
+  {
+    "id": "earring-002",
+    "name": "Earring.002",
+    "modelUrl": "/assets/characters/modular/accessories/Earring.002.glb",
+    "thumbnailUrl": "/assets/thumbs/Earring.002.webp",
+    "category": "characters"
+  },
+  {
+    "id": "earring-005",
+    "name": "Earring.005",
+    "modelUrl": "/assets/characters/modular/accessories/Earring.005.glb",
+    "thumbnailUrl": "/assets/thumbs/Earring.005.webp",
+    "category": "characters"
+  },
+  {
+    "id": "top-003",
+    "name": "Top.003",
+    "modelUrl": "/assets/characters/modular/tops/Top.003.glb",
+    "thumbnailUrl": "/assets/thumbs/Top.003.webp",
+    "category": "characters"
+  },
+  {
+    "id": "top-001",
+    "name": "Top.001",
+    "modelUrl": "/assets/characters/modular/tops/Top.001.glb",
+    "thumbnailUrl": "/assets/thumbs/Top.001.webp",
+    "category": "characters"
+  },
+  {
+    "id": "top-002",
+    "name": "Top.002",
+    "modelUrl": "/assets/characters/modular/tops/Top.002.glb",
+    "thumbnailUrl": "/assets/thumbs/Top.002.webp",
+    "category": "characters"
+  },
+  {
+    "id": "outfit-001",
+    "name": "Outfit.001",
+    "modelUrl": "/assets/characters/modular/tops/Outfit.001.glb",
+    "thumbnailUrl": "/assets/thumbs/Outfit.001.webp",
+    "category": "characters"
+  },
+  {
+    "id": "outfit-004",
+    "name": "Outfit.004",
+    "modelUrl": "/assets/characters/modular/tops/Outfit.004.glb",
+    "thumbnailUrl": "/assets/thumbs/Outfit.004.webp",
+    "category": "characters"
+  },
+  {
+    "id": "outfit-003",
+    "name": "Outfit.003",
+    "modelUrl": "/assets/characters/modular/tops/Outfit.003.glb",
+    "thumbnailUrl": "/assets/thumbs/Outfit.003.webp",
+    "category": "characters"
+  },
+  {
+    "id": "wawadress",
+    "name": "WawaDress",
+    "modelUrl": "/assets/characters/modular/tops/WawaDress.glb",
+    "thumbnailUrl": "/assets/thumbs/WawaDress.svg",
+    "category": "characters"
+  },
+  {
+    "id": "outfit-002",
+    "name": "Outfit.002",
+    "modelUrl": "/assets/characters/modular/tops/Outfit.002.glb",
+    "thumbnailUrl": "/assets/thumbs/Outfit.002.webp",
+    "category": "characters"
+  },
+  {
+    "id": "goblin-female",
+    "name": "Goblin Female",
+    "modelUrl": "/assets/characters/npcs/Goblin_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Goblin_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "cowboy-hair",
+    "name": "Cowboy Hair",
+    "modelUrl": "/assets/characters/npcs/Cowboy_Hair.glb",
+    "thumbnailUrl": "/assets/thumbs/Cowboy_Hair.svg",
+    "category": "characters"
+  },
+  {
+    "id": "cowboy-female",
+    "name": "Cowboy Female",
+    "modelUrl": "/assets/characters/npcs/Cowboy_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Cowboy_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "bluesoldier-female",
+    "name": "BlueSoldier Female",
+    "modelUrl": "/assets/characters/npcs/BlueSoldier_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/BlueSoldier_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "suit-male",
+    "name": "Suit Male",
+    "modelUrl": "/assets/characters/npcs/Suit_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Suit_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "ninja-male-hair",
+    "name": "Ninja Male Hair",
+    "modelUrl": "/assets/characters/npcs/Ninja_Male_Hair.glb",
+    "thumbnailUrl": "/assets/thumbs/Ninja_Male_Hair.svg",
+    "category": "characters"
+  },
+  {
+    "id": "pirate-female",
+    "name": "Pirate Female",
+    "modelUrl": "/assets/characters/npcs/Pirate_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Pirate_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "doctor-female-young",
+    "name": "Doctor Female Young",
+    "modelUrl": "/assets/characters/npcs/Doctor_Female_Young.glb",
+    "thumbnailUrl": "/assets/thumbs/Doctor_Female_Young.svg",
+    "category": "characters"
+  },
+  {
+    "id": "soldier-female",
+    "name": "Soldier Female",
+    "modelUrl": "/assets/characters/npcs/Soldier_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Soldier_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "bluesoldier-male",
+    "name": "BlueSoldier Male",
+    "modelUrl": "/assets/characters/npcs/BlueSoldier_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/BlueSoldier_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "viking-female",
+    "name": "Viking Female",
+    "modelUrl": "/assets/characters/npcs/Viking_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Viking_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "zombie-female",
+    "name": "Zombie Female",
+    "modelUrl": "/assets/characters/npcs/Zombie_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Zombie_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "worker-female",
+    "name": "Worker Female",
+    "modelUrl": "/assets/characters/npcs/Worker_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Worker_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "pirate-male",
+    "name": "Pirate Male",
+    "modelUrl": "/assets/characters/npcs/Pirate_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Pirate_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "knight-golden-male",
+    "name": "Knight Golden Male",
+    "modelUrl": "/assets/characters/npcs/Knight_Golden_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Knight_Golden_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "casual3-male",
+    "name": "Casual3 Male",
+    "modelUrl": "/assets/characters/npcs/Casual3_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Casual3_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "casual-bald",
+    "name": "Casual Bald",
+    "modelUrl": "/assets/characters/npcs/Casual_Bald.glb",
+    "thumbnailUrl": "/assets/thumbs/Casual_Bald.svg",
+    "category": "characters"
+  },
+  {
+    "id": "suit-female",
+    "name": "Suit Female",
+    "modelUrl": "/assets/characters/npcs/Suit_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Suit_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "ninja-sand",
+    "name": "Ninja Sand",
+    "modelUrl": "/assets/characters/npcs/Ninja_Sand.glb",
+    "thumbnailUrl": "/assets/thumbs/Ninja_Sand.svg",
+    "category": "characters"
+  },
+  {
+    "id": "casual-male",
+    "name": "Casual Male",
+    "modelUrl": "/assets/characters/npcs/Casual_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Casual_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "viking-male",
+    "name": "Viking Male",
+    "modelUrl": "/assets/characters/npcs/Viking_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Viking_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "casual2-female",
+    "name": "Casual2 Female",
+    "modelUrl": "/assets/characters/npcs/Casual2_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Casual2_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "casual-female",
+    "name": "Casual Female",
+    "modelUrl": "/assets/characters/npcs/Casual_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Casual_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "wizard",
+    "name": "Wizard",
+    "modelUrl": "/assets/characters/npcs/Wizard.glb",
+    "thumbnailUrl": "/assets/thumbs/Wizard.svg",
+    "category": "characters"
+  },
+  {
+    "id": "kimono-male",
+    "name": "Kimono Male",
+    "modelUrl": "/assets/characters/npcs/Kimono_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Kimono_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "doctor-female-old",
+    "name": "Doctor Female Old",
+    "modelUrl": "/assets/characters/npcs/Doctor_Female_Old.glb",
+    "thumbnailUrl": "/assets/thumbs/Doctor_Female_Old.svg",
+    "category": "characters"
+  },
+  {
+    "id": "ninja-male",
+    "name": "Ninja Male",
+    "modelUrl": "/assets/characters/npcs/Ninja_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Ninja_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "cowboy-male",
+    "name": "Cowboy Male",
+    "modelUrl": "/assets/characters/npcs/Cowboy_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Cowboy_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "doctor-male-old",
+    "name": "Doctor Male Old",
+    "modelUrl": "/assets/characters/npcs/Doctor_Male_Old.glb",
+    "thumbnailUrl": "/assets/thumbs/Doctor_Male_Old.svg",
+    "category": "characters"
+  },
+  {
+    "id": "soldier-male",
+    "name": "Soldier Male",
+    "modelUrl": "/assets/characters/npcs/Soldier_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Soldier_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "elf",
+    "name": "Elf",
+    "modelUrl": "/assets/characters/npcs/Elf.glb",
+    "thumbnailUrl": "/assets/thumbs/Elf.svg",
+    "category": "characters"
+  },
+  {
+    "id": "tower-2",
+    "name": "tower 2",
+    "modelUrl": "/assets/characters/npcs/tower_2.glb",
+    "thumbnailUrl": "/assets/thumbs/tower_2.svg",
+    "category": "characters"
+  },
+  {
+    "id": "doctor-male-young",
+    "name": "Doctor Male Young",
+    "modelUrl": "/assets/characters/npcs/Doctor_Male_Young.glb",
+    "thumbnailUrl": "/assets/thumbs/Doctor_Male_Young.svg",
+    "category": "characters"
+  },
+  {
+    "id": "casual3-female",
+    "name": "Casual3 Female",
+    "modelUrl": "/assets/characters/npcs/Casual3_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Casual3_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "ninja-female",
+    "name": "Ninja Female",
+    "modelUrl": "/assets/characters/npcs/Ninja_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Ninja_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "worker-male",
+    "name": "Worker Male",
+    "modelUrl": "/assets/characters/npcs/Worker_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Worker_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "zombie-male",
+    "name": "Zombie Male",
+    "modelUrl": "/assets/characters/npcs/Zombie_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Zombie_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "knight-male",
+    "name": "Knight Male",
+    "modelUrl": "/assets/characters/npcs/Knight_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Knight_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "cow",
+    "name": "Cow",
+    "modelUrl": "/assets/characters/npcs/Cow.glb",
+    "thumbnailUrl": "/assets/thumbs/Cow.svg",
+    "category": "characters"
+  },
+  {
+    "id": "casual2-male",
+    "name": "Casual2 Male",
+    "modelUrl": "/assets/characters/npcs/Casual2_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Casual2_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "pug",
+    "name": "Pug",
+    "modelUrl": "/assets/characters/npcs/Pug.glb",
+    "thumbnailUrl": "/assets/thumbs/Pug.svg",
+    "category": "characters"
+  },
+  {
+    "id": "chef-male",
+    "name": "Chef Male",
+    "modelUrl": "/assets/characters/npcs/Chef_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Chef_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "chef-female",
+    "name": "Chef Female",
+    "modelUrl": "/assets/characters/npcs/Chef_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Chef_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "chef-hat",
+    "name": "Chef Hat",
+    "modelUrl": "/assets/characters/npcs/Chef_Hat.glb",
+    "thumbnailUrl": "/assets/thumbs/Chef_Hat.svg",
+    "category": "characters"
+  },
+  {
+    "id": "chef-male-processed",
+    "name": "Chef Male processed",
+    "modelUrl": "/assets/characters/npcs/Chef_Male-processed.glb",
+    "thumbnailUrl": "/assets/thumbs/Chef_Male-processed.svg",
+    "category": "characters"
+  },
+  {
+    "id": "oldclassy-female",
+    "name": "OldClassy Female",
+    "modelUrl": "/assets/characters/npcs/OldClassy_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/OldClassy_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "goblin-male",
+    "name": "Goblin Male",
+    "modelUrl": "/assets/characters/npcs/Goblin_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/Goblin_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "tower",
+    "name": "tower",
+    "modelUrl": "/assets/characters/npcs/tower.glb",
+    "thumbnailUrl": "/assets/thumbs/tower.webp",
+    "category": "characters"
+  },
+  {
+    "id": "witch",
+    "name": "Witch",
+    "modelUrl": "/assets/characters/npcs/Witch.glb",
+    "thumbnailUrl": "/assets/thumbs/Witch.svg",
+    "category": "characters"
+  },
+  {
+    "id": "knight-golden-female",
+    "name": "Knight Golden Female",
+    "modelUrl": "/assets/characters/npcs/Knight_Golden_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Knight_Golden_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "oldclassy-male",
+    "name": "OldClassy Male",
+    "modelUrl": "/assets/characters/npcs/OldClassy_Male.glb",
+    "thumbnailUrl": "/assets/thumbs/OldClassy_Male.svg",
+    "category": "characters"
+  },
+  {
+    "id": "ninja-sand-female",
+    "name": "Ninja Sand Female",
+    "modelUrl": "/assets/characters/npcs/Ninja_Sand_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Ninja_Sand_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "kimono-female",
+    "name": "Kimono Female",
+    "modelUrl": "/assets/characters/npcs/Kimono_Female.glb",
+    "thumbnailUrl": "/assets/thumbs/Kimono_Female.svg",
+    "category": "characters"
+  },
+  {
+    "id": "basecharacter",
+    "name": "BaseCharacter",
+    "modelUrl": "/assets/characters/base/BaseCharacter.glb",
+    "thumbnailUrl": "/assets/thumbs/BaseCharacter.svg",
+    "category": "characters"
+  },
+  {
+    "id": "armature",
+    "name": "Armature",
+    "modelUrl": "/assets/characters/base/Armature.glb",
+    "thumbnailUrl": "/assets/thumbs/Armature.webp",
+    "category": "characters"
+  },
+  {
+    "id": "poses",
+    "name": "Poses",
+    "modelUrl": "/assets/animations/Poses.glb",
+    "thumbnailUrl": "/assets/thumbs/Poses.webp",
+    "category": "all"
+  },
+  {
+    "id": "pine-5",
+    "name": "Pine 5",
+    "modelUrl": "/assets/environment/trees/Pine_5.glb",
+    "thumbnailUrl": "/assets/thumbs/Pine_5.webp",
+    "category": "trees"
+  },
+  {
+    "id": "deadtree-3",
+    "name": "DeadTree 3",
+    "modelUrl": "/assets/environment/trees/DeadTree_3.glb",
+    "thumbnailUrl": "/assets/thumbs/DeadTree_3.webp",
+    "category": "trees"
+  },
+  {
+    "id": "birchtree-4",
+    "name": "BirchTree 4",
+    "modelUrl": "/assets/environment/trees/BirchTree_4.glb",
+    "thumbnailUrl": "/assets/thumbs/BirchTree_4.webp",
+    "category": "trees"
+  },
+  {
+    "id": "deadtree-1",
+    "name": "DeadTree 1",
+    "modelUrl": "/assets/environment/trees/DeadTree_1.glb",
+    "thumbnailUrl": "/assets/thumbs/DeadTree_1.webp",
+    "category": "trees"
+  },
+  {
+    "id": "commontree-5",
+    "name": "CommonTree 5",
+    "modelUrl": "/assets/environment/trees/CommonTree_5.glb",
+    "thumbnailUrl": "/assets/thumbs/CommonTree_5.webp",
+    "category": "trees"
+  },
+  {
+    "id": "deadtree-7",
+    "name": "DeadTree 7",
+    "modelUrl": "/assets/environment/trees/DeadTree_7.glb",
+    "thumbnailUrl": "/assets/thumbs/DeadTree_7.webp",
+    "category": "trees"
+  },
+  {
+    "id": "commontree-1",
+    "name": "CommonTree 1",
+    "modelUrl": "/assets/environment/trees/CommonTree_1.glb",
+    "thumbnailUrl": "/assets/thumbs/CommonTree_1.webp",
+    "category": "trees"
+  },
+  {
+    "id": "deadtree-5",
+    "name": "DeadTree 5",
+    "modelUrl": "/assets/environment/trees/DeadTree_5.glb",
+    "thumbnailUrl": "/assets/thumbs/DeadTree_5.webp",
+    "category": "trees"
+  },
+  {
+    "id": "mapletree-5",
+    "name": "MapleTree 5",
+    "modelUrl": "/assets/environment/trees/MapleTree_5.glb",
+    "thumbnailUrl": "/assets/thumbs/MapleTree_5.webp",
+    "category": "trees"
+  },
+  {
+    "id": "pine-1",
+    "name": "Pine 1",
+    "modelUrl": "/assets/environment/trees/Pine_1.glb",
+    "thumbnailUrl": "/assets/thumbs/Pine_1.webp",
+    "category": "trees"
+  },
+  {
+    "id": "deadtree-8",
+    "name": "DeadTree 8",
+    "modelUrl": "/assets/environment/trees/DeadTree_8.glb",
+    "thumbnailUrl": "/assets/thumbs/DeadTree_8.webp",
+    "category": "trees"
+  },
+  {
+    "id": "birchtree-3",
+    "name": "BirchTree 3",
+    "modelUrl": "/assets/environment/trees/BirchTree_3.glb",
+    "thumbnailUrl": "/assets/thumbs/BirchTree_3.webp",
+    "category": "trees"
+  },
+  {
+    "id": "deadtree-9",
+    "name": "DeadTree 9",
+    "modelUrl": "/assets/environment/trees/DeadTree_9.glb",
+    "thumbnailUrl": "/assets/thumbs/DeadTree_9.webp",
+    "category": "trees"
+  },
+  {
+    "id": "commontree-4",
+    "name": "CommonTree 4",
+    "modelUrl": "/assets/environment/trees/CommonTree_4.glb",
+    "thumbnailUrl": "/assets/thumbs/CommonTree_4.webp",
+    "category": "trees"
+  },
+  {
+    "id": "deadtree-4",
+    "name": "DeadTree 4",
+    "modelUrl": "/assets/environment/trees/DeadTree_4.glb",
+    "thumbnailUrl": "/assets/thumbs/DeadTree_4.webp",
+    "category": "trees"
+  },
+  {
+    "id": "birchtree-5",
+    "name": "BirchTree 5",
+    "modelUrl": "/assets/environment/trees/BirchTree_5.glb",
+    "thumbnailUrl": "/assets/thumbs/BirchTree_5.webp",
+    "category": "trees"
+  },
+  {
+    "id": "twistedtree-4",
+    "name": "TwistedTree 4",
+    "modelUrl": "/assets/environment/trees/TwistedTree_4.glb",
+    "thumbnailUrl": "/assets/thumbs/TwistedTree_4.webp",
+    "category": "trees"
+  },
+  {
+    "id": "mapletree-2",
+    "name": "MapleTree 2",
+    "modelUrl": "/assets/environment/trees/MapleTree_2.glb",
+    "thumbnailUrl": "/assets/thumbs/MapleTree_2.webp",
+    "category": "trees"
+  },
+  {
+    "id": "mapletree-1",
+    "name": "MapleTree 1",
+    "modelUrl": "/assets/environment/trees/MapleTree_1.glb",
+    "thumbnailUrl": "/assets/thumbs/MapleTree_1.webp",
+    "category": "trees"
+  },
+  {
+    "id": "deadtree-2",
+    "name": "DeadTree 2",
+    "modelUrl": "/assets/environment/trees/DeadTree_2.glb",
+    "thumbnailUrl": "/assets/thumbs/DeadTree_2.webp",
+    "category": "trees"
+  },
+  {
+    "id": "deadtree-6",
+    "name": "DeadTree 6",
+    "modelUrl": "/assets/environment/trees/DeadTree_6.glb",
+    "thumbnailUrl": "/assets/thumbs/DeadTree_6.webp",
+    "category": "trees"
+  },
+  {
+    "id": "birchtree-1",
+    "name": "BirchTree 1",
+    "modelUrl": "/assets/environment/trees/BirchTree_1.glb",
+    "thumbnailUrl": "/assets/thumbs/BirchTree_1.webp",
+    "category": "trees"
+  },
+  {
+    "id": "twistedtree-3",
+    "name": "TwistedTree 3",
+    "modelUrl": "/assets/environment/trees/TwistedTree_3.glb",
+    "thumbnailUrl": "/assets/thumbs/TwistedTree_3.webp",
+    "category": "trees"
+  },
+  {
+    "id": "pine-4",
+    "name": "Pine 4",
+    "modelUrl": "/assets/environment/trees/Pine_4.glb",
+    "thumbnailUrl": "/assets/thumbs/Pine_4.webp",
+    "category": "trees"
+  },
+  {
+    "id": "commontree-3",
+    "name": "CommonTree 3",
+    "modelUrl": "/assets/environment/trees/CommonTree_3.glb",
+    "thumbnailUrl": "/assets/thumbs/CommonTree_3.webp",
+    "category": "trees"
+  },
+  {
+    "id": "mapletree-4",
+    "name": "MapleTree 4",
+    "modelUrl": "/assets/environment/trees/MapleTree_4.glb",
+    "thumbnailUrl": "/assets/thumbs/MapleTree_4.webp",
+    "category": "trees"
+  },
+  {
+    "id": "commontree-2",
+    "name": "CommonTree 2",
+    "modelUrl": "/assets/environment/trees/CommonTree_2.glb",
+    "thumbnailUrl": "/assets/thumbs/CommonTree_2.webp",
+    "category": "trees"
+  },
+  {
+    "id": "deadtree-10",
+    "name": "DeadTree 10",
+    "modelUrl": "/assets/environment/trees/DeadTree_10.glb",
+    "thumbnailUrl": "/assets/thumbs/DeadTree_10.webp",
+    "category": "trees"
+  },
+  {
+    "id": "pine-3",
+    "name": "Pine 3",
+    "modelUrl": "/assets/environment/trees/Pine_3.glb",
+    "thumbnailUrl": "/assets/thumbs/Pine_3.webp",
+    "category": "trees"
+  },
+  {
+    "id": "birchtree-2",
+    "name": "BirchTree 2",
+    "modelUrl": "/assets/environment/trees/BirchTree_2.glb",
+    "thumbnailUrl": "/assets/thumbs/BirchTree_2.webp",
+    "category": "trees"
+  },
+  {
+    "id": "mapletree-3",
+    "name": "MapleTree 3",
+    "modelUrl": "/assets/environment/trees/MapleTree_3.glb",
+    "thumbnailUrl": "/assets/thumbs/MapleTree_3.webp",
+    "category": "trees"
+  },
+  {
+    "id": "pine-2",
+    "name": "Pine 2",
+    "modelUrl": "/assets/environment/trees/Pine_2.glb",
+    "thumbnailUrl": "/assets/thumbs/Pine_2.webp",
+    "category": "trees"
+  },
+  {
+    "id": "twistedtree-5",
+    "name": "TwistedTree 5",
+    "modelUrl": "/assets/environment/trees/TwistedTree_5.glb",
+    "thumbnailUrl": "/assets/thumbs/TwistedTree_5.webp",
+    "category": "trees"
+  },
+  {
+    "id": "twistedtree-2",
+    "name": "TwistedTree 2",
+    "modelUrl": "/assets/environment/trees/TwistedTree_2.glb",
+    "thumbnailUrl": "/assets/thumbs/TwistedTree_2.webp",
+    "category": "trees"
+  },
+  {
+    "id": "twistedtree-1",
+    "name": "TwistedTree 1",
+    "modelUrl": "/assets/environment/trees/TwistedTree_1.glb",
+    "thumbnailUrl": "/assets/thumbs/TwistedTree_1.webp",
+    "category": "trees"
+  },
+  {
+    "id": "bush-flowers",
+    "name": "Bush Flowers",
+    "modelUrl": "/assets/environment/vegetation/Bush_Flowers.glb",
+    "thumbnailUrl": "/assets/thumbs/Bush_Flowers.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "petal-3",
+    "name": "Petal 3",
+    "modelUrl": "/assets/environment/vegetation/Petal_3.glb",
+    "thumbnailUrl": "/assets/thumbs/Petal_3.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "bush-common",
+    "name": "Bush Common",
+    "modelUrl": "/assets/environment/vegetation/Bush_Common.glb",
+    "thumbnailUrl": "/assets/thumbs/Bush_Common.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "fern-1",
+    "name": "Fern 1",
+    "modelUrl": "/assets/environment/vegetation/Fern_1.glb",
+    "thumbnailUrl": "/assets/thumbs/Fern_1.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "flower-1",
+    "name": "Flower 1",
+    "modelUrl": "/assets/environment/vegetation/Flower_1.glb",
+    "thumbnailUrl": "/assets/thumbs/Flower_1.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "plant-1",
+    "name": "Plant 1",
+    "modelUrl": "/assets/environment/vegetation/Plant_1.glb",
+    "thumbnailUrl": "/assets/thumbs/Plant_1.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "bush-small",
+    "name": "Bush Small",
+    "modelUrl": "/assets/environment/vegetation/Bush_Small.glb",
+    "thumbnailUrl": "/assets/thumbs/Bush_Small.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "mushroom-laetiporus",
+    "name": "Mushroom Laetiporus",
+    "modelUrl": "/assets/environment/vegetation/Mushroom_Laetiporus.glb",
+    "thumbnailUrl": "/assets/thumbs/Mushroom_Laetiporus.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "petal-5",
+    "name": "Petal 5",
+    "modelUrl": "/assets/environment/vegetation/Petal_5.glb",
+    "thumbnailUrl": "/assets/thumbs/Petal_5.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "petal-1",
+    "name": "Petal 1",
+    "modelUrl": "/assets/environment/vegetation/Petal_1.glb",
+    "thumbnailUrl": "/assets/thumbs/Petal_1.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "flower-1-clump",
+    "name": "Flower 1 Clump",
+    "modelUrl": "/assets/environment/vegetation/Flower_1_Clump.glb",
+    "thumbnailUrl": "/assets/thumbs/Flower_1_Clump.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "flower-4-single",
+    "name": "Flower 4 Single",
+    "modelUrl": "/assets/environment/vegetation/Flower_4_Single.glb",
+    "thumbnailUrl": "/assets/thumbs/Flower_4_Single.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "flower-3-single",
+    "name": "Flower 3 Single",
+    "modelUrl": "/assets/environment/vegetation/Flower_3_Single.glb",
+    "thumbnailUrl": "/assets/thumbs/Flower_3_Single.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "grass-large",
+    "name": "Grass Large",
+    "modelUrl": "/assets/environment/vegetation/Grass_Large.glb",
+    "thumbnailUrl": "/assets/thumbs/Grass_Large.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "mushroom-common",
+    "name": "Mushroom Common",
+    "modelUrl": "/assets/environment/vegetation/Mushroom_Common.glb",
+    "thumbnailUrl": "/assets/thumbs/Mushroom_Common.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "flower-2-clump",
+    "name": "Flower 2 Clump",
+    "modelUrl": "/assets/environment/vegetation/Flower_2_Clump.glb",
+    "thumbnailUrl": "/assets/thumbs/Flower_2_Clump.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "plant-1-big",
+    "name": "Plant 1 Big",
+    "modelUrl": "/assets/environment/vegetation/Plant_1_Big.glb",
+    "thumbnailUrl": "/assets/thumbs/Plant_1_Big.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "grass-wispy-short",
+    "name": "Grass Wispy Short",
+    "modelUrl": "/assets/environment/vegetation/Grass_Wispy_Short.glb",
+    "thumbnailUrl": "/assets/thumbs/Grass_Wispy_Short.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "plant-7",
+    "name": "Plant 7",
+    "modelUrl": "/assets/environment/vegetation/Plant_7.glb",
+    "thumbnailUrl": "/assets/thumbs/Plant_7.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "grass-common-short",
+    "name": "Grass Common Short",
+    "modelUrl": "/assets/environment/vegetation/Grass_Common_Short.glb",
+    "thumbnailUrl": "/assets/thumbs/Grass_Common_Short.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "flower-5-clump",
+    "name": "Flower 5 Clump",
+    "modelUrl": "/assets/environment/vegetation/Flower_5_Clump.glb",
+    "thumbnailUrl": "/assets/thumbs/Flower_5_Clump.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "bush-small-flowers",
+    "name": "Bush Small Flowers",
+    "modelUrl": "/assets/environment/vegetation/Bush_Small_Flowers.glb",
+    "thumbnailUrl": "/assets/thumbs/Bush_Small_Flowers.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "clover-2",
+    "name": "Clover 2",
+    "modelUrl": "/assets/environment/vegetation/Clover_2.glb",
+    "thumbnailUrl": "/assets/thumbs/Clover_2.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "flower-4-clump",
+    "name": "Flower 4 Clump",
+    "modelUrl": "/assets/environment/vegetation/Flower_4_Clump.glb",
+    "thumbnailUrl": "/assets/thumbs/Flower_4_Clump.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "bush-common-flowers",
+    "name": "Bush Common Flowers",
+    "modelUrl": "/assets/environment/vegetation/Bush_Common_Flowers.glb",
+    "thumbnailUrl": "/assets/thumbs/Bush_Common_Flowers.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "grass-wispy-tall",
+    "name": "Grass Wispy Tall",
+    "modelUrl": "/assets/environment/vegetation/Grass_Wispy_Tall.glb",
+    "thumbnailUrl": "/assets/thumbs/Grass_Wispy_Tall.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "clover-1",
+    "name": "Clover 1",
+    "modelUrl": "/assets/environment/vegetation/Clover_1.glb",
+    "thumbnailUrl": "/assets/thumbs/Clover_1.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "grass-common-tall",
+    "name": "Grass Common Tall",
+    "modelUrl": "/assets/environment/vegetation/Grass_Common_Tall.glb",
+    "thumbnailUrl": "/assets/thumbs/Grass_Common_Tall.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "bush-large",
+    "name": "Bush Large",
+    "modelUrl": "/assets/environment/vegetation/Bush_Large.glb",
+    "thumbnailUrl": "/assets/thumbs/Bush_Large.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "petal-4",
+    "name": "Petal 4",
+    "modelUrl": "/assets/environment/vegetation/Petal_4.glb",
+    "thumbnailUrl": "/assets/thumbs/Petal_4.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "plant-7-big",
+    "name": "Plant 7 Big",
+    "modelUrl": "/assets/environment/vegetation/Plant_7_Big.glb",
+    "thumbnailUrl": "/assets/thumbs/Plant_7_Big.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "grass-large-extruded",
+    "name": "Grass Large Extruded",
+    "modelUrl": "/assets/environment/vegetation/Grass_Large_Extruded.glb",
+    "thumbnailUrl": "/assets/thumbs/Grass_Large_Extruded.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "grass-small",
+    "name": "Grass Small",
+    "modelUrl": "/assets/environment/vegetation/Grass_Small.glb",
+    "thumbnailUrl": "/assets/thumbs/Grass_Small.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "flower-4-group",
+    "name": "Flower 4 Group",
+    "modelUrl": "/assets/environment/vegetation/Flower_4_Group.glb",
+    "thumbnailUrl": "/assets/thumbs/Flower_4_Group.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "flower-2",
+    "name": "Flower 2",
+    "modelUrl": "/assets/environment/vegetation/Flower_2.glb",
+    "thumbnailUrl": "/assets/thumbs/Flower_2.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "flower-3-clump",
+    "name": "Flower 3 Clump",
+    "modelUrl": "/assets/environment/vegetation/Flower_3_Clump.glb",
+    "thumbnailUrl": "/assets/thumbs/Flower_3_Clump.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "petal-2",
+    "name": "Petal 2",
+    "modelUrl": "/assets/environment/vegetation/Petal_2.glb",
+    "thumbnailUrl": "/assets/thumbs/Petal_2.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "bush-large-flowers",
+    "name": "Bush Large Flowers",
+    "modelUrl": "/assets/environment/vegetation/Bush_Large_Flowers.glb",
+    "thumbnailUrl": "/assets/thumbs/Bush_Large_Flowers.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "flower-3-group",
+    "name": "Flower 3 Group",
+    "modelUrl": "/assets/environment/vegetation/Flower_3_Group.glb",
+    "thumbnailUrl": "/assets/thumbs/Flower_3_Group.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "bush",
+    "name": "Bush",
+    "modelUrl": "/assets/environment/vegetation/Bush.glb",
+    "thumbnailUrl": "/assets/thumbs/Bush.webp",
+    "category": "vegetation"
+  },
+  {
+    "id": "rockpath-square-thin",
+    "name": "RockPath Square Thin",
+    "modelUrl": "/assets/environment/rocks/RockPath_Square_Thin.glb",
+    "thumbnailUrl": "/assets/thumbs/RockPath_Square_Thin.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "rockpath-round-thin",
+    "name": "RockPath Round Thin",
+    "modelUrl": "/assets/environment/rocks/RockPath_Round_Thin.glb",
+    "thumbnailUrl": "/assets/thumbs/RockPath_Round_Thin.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "rock-medium-3",
+    "name": "Rock Medium 3",
+    "modelUrl": "/assets/environment/rocks/Rock_Medium_3.glb",
+    "thumbnailUrl": "/assets/thumbs/Rock_Medium_3.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "pebble-square-1",
+    "name": "Pebble Square 1",
+    "modelUrl": "/assets/environment/rocks/Pebble_Square_1.glb",
+    "thumbnailUrl": "/assets/thumbs/Pebble_Square_1.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "rock-medium-1",
+    "name": "Rock Medium 1",
+    "modelUrl": "/assets/environment/rocks/Rock_Medium_1.glb",
+    "thumbnailUrl": "/assets/thumbs/Rock_Medium_1.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "pebble-round-2",
+    "name": "Pebble Round 2",
+    "modelUrl": "/assets/environment/rocks/Pebble_Round_2.glb",
+    "thumbnailUrl": "/assets/thumbs/Pebble_Round_2.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "pebble-round-5",
+    "name": "Pebble Round 5",
+    "modelUrl": "/assets/environment/rocks/Pebble_Round_5.glb",
+    "thumbnailUrl": "/assets/thumbs/Pebble_Round_5.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "rockpath-round-small-3",
+    "name": "RockPath Round Small 3",
+    "modelUrl": "/assets/environment/rocks/RockPath_Round_Small_3.glb",
+    "thumbnailUrl": "/assets/thumbs/RockPath_Round_Small_3.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "pebble-square-3",
+    "name": "Pebble Square 3",
+    "modelUrl": "/assets/environment/rocks/Pebble_Square_3.glb",
+    "thumbnailUrl": "/assets/thumbs/Pebble_Square_3.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "rockpath-round-small-1",
+    "name": "RockPath Round Small 1",
+    "modelUrl": "/assets/environment/rocks/RockPath_Round_Small_1.glb",
+    "thumbnailUrl": "/assets/thumbs/RockPath_Round_Small_1.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "pebble-round-4",
+    "name": "Pebble Round 4",
+    "modelUrl": "/assets/environment/rocks/Pebble_Round_4.glb",
+    "thumbnailUrl": "/assets/thumbs/Pebble_Round_4.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "pebble-round-3",
+    "name": "Pebble Round 3",
+    "modelUrl": "/assets/environment/rocks/Pebble_Round_3.glb",
+    "thumbnailUrl": "/assets/thumbs/Pebble_Round_3.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "pebble-square-2",
+    "name": "Pebble Square 2",
+    "modelUrl": "/assets/environment/rocks/Pebble_Square_2.glb",
+    "thumbnailUrl": "/assets/thumbs/Pebble_Square_2.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "rockpath-square-small-3",
+    "name": "RockPath Square Small 3",
+    "modelUrl": "/assets/environment/rocks/RockPath_Square_Small_3.glb",
+    "thumbnailUrl": "/assets/thumbs/RockPath_Square_Small_3.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "pebble-square-6",
+    "name": "Pebble Square 6",
+    "modelUrl": "/assets/environment/rocks/Pebble_Square_6.glb",
+    "thumbnailUrl": "/assets/thumbs/Pebble_Square_6.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "pebble-square-5",
+    "name": "Pebble Square 5",
+    "modelUrl": "/assets/environment/rocks/Pebble_Square_5.glb",
+    "thumbnailUrl": "/assets/thumbs/Pebble_Square_5.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "rockpath-round-wide",
+    "name": "RockPath Round Wide",
+    "modelUrl": "/assets/environment/rocks/RockPath_Round_Wide.glb",
+    "thumbnailUrl": "/assets/thumbs/RockPath_Round_Wide.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "rockpath-square-small-1",
+    "name": "RockPath Square Small 1",
+    "modelUrl": "/assets/environment/rocks/RockPath_Square_Small_1.glb",
+    "thumbnailUrl": "/assets/thumbs/RockPath_Square_Small_1.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "rockpath-square-small-2",
+    "name": "RockPath Square Small 2",
+    "modelUrl": "/assets/environment/rocks/RockPath_Square_Small_2.glb",
+    "thumbnailUrl": "/assets/thumbs/RockPath_Square_Small_2.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "rockpath-square-wide",
+    "name": "RockPath Square Wide",
+    "modelUrl": "/assets/environment/rocks/RockPath_Square_Wide.glb",
+    "thumbnailUrl": "/assets/thumbs/RockPath_Square_Wide.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "pebble-square-4",
+    "name": "Pebble Square 4",
+    "modelUrl": "/assets/environment/rocks/Pebble_Square_4.glb",
+    "thumbnailUrl": "/assets/thumbs/Pebble_Square_4.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "rock-medium-2",
+    "name": "Rock Medium 2",
+    "modelUrl": "/assets/environment/rocks/Rock_Medium_2.glb",
+    "thumbnailUrl": "/assets/thumbs/Rock_Medium_2.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "pebble-round-1",
+    "name": "Pebble Round 1",
+    "modelUrl": "/assets/environment/rocks/Pebble_Round_1.glb",
+    "thumbnailUrl": "/assets/thumbs/Pebble_Round_1.webp",
+    "category": "rocks"
+  },
+  {
+    "id": "rockpath-round-small-2",
+    "name": "RockPath Round Small 2",
+    "modelUrl": "/assets/environment/rocks/RockPath_Round_Small_2.glb",
+    "thumbnailUrl": "/assets/thumbs/RockPath_Round_Small_2.webp",
+    "category": "rocks"
+  }
+]

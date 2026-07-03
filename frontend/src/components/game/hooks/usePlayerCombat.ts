@@ -29,7 +29,7 @@ import {
   charState,
   attackTimer,
   SKILL_COOLDOWN,
-} from '../PlayerController.buffers';
+} from '@/src/entities/player/buffers';
 
 interface PlayerCombatProps {
   playerClass: string;

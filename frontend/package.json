@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "thumbs:gen": "bun run scripts/generate-thumbnails.ts"
   },
   "dependencies": {
     "@gltf-transform/core": "^4.4.0",

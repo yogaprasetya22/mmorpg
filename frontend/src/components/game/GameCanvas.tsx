@@ -9,11 +9,11 @@ import dynamic from 'next/dynamic';
 
 const Perf = dynamic(() => import("r3f-perf").then((mod) => mod.Perf), { ssr: false });
 const WorldEditor = dynamic(
-  () => import("./environment/WorldEditor").then((mod) => mod.WorldEditor),
+  () => import("@/src/features/world-editor/ui/WorldEditor").then((mod) => mod.WorldEditor),
   { ssr: false }
 );
 const WorldEditorUI = dynamic(
-  () => import("./environment/WorldEditorUI").then((mod) => mod.WorldEditorUI),
+  () => import("@/src/features/world-editor/ui/WorldEditorUI").then((mod) => mod.WorldEditorUI),
   { ssr: false }
 );
 import { ModularMap } from "./environment/ModularMap";
@@ -21,7 +21,7 @@ import { ModularMap } from "./environment/ModularMap";
 import { EnvironmentMultiGlobal } from "./environment/EnvironmentMultiGlobal";
 import { MapObstacle } from "@/src/core/domain/unit.types";
 import { useStore } from "@/src/state/useStore";
-import { useEditorStore } from "@/src/state/useEditorStore";
+import { useEditorStore } from "@/src/features/world-editor/store/useEditorStore";
 import { API_BASE_URL } from "@/src/core/config";
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { Activity, RefreshCw } from "lucide-react";
@@ -38,7 +38,7 @@ import { EmptyDrawGuard } from "./systems/EmptyDrawGuard";
 import { OptimizedPostProcessing } from "./systems/OptimizedPostProcessing";
 
 // Arena/Multiplayer Components
-import { PlayerController } from "./PlayerController";
+import { PlayerController } from "@/src/entities/player/ui/PlayerController";
 import { RemotePlayersRenderer } from "./RemotePlayersRenderer";
 import { RemoteMonstersRenderer } from "./RemoteMonstersRenderer";
 import { VFXProvider } from "./systems/VFXManager";

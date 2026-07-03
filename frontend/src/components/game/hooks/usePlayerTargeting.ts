@@ -10,7 +10,7 @@ import {
   hasTarget,
   AUTO_AIM_RADIUS,
   AUTO_AIM_RSQ,
-} from '../PlayerController.buffers';
+} from '@/src/entities/player/buffers';
 
 export function usePlayerTargeting(unitRegistry: React.RefObject<UnitRuntimeData[]> | undefined) {
   const lastNearestTargetId = useRef<string>("");

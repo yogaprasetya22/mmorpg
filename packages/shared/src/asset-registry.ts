@@ -4,6 +4,7 @@ export interface AssetInfo {
     name: string;
     path: string;
     category: "rocks" | "trees" | "vegetation";
+    thumbnail?: string;
 }
 
 export interface MaterialInfo {

@@ -7,7 +7,7 @@ import {
   _downRayOrigin,
   _downRayDir,
   _downRaycaster,
-} from '../PlayerController.buffers';
+} from '@/src/entities/player/buffers';
 
 export function usePlayerPhysicsGating(ecctrlRef: React.RefObject<any>) {
   const tick = (

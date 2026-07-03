@@ -1,0 +1,3632 @@
+{
+  "id": "node-59f48bd0-7a52-4a63-a420-b1c2fa076747",
+  "name": "Untitled World",
+  "version": 97,
+  "nodes": [
+    {
+      "id": "node-7e292a6b-5d3d-4880-831b-c6e7ba8bd35d",
+      "type": "mountain",
+      "name": "Peak 1",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 2.544772749301046,
+          "y": 5.3999999999999995,
+          "z": -59.05935971299186
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 7.810242200270295,
+          "y": 10.799999999999999,
+          "z": 7.277761227451265
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "peakIndex": 0,
+        "height": 10.799999999999999
+      },
+      "tags": [
+        "mountain_range_456",
+        "mountain",
+        "peak_0"
+      ],
+      "createdAt": "2026-07-02T07:06:13.502Z",
+      "updatedAt": "2026-07-02T07:06:13.502Z"
+    },
+    {
+      "id": "node-15535c65-4d15-4401-8b81-80e6f4822d80",
+      "type": "mountain",
+      "name": "Peak 2",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 17.667741087265313,
+          "y": 7.516026908252903,
+          "z": -60.56357708154246
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 8.462531407363713,
+          "y": 15.032053816505806,
+          "z": 9.41184305306524
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "peakIndex": 1,
+        "height": 15.032053816505806
+      },
+      "tags": [
+        "mountain_range_456",
+        "mountain",
+        "peak_1"
+      ],
+      "createdAt": "2026-07-02T07:06:13.503Z",
+      "updatedAt": "2026-07-02T07:06:13.503Z"
+    },
+    {
+      "id": "node-38724628-aacf-4498-ba37-9a30ead7fd52",
+      "type": "mountain",
+      "name": "Peak 3",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 27.234458240680397,
+          "y": 8.823803458662553,
+          "z": -57.39226898225024
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 8.043667867779732,
+          "y": 17.647606917325106,
+          "z": 7.951748826541007
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "peakIndex": 2,
+        "height": 17.647606917325106
+      },
+      "tags": [
+        "mountain_range_456",
+        "mountain",
+        "peak_2"
+      ],
+      "createdAt": "2026-07-02T07:06:13.503Z",
+      "updatedAt": "2026-07-02T07:06:13.503Z"
+    },
+    {
+      "id": "node-6f1e253e-fad2-4cc7-b488-6ccf22a3c914",
+      "type": "mountain",
+      "name": "Foothill 2",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 22.715482275933027,
+          "y": 5.294282075197532,
+          "z": -54.995983155444264
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 4.84460875345394,
+          "y": 6.176662421063787,
+          "z": 4.143975401762873
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "foothillOf": "Peak 2"
+      },
+      "tags": [
+        "mountain_range_456",
+        "mountain",
+        "foothill"
+      ],
+      "createdAt": "2026-07-02T07:06:13.503Z",
+      "updatedAt": "2026-07-02T07:06:13.503Z"
+    },
+    {
+      "id": "node-8294649c-c801-41e3-ac86-99139fc8e815",
+      "type": "mountain",
+      "name": "Peak 4",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 46.560711240861565,
+          "y": 8.823803458662553,
+          "z": -60.68230261467397
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 7.492671177722514,
+          "y": 17.647606917325106,
+          "z": 9.085134650580585
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "peakIndex": 3,
+        "height": 17.647606917325106
+      },
+      "tags": [
+        "mountain_range_456",
+        "mountain",
+        "peak_3"
+      ],
+      "createdAt": "2026-07-02T07:06:13.503Z",
+      "updatedAt": "2026-07-02T07:06:13.503Z"
+    },
+    {
+      "id": "node-56915290-b48a-4261-a99a-43b0789e3ced",
+      "type": "mountain",
+      "name": "Peak 5",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 62.53810710227117,
+          "y": 7.516026908252904,
+          "z": -62.54375862982124
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 7.781592714600265,
+          "y": 15.032053816505808,
+          "z": 7.7360597820952535
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "peakIndex": 4,
+        "height": 15.032053816505808
+      },
+      "tags": [
+        "mountain_range_456",
+        "mountain",
+        "peak_4"
+      ],
+      "createdAt": "2026-07-02T07:06:13.503Z",
+      "updatedAt": "2026-07-02T07:06:13.503Z"
+    },
+    {
+      "id": "node-aba204d3-3efd-4d65-a746-38ce4d785b20",
+      "type": "mountain",
+      "name": "Foothill 4",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 46.56250142562203,
+          "y": 4.5096161449517425,
+          "z": -56.14665620634332
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 4.31547831883654,
+          "y": 5.261218835777033,
+          "z": 3.274530930444598
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "foothillOf": "Peak 4"
+      },
+      "tags": [
+        "mountain_range_456",
+        "mountain",
+        "foothill"
+      ],
+      "createdAt": "2026-07-02T07:06:13.503Z",
+      "updatedAt": "2026-07-02T07:06:13.503Z"
+    },
+    {
+      "id": "node-8a7e6384-28eb-4e20-8eed-66461a5e0fa1",
+      "type": "mountain",
+      "name": "Peak 6",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 76.98343611275777,
+          "y": 5.3999999999999995,
+          "z": -58.57799895387143
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 6.09220434166491,
+          "y": 10.799999999999999,
+          "z": 9.0438352227211
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "peakIndex": 5,
+        "height": 10.799999999999999
+      },
+      "tags": [
+        "mountain_range_456",
+        "mountain",
+        "peak_5"
+      ],
+      "createdAt": "2026-07-02T07:06:13.503Z",
+      "updatedAt": "2026-07-02T07:06:13.503Z"
+    },
+    {
+      "id": "node-ab4fa64d-3845-41eb-9903-b91344c9c6a4",
+      "type": "mountain",
+      "name": "Foothill 5",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 61.25098398514092,
+          "y": 3.2399999999999998,
+          "z": -61.06755214789882
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 4.999727284535766,
+          "y": 3.7799999999999994,
+          "z": 4.2660916447639465
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "foothillOf": "Peak 5"
+      },
+      "tags": [
+        "mountain_range_456",
+        "mountain",
+        "foothill"
+      ],
+      "createdAt": "2026-07-02T07:06:13.503Z",
+      "updatedAt": "2026-07-02T07:06:13.503Z"
+    },
+    {
+      "id": "node-0154d192-de8b-4bf1-af34-056831f4d620",
+      "type": "zone",
+      "name": "Tundra Biome",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": -60
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 35,
+          "y": 0.1,
+          "z": 35
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "biomeType": "tundra",
+        "groundMaterial": "snow"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "zone",
+        "biome",
+        "tundra"
+      ],
+      "createdAt": "2026-07-02T07:06:18.821Z",
+      "updatedAt": "2026-07-02T07:06:18.821Z"
+    },
+    {
+      "id": "node-571908fc-0828-4d62-bc02-22a2fe059e2e",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -1.9411703071257116,
+          "y": 0,
+          "z": -56.45225405543924
+        },
+        "rotation": {
+          "x": 0,
+          "y": 258.85775280185044,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.2061177019961178,
+          "y": 2.621732821688056,
+          "z": 1.3647752996534108
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.821Z",
+      "updatedAt": "2026-07-02T07:06:18.821Z"
+    },
+    {
+      "id": "node-1d7963a0-73cc-4cfa-9ed4-a9f06fe891c2",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -5.955809553392883,
+          "y": 0,
+          "z": -62.94779998188184
+        },
+        "rotation": {
+          "x": 0,
+          "y": 306.63081594742835,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.0430027924478054,
+          "y": 2.1837456645444036,
+          "z": 1.0035154304932803
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:06:18.821Z",
+      "updatedAt": "2026-07-02T07:06:18.821Z"
+    },
+    {
+      "id": "node-8484b977-1248-43c2-b449-6ac31c3e3486",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -2.0518549627732168,
+          "y": 0,
+          "z": -61.533987044125986
+        },
+        "rotation": {
+          "x": 0,
+          "y": 315.0568355899304,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.8647094153566286,
+          "y": 1.485667780507356,
+          "z": 0.8055491376668216
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:06:18.821Z",
+      "updatedAt": "2026-07-02T07:06:18.821Z"
+    },
+    {
+      "id": "node-17c28d13-3ad2-45e1-a0dc-7316dbe5e9f5",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -8.942054310576962,
+          "y": 0,
+          "z": -80.4092829550519
+        },
+        "rotation": {
+          "x": 0,
+          "y": 141.24119854532182,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.9338643479626626,
+          "y": 2.932242054492235,
+          "z": 1.3958823568653316
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.821Z",
+      "updatedAt": "2026-07-02T07:06:18.821Z"
+    },
+    {
+      "id": "node-7e1b7fb1-ed7e-4fe3-b8ff-e64c93db34eb",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 10.73183995000663,
+          "y": 0,
+          "z": -77.66687015093422
+        },
+        "rotation": {
+          "x": 0,
+          "y": 21.722688199952245,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.8421866459073499,
+          "y": 2.3283360698260367,
+          "z": 1.382507429504767
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.821Z",
+      "updatedAt": "2026-07-02T07:06:18.821Z"
+    },
+    {
+      "id": "node-405ca035-3a0a-4d9b-aeb3-ed359dd2fd12",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 21.51756537406482,
+          "y": 0,
+          "z": -49.167026023861055
+        },
+        "rotation": {
+          "x": 0,
+          "y": 293.8894245028496,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.407434897031635,
+          "y": 2.9183430513367057,
+          "z": 1.0086426411289722
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-69571228-ccc3-4fec-a8c9-674ade3a2865",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 19.25689980797884,
+          "y": 0,
+          "z": -45.36809250681006
+        },
+        "rotation": {
+          "x": 0,
+          "y": 273.88353556394577,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.2905696745729074,
+          "y": 2.310278751887381,
+          "z": 1.1619331324938684
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-b5d696a4-05dd-4a94-868f-a932ef0dcc5e",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -6.614168592280838,
+          "y": 0,
+          "z": -72.29771754299964
+        },
+        "rotation": {
+          "x": 0,
+          "y": 291.0390598420054,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.1075991335557773,
+          "y": 2.593369530979544,
+          "z": 1.1369877599878238
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-cda77a92-78ed-49bd-bdfd-cc7ff4569157",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 13.263939596540862,
+          "y": 0,
+          "z": -78.22139116421118
+        },
+        "rotation": {
+          "x": 0,
+          "y": 180.08843352086842,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.8661720430012793,
+          "y": 2.1548987617716193,
+          "z": 1.4104097166098655
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-f8666deb-6b3c-4297-a15d-3bdad00f0faa",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 1.222861457816309,
+          "y": 0,
+          "z": -41.82534722211163
+        },
+        "rotation": {
+          "x": 0,
+          "y": 134.7001863643527,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.8532288199290634,
+          "y": 2.5817974410019815,
+          "z": 1.3386810777476057
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-aac41fbf-8b94-47c4-b815-c3951d613841",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 9.97159447970448,
+          "y": 0,
+          "z": -63.89601156066178
+        },
+        "rotation": {
+          "x": 0,
+          "y": 213.1329880747944,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.858912783348933,
+          "y": 1.2579076942056417,
+          "z": 0.8240638280054555
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-43ab8db5-6bd3-4ac9-88b6-2b2f449ece25",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -1.9858586200074433,
+          "y": 0,
+          "z": -57.094354910171816
+        },
+        "rotation": {
+          "x": 0,
+          "y": 90.78696297481656,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.9326081531122328,
+          "y": 1.6099319192580879,
+          "z": 0.9053948405897245
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-8ecb444c-3689-44c5-ba54-13401f64b879",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -6.189013926839303,
+          "y": 0,
+          "z": -64.15453610402555
+        },
+        "rotation": {
+          "x": 0,
+          "y": 158.61453780904412,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.0047249903203919,
+          "y": 1.3327530031092465,
+          "z": 0.8429551401175559
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-28d961eb-3991-4d10-8014-08684be84f48",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -24.00258128875801,
+          "y": 0,
+          "z": -53.36280436715651
+        },
+        "rotation": {
+          "x": 0,
+          "y": 88.56241442263126,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.43229500122834,
+          "y": 1.7820752235129476,
+          "z": 1.3367773409700021
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-19c09b90-faff-4c13-8a3d-206f59aa5dc1",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 5.4334018900536805,
+          "y": 0,
+          "z": -46.76738210769645
+        },
+        "rotation": {
+          "x": 0,
+          "y": 58.8390916865319,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.0311661260668188,
+          "y": 2.6056441189721227,
+          "z": 1.478166537778452
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-ae994c8d-2865-4d3c-952a-f52286516434",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 4.913938737010733,
+          "y": 0,
+          "z": -63.00874923230499
+        },
+        "rotation": {
+          "x": 0,
+          "y": 178.04198113270104,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.4623953053960577,
+          "y": 2.4155967887490988,
+          "z": 1.410780451167375
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-8b832688-0bd3-41c6-a0c5-b7b4d5208b5a",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 19.963649730037705,
+          "y": 0,
+          "z": -55.78203043495662
+        },
+        "rotation": {
+          "x": 0,
+          "y": 153.13980152830482,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.2956316342810168,
+          "y": 1.7738585332408547,
+          "z": 1.0937433797866105
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-a3567136-f7e3-45af-a646-02b4171266c5",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -11.83890685604075,
+          "y": 0,
+          "z": -87.54153516715049
+        },
+        "rotation": {
+          "x": 0,
+          "y": 90.52397866733372,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.3816827966598795,
+          "y": 2.0490659596398473,
+          "z": 1.0343697471544147
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-2afed11c-b923-429a-a292-fc77aa18515f",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -10.014315718560752,
+          "y": 0,
+          "z": -62.49681063886637
+        },
+        "rotation": {
+          "x": 0,
+          "y": 14.781356323510408,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.0329538472695277,
+          "y": 2.9705829727463424,
+          "z": 1.2938219798495993
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-a493ca69-8418-426f-8084-0407497d7a75",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -2.7615932094471356,
+          "y": 0,
+          "z": -78.33007161044523
+        },
+        "rotation": {
+          "x": 0,
+          "y": 244.89053576253355,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.5127285362221301,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-4b93d51b-6756-4614-a64d-5ea6ab96e651",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -29.754250660568378,
+          "y": 0,
+          "z": -46.180203820496736
+        },
+        "rotation": {
+          "x": 0,
+          "y": 22.330107875168324,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.37338654713239516,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-27916a98-5784-4d07-b3c4-c84aa28ea3d8",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -9.070285262551366,
+          "y": 0,
+          "z": -63.10738979276483
+        },
+        "rotation": {
+          "x": 0,
+          "y": 232.924610003829,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.8996202189242466,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-13478406-1555-42e1-8352-51d99370c64c",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 7.9445983668605775,
+          "y": 0,
+          "z": -37.763482306857796
+        },
+        "rotation": {
+          "x": 0,
+          "y": 318.7231910135597,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.946358669293113,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-c55963ef-156d-4dc8-a67b-db0d6780a291",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -21.38605321929992,
+          "y": 0,
+          "z": -43.46206861698562
+        },
+        "rotation": {
+          "x": 0,
+          "y": 283.7954021897167,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.9289069117046893,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-a11b1cc7-9537-4de5-a316-949ff8f2a569",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -23.748273734491278,
+          "y": 0,
+          "z": -69.03712420841673
+        },
+        "rotation": {
+          "x": 0,
+          "y": 100.42225873097777,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.4325579486321658,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-69c70165-bda9-4de2-a198-b33b44ec9796",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -4.200504692748708,
+          "y": 0,
+          "z": -75.62564155308365
+        },
+        "rotation": {
+          "x": 0,
+          "y": 151.12573916092515,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.3580124255735427,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-3efe37bb-d13a-442e-bcae-4a622166ddfa",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 7.020375373826017,
+          "y": 0,
+          "z": -62.626327538038396
+        },
+        "rotation": {
+          "x": 0,
+          "y": 241.06214390136302,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.830173080950044,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-a612f7b5-01b1-4b40-ba31-8956b3667e48",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -3.069826638338774,
+          "y": 0,
+          "z": -60.138296115701785
+        },
+        "rotation": {
+          "x": 0,
+          "y": 169.3026157747954,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.3929877039277926,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-bf557808-d1ed-4aa1-a837-dcba8b13dde6",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 3.6521786500856943,
+          "y": 0,
+          "z": -62.472573107155526
+        },
+        "rotation": {
+          "x": 0,
+          "y": 67.25504365749657,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.33392057355958965,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-d5671c04-696d-48a8-aee4-41c0166be75c",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -10.439664673631887,
+          "y": 0,
+          "z": -65.18144390013347
+        },
+        "rotation": {
+          "x": 0,
+          "y": 356.3111263420433,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.7418168588774279,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-01900425-db57-4813-b38c-d28b278194df",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -17.328873407374097,
+          "y": 0,
+          "z": -60.517959399824605
+        },
+        "rotation": {
+          "x": 0,
+          "y": 153.15193491987884,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.8795341862831265,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-feb29693-b8b9-45ff-a58f-d23159bd385a",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -1.5186033846094902,
+          "y": 0,
+          "z": -61.574857442070055
+        },
+        "rotation": {
+          "x": 0,
+          "y": 280.8999508526176,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.6130430973367765,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-8407e1d6-d9eb-41ca-8d8f-b374a872b11a",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -29.576919936981962,
+          "y": 0,
+          "z": -74.79128553747375
+        },
+        "rotation": {
+          "x": 0,
+          "y": 347.9619623813778,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.7830995967844501,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-ab336fb6-8294-4e02-8d8c-b4f7f3063aa4",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 4.204727524288467,
+          "y": 0,
+          "z": -87.17554605946755
+        },
+        "rotation": {
+          "x": 0,
+          "y": 112.1862693876028,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.8680236989166588,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-9e6afdf3-d599-4d99-a1f5-6357eb9dd6f8",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 5.139508147218919,
+          "y": 0,
+          "z": -65.73180038162339
+        },
+        "rotation": {
+          "x": 0,
+          "y": 279.10477677360177,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.8883406109176575,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-df5f735d-60a7-4b6e-a804-6ef1af644f56",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 2.5962748063906607,
+          "y": 0,
+          "z": -48.57825905365601
+        },
+        "rotation": {
+          "x": 0,
+          "y": 335.1657242048532,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.5403288623783737,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-c02840d0-4871-4640-9122-9332eb875aaf",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 24.63880252275461,
+          "y": 0,
+          "z": -71.33911829711126
+        },
+        "rotation": {
+          "x": 0,
+          "y": 350.8456495497376,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.8640302429907023,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-108a8a0d-a499-488a-8e88-e818e9801fd2",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -24.813909990591192,
+          "y": 0,
+          "z": -39.02306293781655
+        },
+        "rotation": {
+          "x": 0,
+          "y": 75.49173588864505,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.7913977362215519,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-bf7f1584-7eed-4e81-a841-123ddfc06065",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 30.24739987160107,
+          "y": 0,
+          "z": -67.36028109047882
+        },
+        "rotation": {
+          "x": 0,
+          "y": 89.00126690044999,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.4814040496945381,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-9291d976-cab3-4029-9758-3bbc185cdf74",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 22.664737667028323,
+          "y": 0,
+          "z": -41.23910219284017
+        },
+        "rotation": {
+          "x": 0,
+          "y": 353.3017926849425,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.9071743674343451,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-3f8fbcba-c6d9-4bc3-af87-a45eaa3f335f",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -13.209356977148694,
+          "y": 0,
+          "z": -90.24326320515617
+        },
+        "rotation": {
+          "x": 0,
+          "y": 288.5599689837545,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.6098714220803231,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-9bb02f0d-191d-475c-bfee-21f5bd4a884d",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -9.620016912449152,
+          "y": 0,
+          "z": -56.521448802487036
+        },
+        "rotation": {
+          "x": 0,
+          "y": 350.0435411464423,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.6701186468591913,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-bbb88d74-b9d3-4e36-8e60-d094333a483b",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -28.547267205567973,
+          "y": 0,
+          "z": -71.40528913122651
+        },
+        "rotation": {
+          "x": 0,
+          "y": 245.28028110042214,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.8550752372946591,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-6569750f-3a21-4c4a-acc9-c8fdf46e2361",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 1.4699037852905545,
+          "y": 0,
+          "z": -59.77005627961122
+        },
+        "rotation": {
+          "x": 0,
+          "y": 106.32124210707843,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.7206288198241964,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-9fc689d7-242e-4f3a-885e-900d6049dff3",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 25.950031763660483,
+          "y": 0,
+          "z": -79.57721311606052
+        },
+        "rotation": {
+          "x": 0,
+          "y": 14.75896155461669,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.7690287461271509,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-8c6de7ed-ef1e-41d3-abd6-1de5f4056f7b",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -12.833227239503685,
+          "y": 0,
+          "z": -72.34384932807234
+        },
+        "rotation": {
+          "x": 0,
+          "y": 146.56510692089796,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.9696052690269426,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-410a7a97-f027-4555-ab10-2f2dc259ba19",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 9.56813715935803,
+          "y": 0,
+          "z": -63.37614550460131
+        },
+        "rotation": {
+          "x": 0,
+          "y": 116.70356140471995,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.6735952850198372,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-e0688f46-1b30-4cc6-a481-5374b1574d6a",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -3.2111618952889764,
+          "y": 0,
+          "z": -68.13444920137601
+        },
+        "rotation": {
+          "x": 0,
+          "y": 303.2603950984776,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.9664314569206909,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 789,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_789",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:06:18.822Z",
+      "updatedAt": "2026-07-02T07:06:18.822Z"
+    },
+    {
+      "id": "node-3ba96e84-8647-49ab-a721-e34c979430a2",
+      "type": "structure",
+      "name": "sumur_kecil",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "isInteractive": true,
+        "type": "well"
+      },
+      "tags": [],
+      "createdAt": "2026-07-02T07:07:09.656Z",
+      "updatedAt": "2026-07-02T07:07:09.656Z"
+    },
+    {
+      "id": "node-efeb144d-4595-4c89-a59e-ad2cc6c73d65",
+      "type": "zone",
+      "name": "Tundra Biome",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": -60
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 35,
+          "y": 0.1,
+          "z": 35
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "biomeType": "tundra",
+        "groundMaterial": "snow"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "zone",
+        "biome",
+        "tundra"
+      ],
+      "createdAt": "2026-07-02T07:53:25.764Z",
+      "updatedAt": "2026-07-02T07:53:25.764Z"
+    },
+    {
+      "id": "node-03b88df8-eb77-4d1c-804c-8fa839df5168",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 18.38177594149622,
+          "y": 0,
+          "z": -69.49308248528229
+        },
+        "rotation": {
+          "x": 0,
+          "y": 114.99851047061384,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.461236460180953,
+          "y": 1.8121409728191793,
+          "z": 1.2309429962886498
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.764Z",
+      "updatedAt": "2026-07-02T07:53:25.764Z"
+    },
+    {
+      "id": "node-d0607184-b6d1-47cf-9faa-c04eb3cdfbff",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 10.75240771846234,
+          "y": 0,
+          "z": -74.23484583078547
+        },
+        "rotation": {
+          "x": 0,
+          "y": 336.4638610649854,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.1576418768614531,
+          "y": 1.9758744132705033,
+          "z": 0.9742666597478092
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.765Z",
+      "updatedAt": "2026-07-02T07:53:25.765Z"
+    },
+    {
+      "id": "node-2dac9f39-ac64-4826-8216-4e64b10d6457",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -30.75376424768587,
+          "y": 0,
+          "z": -66.47927481121293
+        },
+        "rotation": {
+          "x": 0,
+          "y": 205.91557231731713,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.332082978100516,
+          "y": 1.772565795108676,
+          "z": 1.0612174561014398
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:53:25.765Z",
+      "updatedAt": "2026-07-02T07:53:25.765Z"
+    },
+    {
+      "id": "node-6aafab72-25a3-4768-bd1a-be42e38988f1",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 3.7810628350405056,
+          "y": 0,
+          "z": -88.1052789844987
+        },
+        "rotation": {
+          "x": 0,
+          "y": 27.374482210725546,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.1117787250550464,
+          "y": 1.8680298910476267,
+          "z": 1.114657650422305
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:53:25.765Z",
+      "updatedAt": "2026-07-02T07:53:25.765Z"
+    },
+    {
+      "id": "node-fb445a54-04ea-46b0-9a6c-c89b618ff626",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 26.045666540662843,
+          "y": 0,
+          "z": -61.31631603939189
+        },
+        "rotation": {
+          "x": 0,
+          "y": 49.415567480027676,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.38140087982174,
+          "y": 2.4740003487095237,
+          "z": 0.8161357597913593
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:53:25.765Z",
+      "updatedAt": "2026-07-02T07:53:25.765Z"
+    },
+    {
+      "id": "node-cd8c4c7b-0c1c-4726-bc8e-8be91448711f",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 0.7412342552807811,
+          "y": 0,
+          "z": -70.74794093197815
+        },
+        "rotation": {
+          "x": 0,
+          "y": 115.31693863682449,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.499904549587518,
+          "y": 2.2660916447639465,
+          "z": 1.2012182105099782
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.765Z",
+      "updatedAt": "2026-07-02T07:53:25.765Z"
+    },
+    {
+      "id": "node-35c3ff03-e129-4b4f-866e-630e9e0cc0ca",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 13.593375151355206,
+          "y": 0,
+          "z": -60.88171847338121
+        },
+        "rotation": {
+          "x": 0,
+          "y": 132.93521957471967,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.3109788771020248,
+          "y": 1.9242431446909904,
+          "z": 0.952771393978037
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:53:25.765Z",
+      "updatedAt": "2026-07-02T07:53:25.765Z"
+    },
+    {
+      "id": "node-9a3cd02e-4c69-45c8-8ead-4aef5be6423b",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 9.45959746976556,
+          "y": 0,
+          "z": -73.01348743167168
+        },
+        "rotation": {
+          "x": 0,
+          "y": 128.52266664616764,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.48177165503148,
+          "y": 2.5862261401489377,
+          "z": 0.8884710415266455
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:53:25.765Z",
+      "updatedAt": "2026-07-02T07:53:25.765Z"
+    },
+    {
+      "id": "node-b9331741-ad04-4422-ba88-967c2057982b",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 23.537395702680907,
+          "y": 0,
+          "z": -73.59111484456776
+        },
+        "rotation": {
+          "x": 0,
+          "y": 191.94589946419,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.1359760782215744,
+          "y": 1.9169668341055512,
+          "z": 1.2317179962294176
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.765Z",
+      "updatedAt": "2026-07-02T07:53:25.765Z"
+    },
+    {
+      "id": "node-821ac9bf-dcf5-41fa-819f-843a9b571fd9",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 4.397265094622884,
+          "y": 0,
+          "z": -77.17897492584758
+        },
+        "rotation": {
+          "x": 0,
+          "y": 13.178809527307749,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.0775435423711315,
+          "y": 1.1559547251090407,
+          "z": 1.2518759462283924
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.765Z",
+      "updatedAt": "2026-07-02T07:53:25.765Z"
+    },
+    {
+      "id": "node-87ede5a6-96df-4509-8018-04a2e0868417",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -10.370138376877149,
+          "y": 0,
+          "z": -77.5638008047159
+        },
+        "rotation": {
+          "x": 0,
+          "y": 27.45721511542797,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.1858119488460943,
+          "y": 2.301721094176173,
+          "z": 1.0578368304762988
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:53:25.765Z",
+      "updatedAt": "2026-07-02T07:53:25.765Z"
+    },
+    {
+      "id": "node-30ccc099-a0c8-4da4-baf0-bf6669b32a59",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 4.05475664185159,
+          "y": 0,
+          "z": -76.31594082885258
+        },
+        "rotation": {
+          "x": 0,
+          "y": 227.09606730379164,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.1596243696985766,
+          "y": 2.2573096305131912,
+          "z": 1.0064357404364273
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:53:25.765Z",
+      "updatedAt": "2026-07-02T07:53:25.765Z"
+    },
+    {
+      "id": "node-242ec457-1a10-4180-ac09-1a6d406e08c0",
+      "type": "vegetation",
+      "name": "dead_tree",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -0.8505731616889802,
+          "y": 0,
+          "z": -78.76808257085091
+        },
+        "rotation": {
+          "x": 0,
+          "y": 134.2117644008249,
+          "z": 0
+        },
+        "scale": {
+          "x": 1.1514482976635918,
+          "y": 1.8078175392001867,
+          "z": 1.3058322007767855
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "treeType": "dead_tree",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "tree",
+        "dead_tree"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-3da8cddd-ff1b-4efb-90f8-710905d38a61",
+      "type": "vegetation",
+      "name": "pine_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 11.353383930621511,
+          "y": 0,
+          "z": -44.16975294998371
+        },
+        "rotation": {
+          "x": 0,
+          "y": 163.05083172395825,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.8112806554883719,
+          "y": 2.962800083681941,
+          "z": 0.8676360281184317
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "treeType": "pine_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "tree",
+        "pine_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-14339291-19b9-4004-b476-1ac1df9ca50b",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -24.9261890549018,
+          "y": 0,
+          "z": -65.84329460175093
+        },
+        "rotation": {
+          "x": 0,
+          "y": 292.89347369223833,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.9061244596727192,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-59447d0b-99e6-498d-87df-384c099f1723",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -2.50717861225013,
+          "y": 0,
+          "z": -66.51166644379472
+        },
+        "rotation": {
+          "x": 0,
+          "y": 242.53449082374573,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.660349379805848,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-5aba2efd-14f5-40dc-8497-87e17ced1803",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 26.420546796759652,
+          "y": 0,
+          "z": -79.31499414413324
+        },
+        "rotation": {
+          "x": 0,
+          "y": 220.92638231813908,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.9827813772717491,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-8e01a036-e46b-4435-8b0a-303b336c05d9",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 1.1026265590170905,
+          "y": 0,
+          "z": -61.01969445046611
+        },
+        "rotation": {
+          "x": 0,
+          "y": 160.43445627205074,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.3229519840329885,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-b6e9639b-f844-4e3e-ad00-7c1393cc2948",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 28.31432355465726,
+          "y": 0,
+          "z": -54.395810179572436
+        },
+        "rotation": {
+          "x": 0,
+          "y": 241.40036107040942,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.4566827499540522,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-8988cb8f-869f-4076-b312-7beb56db42c3",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 1.6267765014970972,
+          "y": 0,
+          "z": -55.61904724687183
+        },
+        "rotation": {
+          "x": 0,
+          "y": 337.5412620138377,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.7818374438211322,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-15b9b667-7964-49e8-8136-161ff1c4a49e",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -9.419767815154858,
+          "y": 0,
+          "z": -32.62037973970861
+        },
+        "rotation": {
+          "x": 0,
+          "y": 263.78805345855653,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.8761541416868568,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-20823930-98fe-4a5e-a70f-bf8255fda602",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -2.97781898048026,
+          "y": 0,
+          "z": -44.87314904539601
+        },
+        "rotation": {
+          "x": 0,
+          "y": 184.72100260667503,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.8199754836503417,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-bbcb940e-214c-4dc9-a36f-594a6f4cb72b",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 29.085881677044917,
+          "y": 0,
+          "z": -54.915078012221414
+        },
+        "rotation": {
+          "x": 0,
+          "y": 272.88200659677386,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.8459540534298866,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-2737e542-4ec7-4f23-825e-e47d7ecfd9ed",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -2.378309194397354,
+          "y": 0,
+          "z": -74.43467637124613
+        },
+        "rotation": {
+          "x": 0,
+          "y": 230.1759158167988,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.8083949691848829,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-842c29aa-8644-4f81-a78f-0297b9dee85f",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 3.530811892428668,
+          "y": 0,
+          "z": -66.15805625631121
+        },
+        "rotation": {
+          "x": 0,
+          "y": 17.770140822976828,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.9123071857728065,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-90d2bd94-b33b-4925-a180-a94f5fe8ff44",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -10.89642223286148,
+          "y": 0,
+          "z": -63.525970908735296
+        },
+        "rotation": {
+          "x": 0,
+          "y": 182.4292280897498,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.7398124372120947,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-847bded7-8860-4b29-b145-ef30e99bf705",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 30.309228447442344,
+          "y": 0,
+          "z": -48.3403007380911
+        },
+        "rotation": {
+          "x": 0,
+          "y": 227.68076070584357,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.6849667488830165,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-0b8ad1dc-6006-4781-a237-7c4dc380ce57",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -2.08094883738478,
+          "y": 0,
+          "z": -53.58635657602605
+        },
+        "rotation": {
+          "x": 0,
+          "y": 28.278970532119274,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.8507228836650029,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:53:25.766Z",
+      "updatedAt": "2026-07-02T07:53:25.766Z"
+    },
+    {
+      "id": "node-30526bcd-8836-452c-8623-0a003dada462",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 6.958379778383566,
+          "y": 0,
+          "z": -55.116581884457915
+        },
+        "rotation": {
+          "x": 0,
+          "y": 266.32628987543285,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.7856861526612192,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.767Z",
+      "updatedAt": "2026-07-02T07:53:25.767Z"
+    },
+    {
+      "id": "node-faa44e83-5353-456c-b956-5a33b53eb826",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 9.802946141879751,
+          "y": 0,
+          "z": -56.21322034501706
+        },
+        "rotation": {
+          "x": 0,
+          "y": 4.46770585142076,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.8744284199317918,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.767Z",
+      "updatedAt": "2026-07-02T07:53:25.767Z"
+    },
+    {
+      "id": "node-71693d4b-cdc2-4aa2-bb64-2c059446d815",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -8.240243501755405,
+          "y": 0,
+          "z": -58.91548231391022
+        },
+        "rotation": {
+          "x": 0,
+          "y": 336.76086257211864,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.4191970948828384,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:53:25.767Z",
+      "updatedAt": "2026-07-02T07:53:25.767Z"
+    },
+    {
+      "id": "node-cfff68da-098c-4bff-aaa2-d9fef40f504f",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -6.4371515239824815,
+          "y": 0,
+          "z": -49.48573245485764
+        },
+        "rotation": {
+          "x": 0,
+          "y": 8.484048396348953,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.5395553356269374,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.767Z",
+      "updatedAt": "2026-07-02T07:53:25.767Z"
+    },
+    {
+      "id": "node-61dccd7c-51ef-479b-b613-54e552209a84",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -1.8919996656570996,
+          "y": 0,
+          "z": -44.43242706624257
+        },
+        "rotation": {
+          "x": 0,
+          "y": 158.66091513074934,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.5913919862592593,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.767Z",
+      "updatedAt": "2026-07-02T07:53:25.767Z"
+    },
+    {
+      "id": "node-91dfe988-bfd3-4a9d-aad8-a773426441ef",
+      "type": "vegetation",
+      "name": "ice_shard",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 5.260971353503644,
+          "y": 0,
+          "z": -68.00106440090067
+        },
+        "rotation": {
+          "x": 0,
+          "y": 178.50356700830162,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.8030185300856829,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "ice_shard",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "ice_shard"
+      ],
+      "createdAt": "2026-07-02T07:53:25.767Z",
+      "updatedAt": "2026-07-02T07:53:25.767Z"
+    },
+    {
+      "id": "node-c808c706-c865-4016-9761-f1e8d9def69a",
+      "type": "vegetation",
+      "name": "rock_snow",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": -4.311708208970917,
+          "y": 0,
+          "z": -72.21921542531494
+        },
+        "rotation": {
+          "x": 0,
+          "y": 90.10595706291497,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.5,
+          "y": 0.6813545834971592,
+          "z": 0.5
+        }
+      },
+      "bounds": null,
+      "properties": {
+        "seed": 456,
+        "decorType": "rock_snow",
+        "biome": "tundra"
+      },
+      "tags": [
+        "biome_tundra_456",
+        "vegetation",
+        "decor",
+        "rock_snow"
+      ],
+      "createdAt": "2026-07-02T07:53:25.767Z",
+      "updatedAt": "2026-07-02T07:53:25.767Z"
+    },
+    {
+      "id": "node-1c5af4df-185d-4dd1-8c2f-26516af858e2",
+      "type": "structure",
+      "name": "sumur_kecil",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      },
+      "bounds": null,
+      "properties": {},
+      "tags": [],
+      "createdAt": "2026-07-02T07:53:35.944Z",
+      "updatedAt": "2026-07-02T07:53:35.944Z"
+    }
+  ],
+  "items": [],
+  "metadata": {},
+  "createdAt": "2026-07-02T07:04:10.595Z",
+  "updatedAt": "2026-07-02T07:53:35.944Z"
+}
