@@ -158,16 +158,16 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
         position={sunPosition}
         intensity={lightIntensity ?? (sky === 'night' ? 0.15 : 0.8)}
         castShadow
-        shadow-mapSize-width={isEditorOpen ? 4096 : 2048}
-        shadow-mapSize-height={isEditorOpen ? 4096 : 2048}
-        shadow-bias={isEditorOpen ? -0.001 : -0.0005}
-        shadow-normalBias={isEditorOpen ? 0.15 : 0.06}
-        shadow-camera-near={isEditorOpen ? 1 : 0.5}
-        shadow-camera-far={isEditorOpen ? 500 : 200}
-        shadow-camera-left={isEditorOpen ? -150 : -60}
-        shadow-camera-right={isEditorOpen ? 150 : 60}
-        shadow-camera-top={isEditorOpen ? 150 : 60}
-        shadow-camera-bottom={isEditorOpen ? -150 : -60}
+        shadow-mapSize-width={isEditorOpen ? 2048 : 1024}
+        shadow-mapSize-height={isEditorOpen ? 2048 : 1024}
+        shadow-bias={-0.0005}
+        shadow-normalBias={0.06}
+        shadow-camera-near={0.5}
+        shadow-camera-far={200}
+        shadow-camera-left={isEditorOpen ? -100 : -40}
+        shadow-camera-right={isEditorOpen ? 100 : 40}
+        shadow-camera-top={isEditorOpen ? 100 : 40}
+        shadow-camera-bottom={isEditorOpen ? -100 : -40}
       />
 
       <StormTerrain
@@ -180,7 +180,7 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
       {/* WATER PLANE (NO COLLIDER) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.85, 0]}>
         <planeGeometry args={[1500, 1500]} />
-        <primitive object={PainterlyWaterMaterial} attach="material" />
+        <primitive object={PainterlyWaterMaterial} attach="material" transparent={true} />
       </mesh>
 
       {/* Exponential Fog for depth */}

@@ -32,8 +32,8 @@ const HierarchyRow = memo(({
   return (
     <div
       className={`flex items-center gap-1 pl-4 pr-1 py-[3px] rounded-md border text-[9px] transition-all duration-150 group cursor-pointer ${isSelected
-          ? 'bg-blue-600/15 border-blue-500/50 text-white'
-          : 'bg-transparent border-transparent hover:bg-zinc-800/40 text-zinc-400 hover:text-zinc-200'
+        ? 'bg-blue-600/15 border-blue-500/50 text-white'
+        : 'bg-transparent border-transparent hover:bg-zinc-800/40 text-zinc-400 hover:text-zinc-200'
         }`}
       onClick={onClick}
     >
@@ -89,6 +89,7 @@ export const SceneHierarchy = () => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Virtualizer — 22px per row (py-[3px] + text-[9px] ≈ 22px)
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual returns non-memoizable functions, intentional for virtualization
   const rowVirtualizer = useVirtualizer({
     count: reversedItems.length,
     getScrollElement: () => scrollContainerRef.current,
@@ -172,8 +173,8 @@ export const SceneHierarchy = () => {
             <div
               onClick={handleSelectTerrain}
               className={`flex items-center gap-1.5 pl-4 pr-1 py-[3px] rounded-md border text-[9px] transition-all duration-150 cursor-pointer ${selectedId === 'terrain'
-                  ? 'bg-indigo-600/15 border-indigo-500/50 text-white'
-                  : 'bg-transparent border-transparent hover:bg-zinc-800/40 text-zinc-400 hover:text-zinc-200'
+                ? 'bg-indigo-600/15 border-indigo-500/50 text-white'
+                : 'bg-transparent border-transparent hover:bg-zinc-800/40 text-zinc-400 hover:text-zinc-200'
                 }`}
             >
               <Mountain className={`w-3 h-3 flex-shrink-0 ${selectedId === 'terrain' ? 'text-indigo-400' : 'text-zinc-600'}`} />

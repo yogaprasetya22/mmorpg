@@ -40,7 +40,7 @@ export const PlayerStatsHUD = forwardRef<PlayerStatsHUDRef, {
         if (!prev) return { hp, max_hp: maxHp, mp: mp ?? 50, max_mp: maxMp ?? 50, level: defaultLevel, gold: 0, username: defaultUsername };
         if (prev.hp === hp && prev.max_hp === maxHp && (typeof mp === 'undefined' || prev.mp === mp) && (typeof maxMp === 'undefined' || prev.max_mp === maxMp)) return prev;
         
-        let next = { ...prev, hp, max_hp: maxHp };
+        const next = { ...prev, hp, max_hp: maxHp };
         if (typeof mp !== 'undefined') next.mp = mp;
         if (typeof maxMp !== 'undefined') next.max_mp = maxMp;
         setTimeout(() => {

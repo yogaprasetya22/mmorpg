@@ -14,7 +14,7 @@
  *   - constants/terrain.constants.ts (nilai tetap)
  */
 
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 import { StaticCollider } from 'bvhecctrl';
@@ -50,7 +50,7 @@ export const StormTerrain = ({
   onReady,
   onSculptLoaded,
 }: StormTerrainProps) => {
-  const { terrainConfig, brushSize, paintMode, brushHoverPos, isEditorOpen } = useEditorStore();
+  const { terrainConfig, brushSize, paintMode, brushHoverPos, isEditorOpen, terrainWireframe } = useEditorStore();
 
   const {
     paintTexture, sculptHeightsRef, sculptTrigger, isSculptLoaded,
@@ -58,7 +58,31 @@ export const StormTerrain = ({
     meshRef, handlePaint, ringColor,
   } = useTerrainBrush(baseDistance, onSculptLoaded);
 
-  // ── Terrain geometry ───────────────────────────────────────────────────────
+  const physicsMeshRef = useRef<THREE.Mesh>(null!);
+
+  // ── Physics geometry (128 segments for perfect collision parity) ──
+  const physicsGeo = useMemo(() => {
+    const segs = potatoMode ? 64 : 128;
+    const geo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, segs, segs);
+    const pos = geo.attributes.position;
+    const heights = sculptHeightsRef.current;
+
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const elev = getTerrainElevation(x, y, 'STORM', baseDistance, terrainConfig, true);
+      const u  = (x + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+      const v  = (y + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+      const px = Math.max(0, Math.min(SCULPT_RES - 1, Math.round(u * (SCULPT_RES - 1))));
+      const py = Math.max(0, Math.min(SCULPT_RES - 1, Math.round((1 - v) * (SCULPT_RES - 1))));
+      pos.setZ(i, elev + (heights[py * SCULPT_RES + px] || 0));
+    }
+    geo.computeVertexNormals();
+    (geo as any).computeBoundsTree({ maxDepth: 32, maxLeafSize: 10 });
+    return geo;
+  }, [baseDistance, potatoMode, terrainConfig]);
+
+  // ── Visual geometry (128 segments for perfect collision parity) ──
   const terrainGeo = useMemo(() => {
     const segs = potatoMode ? 64 : 128;
     const geo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, segs, segs);
@@ -78,7 +102,53 @@ export const StormTerrain = ({
     geo.computeVertexNormals();
     (geo as any).computeBoundsTree({ maxDepth: 64, maxLeafSize: 5 });
     return geo;
-  }, [baseDistance, potatoMode, terrainConfig, sculptTrigger]);
+  }, [baseDistance, potatoMode, terrainConfig]);
+
+  // Update both visual & physics mesh heights when sculptTrigger fires (e.g. load/reset/flatten)
+  useEffect(() => {
+    const heights = sculptHeightsRef.current;
+    if (!isSculptLoaded) return;
+
+    // 1. Update visual mesh
+    if (meshRef.current) {
+      const geo = meshRef.current.geometry;
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        const elev = getTerrainElevation(x, y, 'STORM', baseDistance, terrainConfig, true);
+        const u  = (x + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+        const v  = (y + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+        const px = Math.max(0, Math.min(SCULPT_RES - 1, Math.round(u * (SCULPT_RES - 1))));
+        const py = Math.max(0, Math.min(SCULPT_RES - 1, Math.round((1 - v) * (SCULPT_RES - 1))));
+        pos.setZ(i, elev + (heights[py * SCULPT_RES + px] || 0));
+      }
+      pos.needsUpdate = true;
+      geo.computeVertexNormals();
+      const bt = (geo as any).boundsTree;
+      if (bt) bt.refit();
+    }
+
+    // 2. Update physics mesh
+    if (physicsMeshRef.current) {
+      const geo = physicsMeshRef.current.geometry;
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        const elev = getTerrainElevation(x, y, 'STORM', baseDistance, terrainConfig, true);
+        const u  = (x + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+        const v  = (y + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+        const px = Math.max(0, Math.min(SCULPT_RES - 1, Math.round(u * (SCULPT_RES - 1))));
+        const py = Math.max(0, Math.min(SCULPT_RES - 1, Math.round((1 - v) * (SCULPT_RES - 1))));
+        pos.setZ(i, elev + (heights[py * SCULPT_RES + px] || 0));
+      }
+      pos.needsUpdate = true;
+      geo.computeVertexNormals();
+      const bt = (geo as any).boundsTree;
+      if (bt) bt.refit();
+    }
+  }, [sculptTrigger, baseDistance, terrainConfig, isSculptLoaded]);
 
   // Signal parent terrain siap dipakai
   useEffect(() => {
@@ -131,26 +201,37 @@ export const StormTerrain = ({
     <>
       {/* ── Terrain mesh dengan physics collider ── */}
       <StaticCollider
-        key={`terrain-sc-${sculptTrigger}`}
+        key={`terrain-collider-key-${isSculptLoaded}-${sculptTrigger}`}
+        bvhName="terrain"
         debug={debug}
         restitution={0}
         friction={1}
-        BVHOptions={{ strategy: 1, maxDepth: 64, maxLeafSize: 5, verbose: false } as any}
+        BVHOptions={{ strategy: 1, maxDepth: 32, maxLeafSize: 10, verbose: false } as any}
       >
         <mesh
-          ref={meshRef}
-          name="terrain"
-          geometry={terrainGeo}
+          ref={physicsMeshRef}
+          name="terrain-collider"
+          geometry={physicsGeo}
           rotation={[-Math.PI / 2, 0, 0]}
           position={[0, GROUND_Y, 0]}
-          receiveShadow={!potatoMode || isEditorOpen}
-          onPointerDown={(e: any) => {
-            if (paintMode && e.button === 0) e.stopPropagation();
-          }}
         >
-          <primitive object={TerrainMaterial} attach="material" wireframe={debug} />
+          <meshBasicMaterial visible={false} />
         </mesh>
       </StaticCollider>
+
+      <mesh
+        ref={meshRef}
+        name="terrain"
+        geometry={terrainGeo}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, GROUND_Y, 0]}
+        receiveShadow={!potatoMode || isEditorOpen}
+        onPointerDown={(e: any) => {
+          if (paintMode && e.button === 0) e.stopPropagation();
+        }}
+      >
+        <primitive object={TerrainMaterial} attach="material" wireframe={debug || terrainWireframe} />
+      </mesh>
 
       {/* ── Ring brush: lingkaran penanda radius kuas ── */}
       {paintMode && brushHoverPos && (() => {

@@ -6,6 +6,7 @@ import { useFrame } from '@react-three/fiber';
 
 /** Emits a custom DOM event 'fps-update' every 1s with the current FPS count. Renders nothing. */
 export const FPSCounterUpdater = () => {
+  // eslint-disable-next-line react-hooks/purity -- Lazy init with performance.now() is intentional for frame timing
   const lastTime = useRef(performance.now());
   const frameCount = useRef(0);
 

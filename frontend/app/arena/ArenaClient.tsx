@@ -3,7 +3,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Gavel, Scale, Gift, Sparkles, Gem, ChevronRight, LogOut, User, BookOpen } from 'lucide-react';
+import { Gavel, Scale, Gift, Sparkles, Gem, ChevronRight, LogOut, User, BookOpen, Grid } from 'lucide-react';
 const AvatarExperience = dynamic(
   () => import('@/src/components/game/avatar/AvatarExperience'),
   { ssr: false }
@@ -18,6 +18,8 @@ import { GameCanvas } from '@/src/components/game/GameCanvas';
 
 // BVH bootstrap + GLTF preloads (side-effect import)
 import './ArenaClient.bootstrap';
+
+import { useEditorStore } from '@/src/features/world-editor/store/useEditorStore';
 
 // Hook
 import { useArenaGameState } from './ArenaClient.hooks';
@@ -50,6 +52,13 @@ export default function MultiplayerArena() {
   const state = useArenaGameState();
   const [showQuickMenu, setShowQuickMenu] = useState(true);
   const [showSettingsDashboard, setShowSettingsDashboard] = useState(false);
+  const [debugWireframe, setDebugWireframe] = useState(false);
+
+  const toggleDebugWireframe = () => {
+    const next = !debugWireframe;
+    setDebugWireframe(next);
+    useEditorStore.setState({ terrainWireframe: next });
+  };
   const [showShopModal, setShowShopModal] = useState(false);
   const [showAuctionModal, setShowAuctionModal] = useState(false);
   const [showRewardsModal, setShowRewardsModal] = useState(false);
@@ -193,7 +202,7 @@ export default function MultiplayerArena() {
           <GameCanvas
             isEditor={false}
             isCinematic={false}
-            debug={false}
+            debug={debugWireframe}
             mapObstacles={[]}
             setMapObstacles={() => { }}
             settingsRef={state.settingsRef}
@@ -360,6 +369,22 @@ export default function MultiplayerArena() {
                 <span className="text-sm">🎒</span>
               </button>
               <span className="absolute -top-1.5 -left-1 px-1 bg-black/80 rounded text-[7px] font-black text-zinc-500">B</span>
+            </div>
+
+            {/* Debug Wireframe Toggle */}
+            <div className="relative">
+              <button
+                onClick={toggleDebugWireframe}
+                className={`w-8 h-8 rounded-xl border transition-all active:scale-95 flex items-center justify-center ${
+                  debugWireframe
+                    ? 'bg-blue-600/35 border-blue-500 text-blue-300 hover:text-white shadow-[0_0_10px_rgba(59,130,246,0.3)]'
+                    : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white'
+                }`}
+                title="Toggle Debug Wireframe Mode"
+              >
+                <Grid className="w-4 h-4" />
+              </button>
+              <span className="absolute -top-1.5 -left-1 px-1 bg-black/80 rounded text-[7px] font-black text-zinc-500">DBG</span>
             </div>
 
             {/* Divider */}

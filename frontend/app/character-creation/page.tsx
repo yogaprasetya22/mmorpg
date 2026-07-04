@@ -28,6 +28,7 @@ export default function CharacterCreationPage() {
       router.push("/arena");
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Set authorized after token validation
     setAuthorized(true);
     fetchCategories();
   }, [fetchCategories, router]);
@@ -43,8 +44,8 @@ export default function CharacterCreationPage() {
   }
 
   return (
-    <div 
-      ref={containerRef} 
+    <div
+      ref={containerRef}
       className="w-screen h-screen relative overflow-hidden bg-[#130f30]"
     >
       {/* 2D Overlay UI panel */}

@@ -27,6 +27,7 @@ export const PainterlyGrass = ({ baseDistance = 24, mode }: PainterlyGrassProps)
             const x = Math.cos(angle) * r;
             const z = Math.sin(angle) * r;
             geo.translate(x, 0.4, z);
+            // eslint-disable-next-line react-hooks/purity -- Math.random() intentional for randomized grass blade rotation
             geo.rotateY(Math.random() * Math.PI);
             geometries.push(geo);
         }

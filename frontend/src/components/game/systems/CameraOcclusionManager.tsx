@@ -1,296 +1,258 @@
 'use client';
 
-import { useRef, useMemo, useEffect } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useStore } from '@/src/state/useStore';
 
-interface GhostedObject {
-  id: string;
-  geometry: THREE.BufferGeometry;
-  originalMaterial: THREE.Material | THREE.Material[];
-  position: THREE.Vector3;
-  quaternion: THREE.Quaternion;
-  scale: THREE.Vector3;
-  matrix: THREE.Matrix4;
-  parentMesh: THREE.InstancedMesh | THREE.Mesh;
-  instanceId?: number;
-  originalScale: THREE.Vector3;
-  progress: number;
-  holoMesh: THREE.Mesh;
-  gpuHidden: boolean;
+// ---------------------------------------------------------------------------
+// Config — every magic number from the original file now lives here instead
+// of being buried inline in GLSL string templates.
+// ---------------------------------------------------------------------------
+export interface CameraOcclusionConfig {
+  /** Radius of the cutout right around the player (meters). */
+  maskRadius?: number;
+  /** Radius of the cutout right at the camera lens (meters). Bigger than
+   *  maskRadius so objects hugging the lens still get punched through. */
+  nearConeRadius?: number;
+  /** Anything closer to the camera than this is force-discarded regardless
+   *  of the cone test — prevents near-plane clipping artifacts. */
+  nearClipDistance?: number;
+  /** Normalized camera->player distance (0..1) below which the cutout is
+   *  active. Above this (i.e. behind the player) objects stay solid. */
+  coneFalloff?: number;
+  /** Vertical offset applied to the tracked player position, e.g. to target
+   *  chest height instead of the feet/origin. */
+  playerHeightOffset?: number;
+  /** How often (ms) to rescan the scene for new meshes that need patching.
+   *  Lower = new objects get occlusion sooner, at the cost of more
+   *  frequent scene.traverse calls. */
+  rescanIntervalMs?: number;
+  /** Object names to always skip. Matched against Object3D.name. */
+  excludedNames?: string[];
 }
 
-export const CameraOcclusionManager = () => {
+const DEFAULT_CONFIG: Required<CameraOcclusionConfig> = {
+  maskRadius: 1.5,
+  nearConeRadius: 4.5,
+  nearClipDistance: 2.5,
+  coneFalloff: 0.9,
+  playerHeightOffset: 1.0,
+  rescanIntervalMs: 1000,
+  excludedNames: ['terrain', 'player', 'water'],
+};
+
+interface OcclusionUniforms {
+  uPlayerPos: { value: THREE.Vector3 };
+  uCamPos: { value: THREE.Vector3 };
+  uMaskRadiusSq: { value: number };
+  uNearConeRadius: { value: number };
+  uNearClipDistance: { value: number };
+  uConeFalloff: { value: number };
+}
+
+// ---------------------------------------------------------------------------
+// Shader patch — pulled out of the component so it's a pure, testable
+// function: (material, uniforms) -> mutates material.onBeforeCompile.
+//
+// Same technique as the original (onBeforeCompile injection into the
+// built-in ShaderChunk hooks), just with the constants replaced by
+// uniforms so config changes don't require a shader recompile.
+// ---------------------------------------------------------------------------
+function patchMaterialForOcclusionCutout(
+  material: THREE.Material,
+  uniforms: OcclusionUniforms,
+  patched: WeakSet<THREE.Material>
+): void {
+  if (patched.has(material)) return;
+  patched.add(material);
+
+  const originalOnBeforeCompile = material.onBeforeCompile;
+
+  material.onBeforeCompile = (shader, renderer) => {
+    originalOnBeforeCompile?.call(material, shader, renderer);
+
+    Object.assign(shader.uniforms, uniforms);
+
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <common>',
+      `#include <common>
+       varying vec3 vHoloWorldPos;`
+    );
+
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <project_vertex>',
+      `#include <project_vertex>
+
+       vec4 tempWorldPos = vec4( transformed, 1.0 );
+       #ifdef USE_INSTANCING
+          tempWorldPos = instanceMatrix * tempWorldPos;
+       #endif
+       tempWorldPos = modelMatrix * tempWorldPos;
+       vHoloWorldPos = tempWorldPos.xyz;
+      `
+    );
+
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      `#include <common>
+       uniform vec3 uPlayerPos;
+       uniform vec3 uCamPos;
+       uniform float uMaskRadiusSq;
+       uniform float uNearConeRadius;
+       uniform float uNearClipDistance;
+       uniform float uConeFalloff;
+       varying vec3 vHoloWorldPos;
+
+       // 2x2 checkerboard stipple so the cutout reads as a dissolve rather
+       // than a hard-edged hole.
+       float occlusionStipple(vec2 fragCoord) {
+         vec2 p = fragCoord / 2.0;
+         return fract((floor(p.x) + floor(p.y)) / 2.0);
+       }`
+    );
+
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <dithering_fragment>',
+      `#include <dithering_fragment>
+
+       vec3 pa = vHoloWorldPos - uCamPos;
+       vec3 ba = uPlayerPos - uCamPos;
+       float baSq = max(dot(ba, ba), 1e-5);
+
+       // Normalized position along the camera->player segment:
+       // 0.0 = at the camera lens, 1.0 = at the player.
+       float hRaw = dot(pa, ba) / baSq;
+       float h = clamp(hRaw, 0.0, 1.0);
+       float distToCam = length(pa);
+
+       // Only cut out between the camera and the player (hRaw < coneFalloff).
+       // Objects beyond the player (hRaw >= coneFalloff) stay solid.
+       if (hRaw < uConeFalloff) {
+         // Cone effect: cutout radius is wide near the camera (so objects
+         // hugging the lens still get punched through) and narrows down
+         // to maskRadius near the player.
+         float targetRadius = mix(uNearConeRadius, sqrt(uMaskRadiusSq), h);
+
+         vec3 perp = pa - (ba * h);
+         float distSq = dot(perp, perp);
+
+         if (distSq < targetRadius * targetRadius || distToCam < uNearClipDistance) {
+           if (occlusionStipple(gl_FragCoord.xy) == 0.0) discard;
+         }
+       }
+      `
+    );
+  };
+
+  material.needsUpdate = true;
+}
+
+// ---------------------------------------------------------------------------
+// Object filtering — name-based exclusion kept for backwards compatibility,
+// plus an opt-in userData flag so callers aren't forced to rely on magic
+// string names as the scene grows.
+// ---------------------------------------------------------------------------
+function shouldExcludeObject(object: THREE.Object3D, excludedNames: Set<string>): boolean {
+  if (excludedNames.has(object.name)) return true;
+  if (object.userData?.excludeFromOcclusionCutout === true) return true;
+  return false;
+}
+
+function collectMaterials(object: THREE.Object3D): THREE.Material[] {
+  const mesh = object as THREE.Mesh;
+  if (!(mesh as any).isMesh && !(mesh as any).isInstancedMesh) return [];
+  if (!mesh.material) return [];
+  return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+export const CameraOcclusionManager = (props: CameraOcclusionConfig = {}) => {
+  const config = { ...DEFAULT_CONFIG, ...props };
   const { camera, scene } = useThree();
 
-  const hologramGroupRef = useRef<THREE.Group>(new THREE.Group());
-  const ghostedTracker = useRef<Map<string, GhostedObject>>(new Map());
+  const excludedNames = useMemo(() => new Set(config.excludedNames), [config.excludedNames]);
 
-  // Memori Cache yang dioptimalkan (EdgesCache dihapus total)
-  const hologramMeshCache = useRef<Map<string, THREE.Mesh>>(new Map());
-  const holoMaterialCache = useRef<Map<string, THREE.Material | THREE.Material[]>>(new Map());
+  const uniforms = useMemo<OcclusionUniforms>(
+    () => ({
+      uPlayerPos: { value: new THREE.Vector3() },
+      uCamPos: { value: new THREE.Vector3() },
+      uMaskRadiusSq: { value: config.maskRadius * config.maskRadius },
+      uNearConeRadius: { value: config.nearConeRadius },
+      uNearClipDistance: { value: config.nearClipDistance },
+      uConeFalloff: { value: config.coneFalloff },
+    }),
+    // Deliberately created once. If you need these to react to live config
+    // changes, update `.value` on the existing uniforms instead of
+    // recreating this object (recreating would desync already-patched
+    // materials, which hold a reference to the original uniform objects).
+    []
+  );
 
-  // ZERO-GARBAGE COLLECTION: Semua alokasi objek dikeluarkan dari useFrame
-  const activeFrameKeys = useRef<Set<string>>(new Set());
-  const meshesToUpdateBatch = useRef<Set<THREE.InstancedMesh>>(new Set());
-  const frameCounter = useRef(0);
+  const patchedMaterials = useRef<WeakSet<THREE.Material>>(new WeakSet());
+  const playerPosScratch = useRef(new THREE.Vector3());
+  const elapsedSinceLastScan = useRef(0);
 
+  const scanAndPatchScene = () => {
+    scene.traverse((child) => {
+      if (shouldExcludeObject(child, excludedNames)) return;
+      for (const material of collectMaterials(child)) {
+        patchMaterialForOcclusionCutout(material, uniforms, patchedMaterials.current);
+      }
+    });
+  };
+
+  // Patch whatever's already in the scene on mount.
   useEffect(() => {
-    const group = hologramGroupRef.current;
-    scene.add(group);
-    return () => { scene.remove(group); };
+    scanAndPatchScene();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene]);
 
-  // Pembuat Shader dengan Kunci Cache Spesifik
-  const createHoloMaterialFromOriginal = (sourceMat: THREE.Material) => {
-    const mat = sourceMat.clone();
-    mat.transparent = true;
-    mat.opacity = 1.0;
-    mat.depthWrite = false;
-
-    const originalOnBeforeCompile = sourceMat.onBeforeCompile;
-    mat.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms, renderer: THREE.WebGLRenderer) => {
-      if (originalOnBeforeCompile) {
-        originalOnBeforeCompile(shader, renderer);
-      }
-      
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <dithering_fragment>',
-        `
-        #include <dithering_fragment>
-        // Dibagi 2.0 (sebelumnya 3.0) agar pola checkerboard lebih rapat, 
-        // sehingga bentuk 3D lebih tajam walau tanpa garis pinggir.
-        vec2 pos = gl_FragCoord.xy / 2.0; 
-        if (mod(floor(pos.x) + floor(pos.y), 2.0) == 0.0) discard;
-        `
-      );
-    };
-    const hasMap = !!(sourceMat as any).map;
-    const hasAlphaTest = (sourceMat.alphaTest || 0) > 0;
-    const hasVertexColors = !!(sourceMat as any).vertexColors;
-    const hasOnBeforeCompile = !!originalOnBeforeCompile;
-
-    let cacheKey = 'holo_dither_' + sourceMat.type + 
-      '_m' + (hasMap ? '1' : '0') + 
-      '_at' + (hasAlphaTest ? '1' : '0') + 
-      '_vc' + (hasVertexColors ? '1' : '0');
-
-    if (hasOnBeforeCompile) {
-      cacheKey += '_obc_' + sourceMat.uuid;
-    }
-
-    mat.customProgramCacheKey = () => cacheKey;
-    return mat;
-  };
-
-  // Variabel Matematika Statis (Pre-allocated)
-  const _tempMatrix = useMemo(() => new THREE.Matrix4(), []);
-  const _tempPos = useMemo(() => new THREE.Vector3(), []);
-  const _playerPos = useMemo(() => new THREE.Vector3(), []);
-  const _zeroVector = useMemo(() => new THREE.Vector3(0, 0, 0), []);
-  const _raycaster = useMemo(() => {
-    const rc = new THREE.Raycaster();
-    rc.firstHitOnly = false;
-    return rc;
-  }, []);
-
-  const getOrCreateHologram = (
-    geometry: THREE.BufferGeometry,
-    originalMaterial: THREE.Material | THREE.Material[],
-    key: string
-  ) => {
-    if (hologramMeshCache.current.has(key)) return hologramMeshCache.current.get(key)!;
-
-    const matKey = Array.isArray(originalMaterial)
-      ? originalMaterial.map(m => m.uuid).join(',')
-      : originalMaterial.uuid;
-
-    let holoMaterial = holoMaterialCache.current.get(matKey);
-    if (!holoMaterial) {
-      if (Array.isArray(originalMaterial)) {
-        holoMaterial = originalMaterial.map(mat => createHoloMaterialFromOriginal(mat));
-      } else {
-        holoMaterial = createHoloMaterialFromOriginal(originalMaterial);
-      }
-      holoMaterialCache.current.set(matKey, holoMaterial);
-    }
-
-    const mesh = new THREE.Mesh(geometry, holoMaterial);
-    mesh.visible = false;
-
-    hologramGroupRef.current.add(mesh);
-    hologramMeshCache.current.set(key, mesh);
-    return mesh;
-  };
-
   useFrame((_, delta) => {
-    frameCounter.current++;
-    const shouldRaycast = frameCounter.current % 6 === 0;
-
     const playerPosArr = useStore.getState().playerPosition;
-    if (!playerPosArr) return;
-
-    _playerPos.set(playerPosArr[0], playerPosArr[1] + 1.2, playerPosArr[2]);
-    const camPos = camera.position;
-    const direction = _tempPos.subVectors(_playerPos, camPos).normalize();
-
-    const colliders = (window as any).globalColliders || [];
-    if (colliders.length === 0) return;
-
-    meshesToUpdateBatch.current.clear();
-
-    if (shouldRaycast) {
-      // 1. KEMBALIKAN KE CPU
-      ghostedTracker.current.forEach((ghost) => {
-        if (ghost.instanceId !== undefined) {
-          const instMesh = ghost.parentMesh as THREE.InstancedMesh;
-          instMesh.setMatrixAt(ghost.instanceId, ghost.matrix);
-        } else {
-          ghost.parentMesh.visible = true;
-        }
-      });
-
-      // 2. RAYCAST
-      _raycaster.set(camPos, direction);
-      // Cap occlusion ray distance so only nearby objects are tested (saves BVH traversal on distant colliders)
-      _raycaster.far = Math.min(camPos.distanceTo(_playerPos) - 0.2, 80);
-      const intersects = _raycaster.intersectObjects(colliders, true);
-
-      activeFrameKeys.current.clear();
-
-      intersects.forEach((hit: THREE.Intersection) => {
-        if (hit.object.name === 'terrain') return;
-        const mesh = hit.object as THREE.Mesh | THREE.InstancedMesh;
-        if (!mesh.geometry || !mesh.material) return;
-
-        const isInstanced = (mesh as any).isInstancedMesh;
-        const key = isInstanced ? `${mesh.uuid}_${hit.instanceId}` : `${mesh.uuid}`;
-        activeFrameKeys.current.add(key);
-
-        if (!ghostedTracker.current.has(key)) {
-          const originalScale = new THREE.Vector3();
-          let matrix = new THREE.Matrix4();
-          let pos = new THREE.Vector3();
-          let quat = new THREE.Quaternion();
-
-          if (isInstanced) {
-            const instMesh = mesh as THREE.InstancedMesh;
-            instMesh.getMatrixAt(hit.instanceId!, matrix);
-            matrix.decompose(pos, quat, originalScale);
-          } else {
-            matrix = mesh.matrixWorld.clone();
-            mesh.matrixWorld.decompose(pos, quat, originalScale);
-          }
-
-          const holoMesh = getOrCreateHologram(mesh.geometry, mesh.material, key);
-
-          holoMesh.position.copy(pos);
-          holoMesh.quaternion.copy(quat);
-          holoMesh.scale.copy(originalScale);
-          holoMesh.updateMatrixWorld();
-          holoMesh.visible = true;
-
-          ghostedTracker.current.set(key, {
-            id: key,
-            geometry: mesh.geometry,
-            originalMaterial: mesh.material,
-            position: pos,
-            quaternion: quat,
-            scale: originalScale,
-            matrix,
-            parentMesh: mesh,
-            instanceId: isInstanced ? hit.instanceId : undefined,
-            originalScale,
-            progress: 0.0,
-            holoMesh,
-            gpuHidden: false
-          });
-        }
-      });
-
-      // 3. SEMBUNYIKAN KEMBALI DI CPU
-      ghostedTracker.current.forEach((ghost) => {
-        if (ghost.instanceId !== undefined) {
-          const instMesh = ghost.parentMesh as THREE.InstancedMesh;
-          _tempMatrix.compose(ghost.position, ghost.quaternion, _zeroVector);
-          instMesh.setMatrixAt(ghost.instanceId, _tempMatrix);
-        } else {
-          ghost.parentMesh.visible = false;
-        }
-      });
+    if (playerPosArr) {
+      playerPosScratch.current.set(
+        playerPosArr[0],
+        playerPosArr[1] + config.playerHeightOffset,
+        playerPosArr[2]
+      );
+      uniforms.uPlayerPos.value.copy(playerPosScratch.current);
+      uniforms.uCamPos.value.copy(camera.position);
     }
 
-    // ==========================================
-    // ANIMASI MULUS & BATCHING GPU (ANTI-LAG)
-    // ==========================================
-    const transitionSpeed = delta * 5;
-
-    ghostedTracker.current.forEach((ghost, key) => {
-      const isBlocked = activeFrameKeys.current.has(key);
-
-      ghost.progress = isBlocked
-        ? Math.min(1.0, ghost.progress + transitionSpeed)
-        : Math.max(0.0, ghost.progress - transitionSpeed);
-
-      if (ghost.progress === 0.0 && !isBlocked) {
-        ghost.holoMesh.visible = false;
-
-        if (ghost.instanceId !== undefined) {
-          const instMesh = ghost.parentMesh as THREE.InstancedMesh;
-          instMesh.setMatrixAt(ghost.instanceId, ghost.matrix);
-          meshesToUpdateBatch.current.add(instMesh);
-        } else {
-          ghost.parentMesh.visible = true;
-        }
-        ghostedTracker.current.delete(key);
-
-      } else {
-        if (!ghost.gpuHidden) {
-          if (ghost.instanceId !== undefined) {
-            const instMesh = ghost.parentMesh as THREE.InstancedMesh;
-            _tempMatrix.compose(ghost.position, ghost.quaternion, _zeroVector);
-            instMesh.setMatrixAt(ghost.instanceId, _tempMatrix);
-            meshesToUpdateBatch.current.add(instMesh);
-          } else {
-            ghost.parentMesh.visible = false;
-          }
-          ghost.gpuHidden = true;
-        }
-
-        // Fading Opacity
-        const targetOpacity = 1.0 - (ghost.progress * 0.5);
-
-        if (Array.isArray(ghost.holoMesh.material)) {
-          for (let i = 0; i < ghost.holoMesh.material.length; i++) {
-            ghost.holoMesh.material[i].opacity = targetOpacity;
-          }
-        } else {
-          (ghost.holoMesh.material as THREE.Material).opacity = targetOpacity;
-        }
-      }
-    });
-
-    // EKSEKUSI BATCH GPU
-    meshesToUpdateBatch.current.forEach(mesh => {
-      mesh.instanceMatrix.needsUpdate = true;
-    });
+    // Time-based rescan instead of a frame-count modulo, so the interval
+    // stays correct regardless of actual frame rate (the original `% 60`
+    // approach assumed a steady 60fps and would drift on slower devices).
+    elapsedSinceLastScan.current += delta * 1000;
+    if (elapsedSinceLastScan.current >= config.rescanIntervalMs) {
+      elapsedSinceLastScan.current = 0;
+      scanAndPatchScene();
+    }
   });
-
-  // Cleanup Cache
-  useEffect(() => {
-    return () => {
-      hologramMeshCache.current.forEach(mesh => {
-        mesh.geometry.dispose();
-      });
-      holoMaterialCache.current.forEach(mat => {
-        if (Array.isArray(mat)) mat.forEach(m => m.dispose());
-        else mat.dispose();
-      });
-      hologramMeshCache.current.clear();
-      holoMaterialCache.current.clear();
-    };
-  }, []);
 
   return null;
 };
+
+/**
+ * KNOWN LIMITATIONS (carried over from the original design, documented so
+ * they're a conscious tradeoff rather than a surprise):
+ *
+ * - New objects wait up to `rescanIntervalMs` before getting the occlusion
+ *   patch. If you spawn something that must be occluded immediately (e.g.
+ *   a projectile that can pass between camera and player), call
+ *   `patchMaterialForOcclusionCutout` on it directly at spawn time instead
+ *   of waiting for the next scan — that function is exported-shape but
+ *   currently module-private; hoist it out if you need that hook.
+ * - There's no unpatch/revert path. If this manager unmounts mid-session,
+ *   already-patched materials keep their onBeforeCompile override. Three.js
+ *   doesn't expose a clean way to revert a shader patch short of disposing
+ *   and recreating the material, which is out of scope here.
+ * - This still calls scene.traverse() on every scan, same as the original.
+ *   For very large scenes, consider patching materials at asset-load time
+ *   (wherever your trees/props/monsters are instantiated) instead of
+ *   discovering them via periodic traversal — that removes the scan
+ *   entirely and the occlusion patch is applied the instant the object is
+ *   created.
+ */

@@ -16,6 +16,7 @@ import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { MapItem } from '@jagres/shared';
+import { useEditorStore } from '@/src/features/world-editor/store/useEditorStore';
 
 // ── Constants ──
 const SECTOR_SIZE = 50; // metres
@@ -55,12 +56,20 @@ interface SectorGroupProps {
     items: MapItem[];
     localMatrix: THREE.Matrix4;
     sectorCenter: [number, number];
+    castShadow?: boolean;
+    receiveShadow?: boolean;
 }
 
-const SectorGroup = memo(({ geometry, material, items, localMatrix, sectorCenter }: SectorGroupProps) => {
+const SectorGroup = memo(({ geometry, material, items, localMatrix, sectorCenter, castShadow = false, receiveShadow = false }: SectorGroupProps) => {
     const meshRef = useRef<THREE.InstancedMesh>(null!);
     const [cx, cz] = sectorCenter;
     const frameCounterRef = useRef(Math.floor(Math.random() * 3)); // Stagger checks
+
+    const setSelectedId = useEditorStore(s => s.setSelectedId);
+    const toggleSelectedId = useEditorStore(s => s.toggleSelectedId);
+    const paintMode = useEditorStore(s => s.paintMode);
+    const activeAsset = useEditorStore(s => s.activeAsset);
+    const vegetationBrushActive = useEditorStore(s => s.vegetationBrushActive);
 
     // Perform distance culling + frustum culling check in the frame loop
     useFrame((state) => {
@@ -151,8 +160,22 @@ const SectorGroup = memo(({ geometry, material, items, localMatrix, sectorCenter
             args={[geometry, material, items.length + 100]}
             position={[cx, 0, cz]}
             frustumCulled
-            castShadow={false}
-            receiveShadow={false}
+            castShadow={castShadow}
+            receiveShadow={receiveShadow}
+            onClick={(e: any) => {
+                if (activeAsset || paintMode || vegetationBrushActive) return;
+                e.stopPropagation();
+                const instId = e.instanceId;
+                if (instId !== undefined && items[instId]) {
+                    const item = items[instId];
+                    const sh = e.shiftKey || e.nativeEvent?.shiftKey;
+                    if (sh) {
+                        toggleSelectedId(item.id);
+                    } else {
+                        setSelectedId(item.id);
+                    }
+                }
+            }}
         />
     );
 }, (prev, next) => {
@@ -172,6 +195,11 @@ const SectorGroup = memo(({ geometry, material, items, localMatrix, sectorCenter
 
 const InstancedVegetationModel = memo(({ path, instances }: { path: string; instances: MapItem[] }) => {
     const { scene } = useGLTF(path) as any;
+
+    const isTreeOrRock = useMemo(() => {
+        const lower = path.toLowerCase();
+        return lower.includes('tree') || lower.includes('rock') || lower.includes('pillar') || lower.includes('structure');
+    }, [path]);
 
     // Extract all sub-meshes data
     const meshes = useMemo(() => {
@@ -218,6 +246,8 @@ const InstancedVegetationModel = memo(({ path, instances }: { path: string; inst
                                 items={sectorItems}
                                 localMatrix={mesh.localMatrix}
                                 sectorCenter={[centerX, centerZ]}
+                                castShadow={isTreeOrRock}
+                                receiveShadow={isTreeOrRock}
                             />
                         );
                     })}

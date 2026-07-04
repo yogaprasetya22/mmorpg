@@ -105,11 +105,11 @@ const AssetCard = React.memo(({ asset, isActive, onClick, onHover }: {
 
   const visual = resolveVisual(asset);
 
-  const thumbUrl = asset.thumbnail 
+  const thumbUrl = asset.thumbnail
     ? (asset.thumbnail.startsWith('http') ? asset.thumbnail : `${API_BASE_URL}${asset.thumbnail}`)
-    : (asset.thumbnailUrl 
-       ? (asset.thumbnailUrl.startsWith('http') ? asset.thumbnailUrl : `${API_BASE_URL}${asset.thumbnailUrl}`)
-       : null);
+    : (asset.thumbnailUrl
+      ? (asset.thumbnailUrl.startsWith('http') ? asset.thumbnailUrl : `${API_BASE_URL}${asset.thumbnailUrl}`)
+      : null);
 
   return (
     <button
@@ -117,8 +117,8 @@ const AssetCard = React.memo(({ asset, isActive, onClick, onHover }: {
       onClick={onClick}
       onMouseEnter={onHover}
       className={`group relative flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all duration-200 border ${isActive
-          ? 'bg-indigo-600/15 border-indigo-500 shadow-[0_0_12px_rgba(99,102,241,0.4)] scale-[0.96] ring-2 ring-indigo-500/20'
-          : 'bg-zinc-900/40 border-zinc-800/60 hover:bg-zinc-800/50 hover:border-zinc-700/60 hover:scale-[0.98]'
+        ? 'bg-indigo-600/15 border-indigo-500 shadow-[0_0_12px_rgba(99,102,241,0.4)] scale-[0.96] ring-2 ring-indigo-500/20'
+        : 'bg-zinc-900/40 border-zinc-800/60 hover:bg-zinc-800/50 hover:border-zinc-700/60 hover:scale-[0.98]'
         }`}
       style={{ contentVisibility: 'auto', containIntrinsicSize: '0 68px' }}
     >
@@ -238,6 +238,7 @@ export const AssetsLibraryModule = () => {
 
   // Sync preview with active asset changes
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Sync preview state with active asset prop
     if (activeAsset) setPreviewAsset(activeAsset);
   }, [activeAsset]);
 
@@ -287,8 +288,8 @@ export const AssetsLibraryModule = () => {
             key={cat}
             onClick={() => setSelectedCategory(cat)}
             className={`py-1.5 px-1 rounded-md text-[7px] font-black tracking-tighter uppercase transition-all ${selectedCategory === cat
-                ? 'bg-indigo-600 text-white shadow shadow-indigo-600/20'
-                : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/40'
+              ? 'bg-indigo-600 text-white shadow shadow-indigo-600/20'
+              : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/40'
               }`}
           >
             {cat}

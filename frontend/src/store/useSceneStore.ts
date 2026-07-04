@@ -46,7 +46,7 @@ export type SceneState = {
 
 // RAF-coalescing state
 let _pendingRafId: number | null = null;
-let _pendingUpdates = new Set<string>();
+const _pendingUpdates = new Set<string>();
 const _pendingData = new Map<string, Partial<SceneEntity>>();
 
 export const useSceneStore = create<SceneState>()((set) => ({

@@ -75,6 +75,7 @@ export const selectIsSaving = (s: EditorStore) => s.isSaving;
 export const selectDynamicAssets = (s: EditorStore) => s.dynamicAssets;
 export const selectLastUsedScales = (s: EditorStore) => s.lastUsedScales;
 export const selectLastUsedRotations = (s: EditorStore) => s.lastUsedRotations;
+export const selectTerrainWireframe = (s: EditorStore) => s.terrainWireframe;
 
 // ─── Re-export for convenience ───
 export type { BrushMaskId, TerrainConfig } from "@/src/features/world-editor/types/editor.types";
@@ -110,7 +111,7 @@ if (typeof window !== "undefined") {
                 store.saveToDatabase().catch((err) => {
                     console.error("Auto save failed:", err);
                 });
-            }, 1000); // 1 second debounce
+            }, 8000); // 8 seconds debounce
         },
         {
             equalityFn: (a, b) => {

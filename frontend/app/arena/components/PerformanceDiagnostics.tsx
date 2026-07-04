@@ -91,7 +91,9 @@ export function PerformanceDiagnostics({
   const { gl } = useThree();
   const lastUpdate = useRef(0);
   const frameTimes = useRef<number[]>([]);
+  // eslint-disable-next-line react-hooks/purity -- Lazy init with performance.now() intentional for frame timing
   const lastFrameTime = useRef(performance.now());
+  // eslint-disable-next-line react-hooks/purity -- Lazy init with performance.now() intentional for telemetry timing
   const lastTelemetryReportTime = useRef(performance.now());
   const windowFrameDeltas = useRef<number[]>([]);
 

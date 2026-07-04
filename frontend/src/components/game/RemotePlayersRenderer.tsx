@@ -185,6 +185,9 @@ export const RemotePlayerInstance = ({
   // ── Refs for per-frame values (zero React re-renders) ──
   const poseRef = useRef("Idle");
   const timeScaleRef = useRef(1.0);
+  // State mirrors for useFrame-updated values — avoid passing ref.current as prop
+  const [pose, setPose] = useState("Idle");
+  const [timeScale, setTimeScale] = useState(1.0);
   const avatarControlRef = useRef<AvatarHandle>(null);
   const shadowEnabledRef = useRef(true);  // Track shadow state to avoid redundant toggles
   const animPausedRef = useRef(false);    // Track animation pause state to avoid per-frame calls
@@ -398,6 +401,7 @@ export const RemotePlayerInstance = ({
     // Drive animation imperatively — zero React re-renders
     if (nextPose !== poseRef.current) {
       poseRef.current = nextPose;
+      setPose(nextPose);
       avatarControlRef.current?.setPose(nextPose);
     }
 
@@ -424,6 +428,7 @@ export const RemotePlayerInstance = ({
     }
     if (Math.abs(nextTimeScale - timeScaleRef.current) > 0.05) {
       timeScaleRef.current = nextTimeScale;
+      setTimeScale(nextTimeScale);
       avatarControlRef.current?.setTimeScale(nextTimeScale);
     }
 
@@ -454,7 +459,7 @@ export const RemotePlayerInstance = ({
 
         // 2. Client-side spatial fallback using squared distance (avoids sqrt per unit)
         if (!closestMonster) {
-          let maxRangeSq = 15.0 * 15.0;
+          const maxRangeSq = 15.0 * 15.0;
           const uPos = groupRef.current.position;
           let minDistSq = maxRangeSq;
 
@@ -495,7 +500,7 @@ export const RemotePlayerInstance = ({
       if (pClass === "Warrior" && fighterSpellsRef?.current) {
         const fPool = fighterSpellsRef.current;
         if (typeof (window as any).globalRemoteFighterPtr === 'undefined') (window as any).globalRemoteFighterPtr = 0;
-        let fPtr = (window as any).globalRemoteFighterPtr;
+        const fPtr = (window as any).globalRemoteFighterPtr;
 
         const fs = fPool[fPtr];
         if (fs) {
@@ -509,7 +514,7 @@ export const RemotePlayerInstance = ({
       } else if (pClass === "Thief" && assassinSpellsRef?.current) {
         const aPool = assassinSpellsRef.current;
         if (typeof (window as any).globalRemoteAssassinPtr === 'undefined') (window as any).globalRemoteAssassinPtr = 0;
-        let aPtr = (window as any).globalRemoteAssassinPtr;
+        const aPtr = (window as any).globalRemoteAssassinPtr;
 
         const as = aPool[aPtr];
         if (as) {
@@ -523,7 +528,7 @@ export const RemotePlayerInstance = ({
       } else if (pClass === "Priest" && tankSpellsRef?.current) {
         const tPool = tankSpellsRef.current;
         if (typeof (window as any).globalRemoteTankPtr === 'undefined') (window as any).globalRemoteTankPtr = 0;
-        let tPtr = (window as any).globalRemoteTankPtr;
+        const tPtr = (window as any).globalRemoteTankPtr;
 
         const ts = tPool[tPtr];
         if (ts) {
@@ -540,7 +545,7 @@ export const RemotePlayerInstance = ({
         if (typeof (window as any).globalRemoteMagePtr === 'undefined') (window as any).globalRemoteMagePtr = 0;
 
         for (let m = 0; m < 4; m++) {
-          let mPtr = (window as any).globalRemoteMagePtr;
+          const mPtr = (window as any).globalRemoteMagePtr;
           const ms = mPool[mPtr];
           if (ms) {
             ms.active = true;
@@ -562,7 +567,7 @@ export const RemotePlayerInstance = ({
         if (typeof (window as any).globalRemoteSpellPtr === 'undefined') (window as any).globalRemoteSpellPtr = 0;
 
         for (let b = 0; b < 12; b++) {
-          let ptr = (window as any).globalRemoteSpellPtr;
+          const ptr = (window as any).globalRemoteSpellPtr;
           const s = pool[ptr];
           if (s) {
             const angle = (b / 12) * Math.PI * 2;
@@ -663,7 +668,7 @@ export const RemotePlayerInstance = ({
       // Dynamic visuals per class
       let color = "#ef4444";
       let bulletSpeed = 80.0;
-      let isFinisher = Math.random() > 0.6;
+      const isFinisher = Math.random() > 0.6;
 
       if (pClass === "Mage") {
         color = isFinisher ? "#ec4899" : "#3b82f6";
@@ -712,7 +717,7 @@ export const RemotePlayerInstance = ({
       if (pClass === "Warrior" && fighterSpellsRef?.current) {
         const fPool = fighterSpellsRef.current;
         if (typeof (window as any).globalRemoteFighterPtr === 'undefined') (window as any).globalRemoteFighterPtr = 0;
-        let fPtr = (window as any).globalRemoteFighterPtr;
+        const fPtr = (window as any).globalRemoteFighterPtr;
 
         const fs = fPool[fPtr];
         if (fs) {
@@ -731,7 +736,7 @@ export const RemotePlayerInstance = ({
       } else if (pClass === "Thief" && assassinSpellsRef?.current) {
         const aPool = assassinSpellsRef.current;
         if (typeof (window as any).globalRemoteAssassinPtr === 'undefined') (window as any).globalRemoteAssassinPtr = 0;
-        let aPtr = (window as any).globalRemoteAssassinPtr;
+        const aPtr = (window as any).globalRemoteAssassinPtr;
 
         const as = aPool[aPtr];
         if (as) {
@@ -745,7 +750,7 @@ export const RemotePlayerInstance = ({
       } else if (pClass === "Priest" && tankSpellsRef?.current) {
         const tPool = tankSpellsRef.current;
         if (typeof (window as any).globalRemoteTankPtr === 'undefined') (window as any).globalRemoteTankPtr = 0;
-        let tPtr = (window as any).globalRemoteTankPtr;
+        const tPtr = (window as any).globalRemoteTankPtr;
 
         const ts = tPool[tPtr];
         if (ts) {
@@ -759,7 +764,7 @@ export const RemotePlayerInstance = ({
       } else if (pClass === "Mage" && spellsRef?.current) {
         const mPool = spellsRef.current;
         if (typeof (window as any).globalRemoteMagePtr === 'undefined') (window as any).globalRemoteMagePtr = 0;
-        let mPtr = (window as any).globalRemoteMagePtr;
+        const mPtr = (window as any).globalRemoteMagePtr;
 
         const ms = mPool[mPtr];
         if (ms) {
@@ -787,7 +792,7 @@ export const RemotePlayerInstance = ({
             if (typeof (window as any).globalRemoteSpellPtr === 'undefined') {
               (window as any).globalRemoteSpellPtr = 0;
             }
-            let ptr = (window as any).globalRemoteSpellPtr;
+            const ptr = (window as any).globalRemoteSpellPtr;
 
             const s = pool[ptr];
             if (s) {
@@ -824,8 +829,8 @@ export const RemotePlayerInstance = ({
         <Suspense fallback={null}>
           <AvatarModel
             customization={remoteCustomization}
-            pose={poseRef.current}
-            timeScale={timeScaleRef.current}
+            pose={pose}
+            timeScale={timeScale}
             controlRef={avatarControlRef}
             skipAnimControl
           />

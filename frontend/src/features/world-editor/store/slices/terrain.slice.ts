@@ -54,8 +54,8 @@ export interface TerrainSlice {
     activeToolKey: string;
     brushHoverPos: [number, number, number] | null;
     setBrushHoverPos: (pos: [number, number, number] | null) => void;
-    activePaintLayer: 0 | 1 | 2 | 3;
-    setActivePaintLayer: (layer: 0 | 1 | 2 | 3) => void;
+    activePaintLayer: 0 | 1 | 2 | 3 | 4;
+    setActivePaintLayer: (layer: 0 | 1 | 2 | 3 | 4) => void;
     paintLayerMaterials: [
         string | null,
         string | null,
@@ -67,6 +67,10 @@ export interface TerrainSlice {
     setPaintLayerColor: (layer: number, color: string) => void;
     flattenTargetHeight: number;
     setFlattenTargetHeight: (h: number) => void;
+    sculptMaxHeight: number;
+    setSculptMaxHeight: (h: number) => void;
+    terrainWireframe: boolean;
+    setTerrainWireframe: (wireframe: boolean) => void;
 }
 
 export const createTerrainSlice: StateCreator<
@@ -247,4 +251,8 @@ export const createTerrainSlice: StateCreator<
         }),
     flattenTargetHeight: 0,
     setFlattenTargetHeight: (h) => set({ flattenTargetHeight: h }),
+    sculptMaxHeight: 120,
+    setSculptMaxHeight: (h) => set({ sculptMaxHeight: h }),
+    terrainWireframe: false,
+    setTerrainWireframe: (terrainWireframe) => set({ terrainWireframe }),
 });

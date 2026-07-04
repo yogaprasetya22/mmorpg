@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, Suspense, useMemo, useRef, useLayoutEffect } from 'react';
-import { 
+import {
   ArrowLeft, HelpCircle, Plus, ShoppingBag, Search, X, Hammer
 } from 'lucide-react';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -23,15 +23,15 @@ const ITEM_GLB_MAP: Record<string, string> = {
   staff_starter: "/assets/items/weapons/Battle_Scythe.glb",
   mace_starter: "/assets/items/weapons/Battle_Hammer.glb",
   dagger_starter: "/assets/items/weapons/Battle_Scythe.glb",
-  
+
   // Armors / Outfits
   leather_armor: "/assets/characters/modular/tops/Outfit.002.glb",
   chain_mail: "/assets/characters/modular/tops/Outfit.003.glb",
   plate_armor: "/assets/characters/modular/tops/Outfit.004.glb",
-  
+
   // Helmets
   iron_helm: "/assets/characters/modular/hair_and_hats/Hat.001.glb",
-  
+
   // Boots
   leather_boots: "/assets/characters/modular/accessories/Shoes.002.glb",
 };
@@ -40,13 +40,13 @@ function ItemModel({ url }: { url: string }) {
   const { scene } = useGLTF(url);
   const clonedScene = useMemo(() => scene.clone(), [scene]);
   const groupRef = useRef<THREE.Group>(null);
-  
+
   useFrame((state) => {
     if (groupRef.current) {
       groupRef.current.rotation.y = state.clock.getElapsedTime() * 0.8;
     }
   });
-  
+
   useLayoutEffect(() => {
     clonedScene.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(clonedScene);
@@ -54,16 +54,16 @@ function ItemModel({ url }: { url: string }) {
     box.getSize(size);
     const center = new THREE.Vector3();
     box.getCenter(center);
-    
+
     clonedScene.position.set(-center.x, -center.y, -center.z);
-    
+
     const maxDim = Math.max(size.x, size.y, size.z);
     const scale = maxDim > 0.001 ? 0.75 / maxDim : 1.0;
     if (groupRef.current) {
       groupRef.current.scale.setScalar(scale);
     }
   }, [clonedScene]);
-  
+
   return (
     <group ref={groupRef}>
       <primitive object={clonedScene} />
@@ -75,7 +75,7 @@ function Item3DPreview({ itemID }: { itemID: string }) {
   const relativeUrl = ITEM_GLB_MAP[itemID];
   if (!relativeUrl) return null;
   const fullUrl = `${API_BASE_URL}${relativeUrl}`;
-  
+
   return (
     <div className="h-[140px] w-full bg-[#fdf9f3] border border-[#dfb76c]/40 rounded-xl relative overflow-hidden flex items-center justify-center shadow-inner shrink-0 mb-2">
       <Canvas
@@ -221,6 +221,7 @@ export function PlayerInventory({
   const [activeTab, setActiveTab] = useState<'Essential' | 'Gear' | 'Card' | 'Engine'>('Essential');
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Sync player stats from props
     setPlayerStats(initialPlayerStats);
   }, [initialPlayerStats]);
 
@@ -233,6 +234,7 @@ export function PlayerInventory({
     };
     window.addEventListener("player_inventory_updated", handleUpdate);
     const initialInv = (window as any).lastInventory;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Initialize inventory from cached value
     if (initialInv) setInventory(initialInv);
     return () => {
       window.removeEventListener("player_inventory_updated", handleUpdate);
@@ -250,6 +252,7 @@ export function PlayerInventory({
       prevRefineLevel.current = selectedItem.refine_level;
     } else {
       prevRefineLevel.current = 0;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Reset refine success when no item selected
       setRefineSuccess(false);
     }
   }, [selectedItem?.id, selectedItem?.refine_level]);
@@ -280,7 +283,7 @@ export function PlayerInventory({
   const filteredBag = bag.filter((item: any) => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
-    
+
     const type = item.type?.toLowerCase();
     if (activeTab === 'Gear') {
       return type === 'equipment';
@@ -337,7 +340,7 @@ export function PlayerInventory({
 
   return (
     <div className="fixed inset-0 w-screen h-[100dvh] z-[9999] bg-[#ebdcb9]/40 backdrop-blur-sm flex flex-col font-sans text-[#4a3000] pointer-events-auto select-none overflow-hidden">
-      
+
       {/* ── BACKGROUND PARCHMENT ── */}
       <div className="absolute inset-0 z-0 bg-[#fdf9f3] pointer-events-none" />
 
@@ -345,7 +348,7 @@ export function PlayerInventory({
       <div className="relative z-10 px-6 py-3.5 flex justify-between items-center border-b border-[#dfb76c]/30 bg-[#ebdcb9]/20 shrink-0 select-none">
         {/* Left: Back & Title */}
         <div className="flex items-center gap-3">
-          <button 
+          <button
             onClick={onClose}
             className="w-9 h-9 rounded-full bg-[#fdf9f3] hover:bg-[#ebdcb9] flex items-center justify-center text-[#4a3000] border border-[#dfb76c] active:scale-95 transition-all shadow-sm"
           >
@@ -380,7 +383,7 @@ export function PlayerInventory({
         </div>
 
         {/* Right: Shop Button */}
-        <button 
+        <button
           onClick={onOpenShop}
           className="flex items-center gap-1.5 bg-gradient-to-b from-[#e3c598] to-[#b88c42] hover:brightness-110 border border-[#8c5b1b]/30 px-4 py-1.5 rounded-full font-black text-[10.5px] tracking-wider uppercase text-[#4a3000] shadow-sm active:scale-95 transition-all"
         >
@@ -391,16 +394,16 @@ export function PlayerInventory({
 
       {/* ── MAIN CONTENT GRID ── */}
       <div className="flex-1 flex min-h-0 relative z-10 px-6 py-4 gap-6 select-none">
-        
+
         {/* LEFT COLUMN: Character Model Preview flanked by Equipment Slots */}
         <div className="flex-1 flex gap-3 items-stretch justify-center relative min-h-0">
-          
+
           {/* Left Side: Cosmetic/Accessory Slots */}
           <div className="flex flex-col justify-center gap-4">
             {leftSlots.map((slot) => {
               const item = getEquippedItem(slot);
               return (
-                <div 
+                <div
                   key={slot}
                   onClick={() => item && setSelectedItem(item)}
                   className={`w-[82px] h-[82px] rounded-2xl border-2 flex flex-col items-center justify-center cursor-pointer transition-all relative group shadow-md ${getRarityBG(item)}`}
@@ -441,18 +444,18 @@ export function PlayerInventory({
               >
                 <ambientLight intensity={1.3} />
                 <directionalLight position={[2, 2.5, 4.5]} intensity={1.5} />
-                <OrbitControls 
-                  enableZoom={false} 
-                  enablePan={false} 
-                  minPolarAngle={Math.PI / 2.2} 
-                  maxPolarAngle={Math.PI / 1.8} 
+                <OrbitControls
+                  enableZoom={false}
+                  enablePan={false}
+                  minPolarAngle={Math.PI / 2.2}
+                  maxPolarAngle={Math.PI / 1.8}
                 />
                 <Suspense fallback={null}>
                   <group position={[0, -0.9, 0]}>
-                    <AvatarModel 
-                      customization={customization} 
-                      pose="Idle" 
-                      paused={false} 
+                    <AvatarModel
+                      customization={customization}
+                      pose="Idle"
+                      paused={false}
                       skipAnimControl={false}
                     />
                   </group>
@@ -466,7 +469,7 @@ export function PlayerInventory({
             {rightSlots.map((slot) => {
               const item = getEquippedItem(slot);
               return (
-                <div 
+                <div
                   key={slot}
                   onClick={() => item && setSelectedItem(item)}
                   className={`w-[82px] h-[82px] rounded-2xl border-2 flex flex-col items-center justify-center cursor-pointer transition-all relative group shadow-md ${getRarityBG(item)}`}
@@ -494,7 +497,7 @@ export function PlayerInventory({
           {/* Search Bar */}
           <div className="relative shrink-0">
             <Search className="w-4 h-4 text-[#8c6b4f] absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input 
+            <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -509,14 +512,13 @@ export function PlayerInventory({
               {filteredBag.map((item: any) => {
                 const isSelected = selectedItem && selectedItem.id === item.id;
                 return (
-                  <div 
+                  <div
                     key={item.id}
                     onClick={() => setSelectedItem(item)}
-                    className={`aspect-square rounded-2xl border-2 cursor-pointer transition-all flex flex-col items-center justify-center relative p-1 hover:brightness-105 ${
-                      isSelected 
-                        ? 'border-[#b88c42] shadow-[0_0_8px_rgba(184,140,66,0.55)] scale-95' 
+                    className={`aspect-square rounded-2xl border-2 cursor-pointer transition-all flex flex-col items-center justify-center relative p-1 hover:brightness-105 ${isSelected
+                        ? 'border-[#b88c42] shadow-[0_0_8px_rgba(184,140,66,0.55)] scale-95'
                         : 'border-[#dfb76c]/30'
-                    } ${getRarityBG(item)}`}
+                      } ${getRarityBG(item)}`}
                   >
                     <ItemThumbnail itemID={item.item_id} className="w-12 h-12" />
                     {item.refine_level > 0 && (
@@ -548,9 +550,9 @@ export function PlayerInventory({
               <button className="bg-[#fdf9f3] hover:bg-[#ebdcb9] text-zinc-600 border border-[#dfb76c]/40 px-4 py-1.5 rounded-full font-black text-[10.5px] uppercase active:scale-95 transition-all shadow-sm">
                 Dism.
               </button>
-              <button 
+              <button
                 onClick={() => {
-                  const sorted = [...bag].sort((a,b) => a.id.localeCompare(b.id));
+                  const sorted = [...bag].sort((a, b) => a.id.localeCompare(b.id));
                   setInventory(sorted);
                 }}
                 className="bg-gradient-to-b from-[#e3c598] to-[#b88c42] text-[#4a3000] border border-[#8c5b1b]/30 px-4 py-1.5 rounded-full font-black text-[10.5px] uppercase active:scale-95 transition-all shadow-sm"
@@ -566,14 +568,13 @@ export function PlayerInventory({
         <div className="flex flex-col justify-between py-2 shrink-0 select-none">
           <div className="flex flex-col gap-3">
             {(['Essential', 'Gear', 'Card', 'Engine'] as const).map((tab) => (
-              <button 
+              <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`w-[105px] py-3 text-[11px] font-black uppercase tracking-wider rounded-xl transition-all duration-200 shadow-md active:scale-95 hover:translate-x-1 ${
-                  activeTab === tab 
-                    ? 'bg-gradient-to-b from-[#8c5b1b] to-[#5c3e16] text-[#fdf9f3] border-2 border-[#dfb76c] shadow-[inset_0_2px_4px_rgba(0,0,0,0.4),0_4px_10px_rgba(140,91,27,0.25)]' 
+                className={`w-[105px] py-3 text-[11px] font-black uppercase tracking-wider rounded-xl transition-all duration-200 shadow-md active:scale-95 hover:translate-x-1 ${activeTab === tab
+                    ? 'bg-gradient-to-b from-[#8c5b1b] to-[#5c3e16] text-[#fdf9f3] border-2 border-[#dfb76c] shadow-[inset_0_2px_4px_rgba(0,0,0,0.4),0_4px_10px_rgba(140,91,27,0.25)]'
                     : 'bg-gradient-to-b from-[#fdf9f3] to-[#ebdcb9]/40 text-[#8c6b4f] border-2 border-[#dfb76c]/40 hover:border-[#b88c42] hover:text-[#4a3000] shadow-[0_2px_4px_rgba(0,0,0,0.05)]'
-                }`}
+                  }`}
               >
                 {tab}
               </button>
@@ -590,17 +591,17 @@ export function PlayerInventory({
 
       {/* ── FLOATING ITEM DETAIL OVERLAY CARD ── */}
       {selectedItem && (
-        <div 
+        <div
           className="fixed inset-0 z-[10000] bg-black/45 backdrop-blur-[1px] flex items-center justify-center"
           onClick={() => setSelectedItem(null)}
         >
-          <div 
+          <div
             className="w-[310px] bg-[#fbf7f0] border-4 border-[#8e6a45] rounded-3xl p-4 shadow-[0_15px_40px_rgba(0,0,0,0.7)] flex flex-col gap-3 relative text-zinc-800 animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header info */}
             <div className="border-b border-[#dfb76c]/40 pb-2 relative">
-              <button 
+              <button
                 onClick={() => setSelectedItem(null)}
                 className="absolute top-0 right-0 w-6 h-6 rounded-full bg-zinc-200 hover:bg-zinc-300 flex items-center justify-center text-zinc-600"
               >
@@ -709,13 +710,13 @@ export function PlayerInventory({
               Apakah Anda yakin ingin menjual <span className="font-bold text-zinc-800">{itemToSell.name}</span> seharga <span className="font-extrabold text-[#d97706]">{itemToSell.sell_price || 150} Zeny</span>?
             </p>
             <div className="grid grid-cols-2 gap-2 mt-2">
-              <button 
+              <button
                 onClick={() => setShowSellConfirm(false)}
                 className="py-1.5 rounded-xl bg-zinc-200 hover:bg-zinc-300 text-zinc-700 font-bold text-[9.5px] uppercase"
               >
                 Batal
               </button>
-              <button 
+              <button
                 onClick={() => {
                   sendSellItem(itemToSell.id);
                   setShowSellConfirm(false);

@@ -158,6 +158,8 @@ The left side of the workspace acts as an inspector dock and control center, div
 - **Deformation Sculpting**: Raises or lowers the height of the landscape vertices.
 - **Brushing Colors**: Blends ground textures and colors (grassy green, volcanic ash, stone pathways) onto the vertex map.
 - **Interactive Ring overlays**: A custom R3F mesh ring overlay follows the cursor, visualizing the active brush size and strength settings.
+- **Detailed Documentation**: For a complete list of tools, configurations, brush masks, procedural generator variables, and shortcut list, see [TERRAIN.md](file:///home/yoga/Dokumen/game%20mmorpg/frontend/app/world-editor/TERRAIN.md).
+
 
 ### 5. 🌿 Instanced Vegetation Layer (`VegetationModule.tsx`)
 

@@ -66,31 +66,22 @@ export interface VegetationSlice {
     clearVegetation: () => void;
 }
 
-const DEFAULT_PROTOTYPES: VegetationPrototype[] = [
-    // Pine theme
-    { id: "pine-1", name: "Pine 1", assetUrl: "/assets/environment/trees/Pine_1.glb", category: "trees", defaultScaleMin: 0.55, defaultScaleMax: 1.45, defaultRandomYaw: true, alignToSurfaceNormal: false },
-    { id: "pine-2", name: "Pine 2", assetUrl: "/assets/environment/trees/Pine_2.glb", category: "trees", defaultScaleMin: 0.55, defaultScaleMax: 1.45, defaultRandomYaw: true, alignToSurfaceNormal: false },
-    { id: "pine-3", name: "Pine 3", assetUrl: "/assets/environment/trees/Pine_3.glb", category: "trees", defaultScaleMin: 0.55, defaultScaleMax: 1.45, defaultRandomYaw: true, alignToSurfaceNormal: false },
-    { id: "pine-4", name: "Pine 4", assetUrl: "/assets/environment/trees/Pine_4.glb", category: "trees", defaultScaleMin: 0.55, defaultScaleMax: 1.45, defaultRandomYaw: true, alignToSurfaceNormal: false },
-    { id: "pine-5", name: "Pine 5", assetUrl: "/assets/environment/trees/Pine_5.glb", category: "trees", defaultScaleMin: 0.55, defaultScaleMax: 1.45, defaultRandomYaw: true, alignToSurfaceNormal: false },
-    
-    // Cherry theme
-    { id: "cherry-1", name: "Birch 1", assetUrl: "/assets/environment/trees/BirchTree_1.glb", category: "trees", defaultScaleMin: 0.55, defaultScaleMax: 1.45, defaultRandomYaw: true, alignToSurfaceNormal: false },
-    { id: "cherry-2", name: "Birch 2", assetUrl: "/assets/environment/trees/BirchTree_2.glb", category: "trees", defaultScaleMin: 0.55, defaultScaleMax: 1.45, defaultRandomYaw: true, alignToSurfaceNormal: false },
-    { id: "cherry-3", name: "Birch 3", assetUrl: "/assets/environment/trees/BirchTree_3.glb", category: "trees", defaultScaleMin: 0.55, defaultScaleMax: 1.45, defaultRandomYaw: true, alignToSurfaceNormal: false },
-
-    // Autumn theme
-    { id: "autumn-1", name: "Maple 1", assetUrl: "/assets/environment/trees/MapleTree_1.glb", category: "trees", defaultScaleMin: 0.55, defaultScaleMax: 1.45, defaultRandomYaw: true, alignToSurfaceNormal: false },
-    { id: "autumn-2", name: "Maple 2", assetUrl: "/assets/environment/trees/MapleTree_2.glb", category: "trees", defaultScaleMin: 0.55, defaultScaleMax: 1.45, defaultRandomYaw: true, alignToSurfaceNormal: false },
-    
-    // Clover & Grasses
-    { id: "clover-1", name: "Bush", assetUrl: "/assets/environment/vegetation/Bush.glb", category: "grass", defaultScaleMin: 0.8, defaultScaleMax: 1.2, defaultRandomYaw: true, alignToSurfaceNormal: true },
-    { id: "grass-1", name: "Grass Small", assetUrl: "/assets/environment/vegetation/Grass_Small.glb", category: "grass", defaultScaleMin: 0.6, defaultScaleMax: 1.1, defaultRandomYaw: true, alignToSurfaceNormal: true },
-    { id: "grass-2", name: "Grass Large", assetUrl: "/assets/environment/vegetation/Grass_Large.glb", category: "grass", defaultScaleMin: 0.7, defaultScaleMax: 1.3, defaultRandomYaw: true, alignToSurfaceNormal: true },
-];
-
 import blueprintsManifest from "@/src/features/world-editor/core/blueprints.manifest.json";
 const DEFAULT_BLUEPRINTS = blueprintsManifest as AssetBlueprint[];
+
+const DEFAULT_PROTOTYPES: VegetationPrototype[] = DEFAULT_BLUEPRINTS
+    .filter((bp) => bp.category === "trees" || bp.category === "vegetation" || bp.category === "rocks")
+    .map((bp) => ({
+        id: bp.id,
+        name: bp.name,
+        assetUrl: bp.modelUrl,
+        category: bp.category === "rocks" ? "rocks" : (bp.category === "trees" ? "trees" : "grass"),
+        defaultScaleMin: bp.category === "trees" ? 0.55 : 0.65,
+        defaultScaleMax: bp.category === "trees" ? 1.45 : 1.35,
+        defaultRandomYaw: true,
+        alignToSurfaceNormal: bp.category !== "trees",
+    }));
+
 
 export const createVegetationSlice: StateCreator<
     VegetationSlice,

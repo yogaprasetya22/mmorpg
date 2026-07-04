@@ -159,7 +159,7 @@ export const AvatarExperience = () => {
         <Suspense fallback={null}>
           <Gltf
             position-y={-0.31}
-            src={`${API_BASE_URL}/assets/environment/structures/platforms/Teleporter Base.glb`}
+            src={`${API_BASE_URL}/assets/environment/rocks/RockPath_Round_Wide.glb`}
           />
         </Suspense>
         <ContactShadows

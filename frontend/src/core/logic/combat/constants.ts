@@ -5,9 +5,9 @@ import { SimulationSettings, ClassConfig } from "@/src/core/domain/unit.types";
 // ============================================================
 
 // --- STATIC WORLD BOUNDARIES (Never Change) ---
-export let PLAYER_BASE_Z = 36;
-export let ENEMY_BASE_Z = -36;
-export let LANE_OFFSETS = [-15, -7.5, 0, 7.5, 15];
+export const PLAYER_BASE_Z = 36;
+export const ENEMY_BASE_Z = -36;
+export const LANE_OFFSETS = [-15, -7.5, 0, 7.5, 15];
 
 export const SEAL_M_ENEMIES = [
     "Baabaa", "Moo Moo", "Piya", "Cankura", "Woody Wordy", 
@@ -15,7 +15,7 @@ export const SEAL_M_ENEMIES = [
     "Gariel", "Tiphareth", "Gehabert", "Sina", "Balie"
 ];
 
-export let CLASS_CONFIG: ClassConfig = {
+export const CLASS_CONFIG: ClassConfig = {
     fighter: { // Warrior
         hp: 8.5,
         hp_regen: 0.22,
@@ -217,7 +217,7 @@ export let CLASS_CONFIG: ClassConfig = {
 
 
 // --- DYNAMIC SIMULATION SETTINGS ---
-export let INITIAL_SETTINGS: SimulationSettings = {
+export const INITIAL_SETTINGS: SimulationSettings = {
     // Military & Stats
     globalHpMultiplier: 1.0,
     globalSpeedMultiplier: 2.0,

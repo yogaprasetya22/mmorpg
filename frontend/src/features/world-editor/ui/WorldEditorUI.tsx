@@ -106,6 +106,7 @@ export const WorldEditorUI = () => {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Mark component as mounted after initialization
     setMounted(true);
     loadFromDatabase();
     fetchDynamicAssets();
@@ -121,6 +122,7 @@ export const WorldEditorUI = () => {
       case 'new-map': {
         const confirmNew = confirm("Membuat peta baru akan menghapus semua objek yang belum disimpan di layar. Lanjutkan?");
         if (confirmNew) {
+          // eslint-disable-next-line react-hooks/purity -- Date.now() in event handler, not render
           const mapId = prompt("Masukkan ID/Nama Peta Baru:", `Peta_${Date.now()}`);
           if (mapId) {
             useEditorStore.getState().createNewMap(mapId);
@@ -185,15 +187,15 @@ export const WorldEditorUI = () => {
             try {
               const data = JSON.parse(evt.target?.result as string);
               // Handle both raw MapItem arrays and full snapshot payloads (nodes from MCP or items from frontend)
-              const loadedItems = Array.isArray(data) 
-                ? data 
+              const loadedItems = Array.isArray(data)
+                ? data
                 : (data.nodes || data.items || []);
-                
+
               if (loadedItems.length === 0 && !data.settings) {
                 alert("File JSON tidak valid atau kosong.");
                 return;
               }
-              
+
               // Normalize MCP nodes structure to frontend MapItem structure if needed
               const normalizedItems = loadedItems.map((item: any) => {
                 if (item.transform && !item.pos) { // MCP Node format
@@ -202,15 +204,15 @@ export const WorldEditorUI = () => {
                   if (item.properties && item.properties.path) {
                     path = item.properties.path;
                   } else if (item.type === 'vegetation') {
-                    path = item.name === 'dead_tree' 
-                      ? `${API_BASE_URL}/assets/environment/trees/DeadTree_1.glb` 
+                    path = item.name === 'dead_tree'
+                      ? `${API_BASE_URL}/assets/environment/trees/DeadTree_1.glb`
                       : `${API_BASE_URL}/assets/environment/trees/Pine_1.glb`;
                   } else if (item.type === 'mountain') {
                     path = `${API_BASE_URL}/assets/environment/rocks/Rock_Medium_1.glb`;
                   } else if (item.name === 'sumur_kecil') {
                     path = `${API_BASE_URL}/assets/environment/rocks/Rock_Medium_3.glb`; // well placeholder
                   }
-                  
+
                   return {
                     id: item.id || `item-${crypto.randomUUID()}`,
                     type: item.type || 'structure',
@@ -225,7 +227,7 @@ export const WorldEditorUI = () => {
               });
 
               useEditorStore.getState().updateItemsWithHistory(normalizedItems);
-              
+
               // Load settings if present
               if (data.settings) {
                 const s = data.settings;

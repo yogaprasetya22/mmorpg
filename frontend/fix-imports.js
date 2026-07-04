@@ -17,7 +17,7 @@ const files = walk('./src').concat(walk('./app'));
 
 for (const file of files) {
   let content = fs.readFileSync(file, 'utf8');
-  let original = content;
+  const original = content;
 
   // Global replacements
   content = content.replace(/@\/src\/components\/game\/player\/buffers/g, '@/src/entities/player/buffers');

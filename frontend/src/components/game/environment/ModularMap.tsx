@@ -162,6 +162,7 @@ export const ModularMap = ({ debug }: { debug?: boolean }) => {
         initialSet.add(sg.sectorKey);
       }
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Initialize active sectors based on position
     setActiveSectorKeys(initialSet);
   }, [sectorGroups]);
 
@@ -196,6 +197,7 @@ const InstancedModelGroup = ({ path, instances, sectorCenter, debug }: {
 }) => {
   const { scene } = useGLTF(path) as any;
   const groupRef = useRef<THREE.Group>(null!);
+  // eslint-disable-next-line react-hooks/purity -- Math.random() intentional for staggered frame culling across instances
   const frameCounterRef = useRef(Math.floor(Math.random() * 3));
 
   // Distance + Frustum based visibility culling (staggered check)

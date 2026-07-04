@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { StormEnvironment } from './StormEnvironment';
 
 interface EnvironmentMultiGlobalProps {
@@ -10,9 +10,14 @@ interface EnvironmentMultiGlobalProps {
 }
 
 export const EnvironmentMultiGlobal = ({ settingsRef, debug = false, onReady }: EnvironmentMultiGlobalProps) => {
+  const [potatoMode, setPotatoMode] = useState<boolean | undefined>(undefined);
+  useEffect(() => {
+    setPotatoMode(settingsRef.current?.potatoMode);
+  }, [settingsRef]);
+
   return (
     <StormEnvironment
-      potatoMode={settingsRef?.current?.potatoMode}
+      potatoMode={potatoMode}
       debug={debug}
       onReady={onReady}
     />

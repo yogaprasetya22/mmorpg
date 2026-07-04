@@ -42,9 +42,10 @@ export const WorldEditor = () => {
     brushMaskId, brushStrength, setBrushStrength, terrainMode,
     brushRotation, brushColor, lastUsedScales, setLastUsedScale,
     lastUsedRotations, setLastUsedRotation, environment, terrainConfig,
-    vegetationBrushActive, setVegetationBrushActive, vegetationTheme,
-    vegetationAssetOverrides, vegetationFixedScale, vegetationDensity,
+    vegetationBrushActive, setVegetationBrushActive,
+    vegetationFixedScale, vegetationDensity,
     cameraFocusTarget, setCameraFocusTarget, cameraFocusObjectId, setCameraFocusObjectId,
+    assetLibrary, vegetationRadius,
   } = useEditorStore();
 
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -206,7 +207,7 @@ export const WorldEditor = () => {
       const theta = Math.random() * Math.PI * 2;
       const px = cx + Math.cos(theta) * r;
       const pz = cz + Math.sin(theta) * r;
-      let py = getCachedTerrainHeight(px, pz, () => {
+      const py = getCachedTerrainHeight(px, pz, () => {
         const h = getTerrainElevation(px, pz, environment, 24, terrainConfig);
         if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
           const rh = (window as any).getGroundHeight(px, pz, -999);
@@ -386,6 +387,23 @@ export const WorldEditor = () => {
       const activeId = draggedId || selectedId;
       const direction = e.deltaY > 0 ? -1 : 1;
       const isShift = e.shiftKey, isCtrl = e.ctrlKey, isAlt = e.altKey;
+
+      if (vegetationBrushActive) {
+        e.preventDefault();
+        if (isShift && isAlt) {
+          const { vegetationFixedScale: vfs, setVegetationFixedScale: svfs } = useEditorStore.getState();
+          const nextScale = Math.max(0, Math.min(4.0, vfs + 0.05 * direction));
+          svfs(parseFloat(nextScale.toFixed(2)));
+        } else if (isCtrl && !isShift) {
+          const { vegetationDensity: vd, setVegetationDensity: svd } = useEditorStore.getState();
+          svd(Math.max(5, Math.min(100, vd + 5 * direction)));
+        } else if (isShift && !isAlt) {
+          const { vegetationRadius: vr, setVegetationRadius: svr } = useEditorStore.getState();
+          svr(Math.max(2, Math.min(30, vr + 0.5 * direction)));
+        }
+        return;
+      }
+
       if (isCtrl && !isAlt && !isShift && selectedId === 'terrain') { e.preventDefault(); setBrushStrength(Math.max(0.01, Math.min(1.0, brushStrength + 0.05 * direction))); return; }
       if (isCtrl && !isAlt && activeId && activeId !== 'terrain') {
         e.preventDefault();
@@ -405,7 +423,7 @@ export const WorldEditor = () => {
         return;
       }
       if (isShift && !isAlt) {
-        if (selectedId === 'terrain' || vegetationBrushActive) {
+        if (selectedId === 'terrain') {
           e.preventDefault();
           const { brushSize: cbs, setBrushSize: sbs } = useEditorStore.getState();
           sbs(Math.max(1, Math.min(150, cbs + 2 * direction)));
@@ -618,12 +636,14 @@ export const WorldEditor = () => {
       )}
 
       {/* Ghost for veg single-asset */}
-      {vegetationBrushActive && brushHoverPos && vegetationAssetOverrides[vegetationTheme] && !isDraggingVegetationRef.current && (() => {
+      {vegetationBrushActive && brushHoverPos && !isDraggingVegetationRef.current && (() => {
+        const bp = items.find(i => i.id === selectedId) ? null : assetLibrary.blueprints.find(b => b.id === assetLibrary.selectedBlueprintId);
+        if (!bp) return null;
         _ghostPreviewPos.set(brushHoverPos[0], brushHoverPos[1], brushHoverPos[2]);
-        const ovPath = vegetationAssetOverrides[vegetationTheme] || '';
+        const modelPath = bp.modelUrl.startsWith('http') ? bp.modelUrl : `${API_BASE_URL}${bp.modelUrl}`;
         return (
           <Suspense fallback={null}>
-            <GhostPreview path={ovPath.startsWith('http') ? ovPath : `${API_BASE_URL}${ovPath}`} position={_ghostPreviewPos}
+            <GhostPreview path={modelPath} position={_ghostPreviewPos}
               scale={vegetationFixedScale > 0 ? [vegetationFixedScale, vegetationFixedScale, vegetationFixedScale] : [1, 1, 1]} rotation={[0, 0, 0]} />
           </Suspense>
         );
@@ -631,7 +651,7 @@ export const WorldEditor = () => {
 
       {/* Vegetation spray ring */}
       {vegetationBrushActive && brushHoverPos && (() => {
-        const worldRadius = brushSize * (1500 / 1024) * 2.0;
+        const worldRadius = vegetationRadius;
         const vegPts = buildProjectedCirclePoints(brushHoverPos[0], brushHoverPos[1], brushHoverPos[2], worldRadius, 64, environment, terrainConfig);
         return (
           <lineLoop>

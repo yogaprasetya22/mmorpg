@@ -8,6 +8,7 @@ export const ExposureBridge = ({ exposure }: { exposure: number }) => {
   const { gl } = useThree();
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- Intentional: mutate WebGLRenderer exposure property
     gl.toneMappingExposure = exposure;
   }, [gl, exposure]);
 

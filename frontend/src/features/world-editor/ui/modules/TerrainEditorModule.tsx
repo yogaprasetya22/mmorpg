@@ -173,6 +173,8 @@ export const TerrainEditorModule = () => {
     // New v2.0 fields
     flattenTargetHeight,
     setFlattenTargetHeight,
+    sculptMaxHeight,
+    setSculptMaxHeight,
     brushHoverPos,
     activePaintLayer,
     setActivePaintLayer,
@@ -180,6 +182,8 @@ export const TerrainEditorModule = () => {
     setPaintLayerMaterial,
     paintLayerColors,
     setPaintLayerColor,
+    terrainWireframe,
+    setTerrainWireframe,
   } = useEditorStore();
 
   const [newBlueprintName, setNewBlueprintName] = useState('');
@@ -187,10 +191,11 @@ export const TerrainEditorModule = () => {
   const handleSaveBlueprint = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBlueprintName.trim()) return;
+    const layerIdx = (activePaintLayer < 4 ? activePaintLayer : 0) as 0 | 1 | 2 | 3;
     createPaintBlueprint(newBlueprintName.trim(), {
       maskType: brushMaskId,
-      textureId: paintLayerMaterials[activePaintLayer],
-      brushColor: paintLayerColors[activePaintLayer] || '#3d5c36',
+      textureId: paintLayerMaterials[layerIdx],
+      brushColor: paintLayerColors[layerIdx] || '#3d5c36',
       defaultSize: brushSize,
       defaultIntensity: brushStrength
     });
@@ -255,6 +260,25 @@ export const TerrainEditorModule = () => {
         >
           <Paintbrush className="w-3.5 h-3.5 text-zinc-400" /> Paint splat
         </button>
+      </div>
+
+      {/* ─── VISUAL MODE TOGGLE ─── */}
+      <div className="flex items-center justify-between p-2 bg-zinc-950/40 rounded-lg border border-zinc-900 text-[8.5px] font-bold text-zinc-400">
+        <span className="uppercase tracking-wider">Visual Mode</span>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setTerrainWireframe(false)}
+            className={`px-2 py-1 rounded transition-all cursor-pointer ${!terrainWireframe ? 'bg-zinc-800 text-white border border-zinc-700' : 'text-zinc-500 hover:text-zinc-350'}`}
+          >
+            Solid Shaded
+          </button>
+          <button
+            onClick={() => setTerrainWireframe(true)}
+            className={`px-2 py-1 rounded transition-all cursor-pointer ${terrainWireframe ? 'bg-zinc-800 text-white border border-zinc-700 shadow-[0_0_8px_rgba(255,255,255,0.1)]' : 'text-zinc-500 hover:text-zinc-350'}`}
+          >
+            Wireframe
+          </button>
+        </div>
       </div>
 
       {/* ────────────────── HEIGHT SCULPT TAB ────────────────── */}
@@ -373,6 +397,13 @@ export const TerrainEditorModule = () => {
 
           {/* Terrain Config Sliders */}
           <div className="flex flex-col gap-3 border-t border-zinc-900/50 pt-3 bg-zinc-950/40 p-3 rounded-lg border border-zinc-900">
+            <div className="flex flex-col gap-1.5 border-b border-zinc-900/40 pb-2.5 mb-1">
+              <div className="flex justify-between items-center text-[8.5px] font-bold text-zinc-500">
+                <span className="uppercase tracking-wider text-amber-500">Max Sculpt Limit (Batas Tinggi)</span>
+                <span className="text-amber-450 font-extrabold">{sculptMaxHeight}m</span>
+              </div>
+              <input type="range" min="30" max="300" step="5" value={sculptMaxHeight} onChange={(e) => setSculptMaxHeight(parseInt(e.target.value))} className="w-full accent-amber-500 hover:accent-amber-400 h-1 bg-zinc-900 rounded appearance-none cursor-pointer" />
+            </div>
             <div className="flex flex-col gap-1.5">
               <div className="flex justify-between items-center text-[8.5px] font-bold text-zinc-500">
                 <span className="uppercase tracking-wider">Peak Heights</span>
@@ -551,89 +582,126 @@ export const TerrainEditorModule = () => {
               })}
             </div>
 
+            {/* Terrain Hole cutout tool button */}
+            <button
+              onClick={() => setActivePaintLayer(4)}
+              className={`mt-2 py-1.5 w-full rounded-xl border flex items-center justify-center gap-2 transition-all cursor-pointer select-none text-[8.5px] font-bold ${activePaintLayer === 4
+                  ? 'border-rose-500 bg-rose-500/10 text-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.25)] font-extrabold'
+                  : 'border-zinc-800 hover:border-zinc-700 bg-zinc-900/30 text-zinc-400'
+                }`}
+            >
+              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2"/>
+                <circle cx="12" cy="12" r="6" fill="currentColor"/>
+              </svg>
+              Terrain Hole (Cutout Tool)
+            </button>
+
             {/* Selected Layer Configuration Panel */}
-            <div className="mt-2 p-2 bg-zinc-950/85 rounded-lg border border-zinc-900 flex flex-col gap-2">
-              <div className="flex justify-between items-center text-[7.5px] font-bold text-zinc-550 uppercase tracking-widest">
-                <span>Configure Layer {activePaintLayer}</span>
-                <span className="text-indigo-400 font-extrabold">
-                  {paintLayerMaterials[activePaintLayer] ? 'Texture Splat Mode' : 'Solid Color Mode'}
-                </span>
+            {activePaintLayer === 4 ? (
+              <div className="mt-2 p-3 bg-rose-950/10 rounded-lg border border-rose-900/30 flex flex-col gap-1.5 text-[8px] leading-relaxed text-rose-300">
+                <span className="font-extrabold uppercase text-[8.5px] tracking-wide block mb-0.5">🕳️ Terrain Hole Mode</span>
+                Sapukan kuas di tanah untuk melubangi terrain secara visual (cutout) agar bisa membuat gua atau pintu masuk terowongan. 
+                Untuk menambal lubang kembali, cukup pilih salah satu dari Layer 0 - 3 di atas dan cat di atas area lubang tersebut.
               </div>
-
-              {/* Toggle material or solid */}
-              <div className="grid grid-cols-2 gap-1.5 text-[8px] font-bold">
-                <button
-                  onClick={() => setPaintLayerMaterial(activePaintLayer, null)}
-                  className={`py-1 rounded border transition-all cursor-pointer select-none ${!paintLayerMaterials[activePaintLayer]
-                      ? 'bg-indigo-600/20 border-indigo-500 text-white font-extrabold'
-                      : 'border-transparent text-zinc-500 hover:bg-zinc-900'
-                    }`}
-                >
-                  Solid Color
-                </button>
-                <button
-                  onClick={() => setPaintLayerMaterial(activePaintLayer, FULL_MATERIAL_LIBRARY[0].id)}
-                  className={`py-1 rounded border transition-all cursor-pointer select-none ${paintLayerMaterials[activePaintLayer]
-                      ? 'bg-indigo-600/20 border-indigo-500 text-white font-extrabold'
-                      : 'border-transparent text-zinc-500 hover:bg-zinc-900'
-                    }`}
-                >
-                  Texture Material
-                </button>
-              </div>
-
-              {/* Texture material selection grid if texture active */}
-              {paintLayerMaterials[activePaintLayer] ? (
-                <div className="grid grid-cols-3 gap-1 mt-1 border-t border-zinc-900 pt-2">
-                  {FULL_MATERIAL_LIBRARY.map((mat) => (
-                    <button
-                      key={mat.id}
-                      onClick={() => setPaintLayerMaterial(activePaintLayer, mat.id)}
-                      className={`h-8 rounded border transition-all relative overflow-hidden cursor-pointer select-none ${paintLayerMaterials[activePaintLayer] === mat.id
-                          ? 'border-indigo-500 shadow'
-                          : 'border-transparent hover:border-zinc-700'
-                        }`}
-                    >
-                      {mat.diffuse && <img src={mat.diffuse} className="absolute inset-0 w-full h-full object-cover opacity-60" alt="" />}
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/60 hover:bg-transparent transition-colors">
-                        <span className="text-[7.5px] font-black uppercase text-white truncate max-w-full px-0.5">{mat.name}</span>
-                      </div>
-                    </button>
-                  ))}
+            ) : (
+              <div className="mt-2 p-2 bg-zinc-950/85 rounded-lg border border-zinc-900 flex flex-col gap-2">
+                <div className="flex justify-between items-center text-[7.5px] font-bold text-zinc-555 uppercase tracking-widest">
+                  <span>Configure Layer {activePaintLayer}</span>
+                  <span className="text-indigo-400 font-extrabold">
+                    {paintLayerMaterials[activePaintLayer] ? 'Texture Splat Mode' : 'Solid Color Mode'}
+                  </span>
                 </div>
-              ) : (
-                /* Color swatches if solid active */
-                <div className="flex flex-col gap-1.5 mt-1 border-t border-zinc-900 pt-2">
-                  <div className="flex gap-1.5 items-center overflow-x-auto custom-scrollbar">
-                    {['#3d5c36', '#7c6a4a', '#5a4d3a', '#e8e0d0', '#2d3e4d', '#fca311', '#d00000', '#ffffff'].map(c => (
+
+                {/* Toggle material or solid */}
+                <div className="grid grid-cols-2 gap-1.5 text-[8px] font-bold">
+                  <button
+                    onClick={() => setPaintLayerMaterial(activePaintLayer, null)}
+                    className={`py-1 rounded border transition-all cursor-pointer select-none ${!paintLayerMaterials[activePaintLayer]
+                        ? 'bg-indigo-600/20 border-indigo-500 text-white font-extrabold'
+                        : 'border-transparent text-zinc-500 hover:bg-zinc-900'
+                      }`}
+                  >
+                    Solid Color
+                  </button>
+                  <button
+                    onClick={() => setPaintLayerMaterial(activePaintLayer, FULL_MATERIAL_LIBRARY[0].id)}
+                    className={`py-1 rounded border transition-all cursor-pointer select-none ${paintLayerMaterials[activePaintLayer]
+                        ? 'bg-indigo-600/20 border-indigo-500 text-white font-extrabold'
+                        : 'border-transparent text-zinc-500 hover:bg-zinc-900'
+                      }`}
+                  >
+                    Texture Material
+                  </button>
+                </div>
+
+                {/* Texture material selection grid if texture active */}
+                {paintLayerMaterials[activePaintLayer] ? (
+                  <div className="grid grid-cols-3 gap-1 mt-1 border-t border-zinc-900 pt-2">
+                    {FULL_MATERIAL_LIBRARY.map((mat) => (
                       <button
-                        key={c}
-                        onClick={() => setPaintLayerColor(activePaintLayer, c)}
-                        className={`w-5.5 h-5.5 rounded border transition-all cursor-pointer select-none flex-shrink-0 hover:scale-110 active:scale-95 ${paintLayerColors[activePaintLayer] === c
-                            ? 'border-indigo-400 scale-105 shadow-[0_0_8px_rgba(99,102,241,0.5)]'
-                            : 'border-zinc-800 hover:border-zinc-600'
+                        key={mat.id}
+                        onClick={() => setPaintLayerMaterial(activePaintLayer, mat.id)}
+                        className={`h-8 rounded border transition-all relative overflow-hidden cursor-pointer select-none ${paintLayerMaterials[activePaintLayer] === mat.id
+                            ? 'border-indigo-500 shadow'
+                            : 'border-transparent hover:border-zinc-700'
                           }`}
-                        style={{ backgroundColor: c }}
-                      />
+                      >
+                        {mat.diffuse && <img src={mat.diffuse} className="absolute inset-0 w-full h-full object-cover opacity-60" alt="" />}
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/60 hover:bg-transparent transition-colors">
+                          <span className="text-[7.5px] font-black uppercase text-white truncate max-w-full px-0.5">{mat.name}</span>
+                        </div>
+                      </button>
                     ))}
-                    <input
-                      type="color"
-                      value={paintLayerColors[activePaintLayer] || '#3d5c36'}
-                      onChange={(e) => setPaintLayerColor(activePaintLayer, e.target.value)}
-                      className="w-5.5 h-5.5 rounded bg-transparent border-none p-0 overflow-hidden cursor-pointer flex-shrink-0 hover:scale-110 active:scale-95"
-                      title="Custom Hex Picker"
-                    />
                   </div>
-                </div>
-              )}
-            </div>
+                ) : (
+                  /* Color swatches if solid active */
+                  <div className="flex flex-col gap-1.5 mt-1 border-t border-zinc-900 pt-2">
+                    <div className="flex gap-1.5 items-center overflow-x-auto custom-scrollbar">
+                      {['#3d5c36', '#7c6a4a', '#5a4d3a', '#e8e0d0', '#2d3e4d', '#fca311', '#d00000', '#ffffff'].map(c => (
+                        <button
+                          key={c}
+                          onClick={() => setPaintLayerColor(activePaintLayer, c)}
+                          className={`w-5.5 h-5.5 rounded border transition-all cursor-pointer select-none flex-shrink-0 hover:scale-110 active:scale-95 ${paintLayerColors[activePaintLayer] === c
+                              ? 'border-indigo-400 scale-105 shadow-[0_0_8px_rgba(99,102,241,0.5)]'
+                              : 'border-zinc-800 hover:border-zinc-600'
+                            }`}
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                      <input
+                        type="color"
+                        value={paintLayerColors[activePaintLayer] || '#3d5c36'}
+                        onChange={(e) => setPaintLayerColor(activePaintLayer, e.target.value)}
+                        className="w-5.5 h-5.5 rounded bg-transparent border-none p-0 overflow-hidden cursor-pointer flex-shrink-0 hover:scale-110 active:scale-95"
+                        title="Custom Hex Picker"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Reset Paint */}
-          <div className="flex gap-2 border-t border-zinc-900/50 pt-3">
+          {/* Auto Paint Splat Mask & Reset Paint */}
+          <div className="flex flex-col gap-2 border-t border-zinc-900/50 pt-3">
+            <button
+              onClick={() => {
+                if (confirm("Generate auto texture splat based on heights and slopes? This will overwrite the current canvas splat.")) {
+                  if (typeof window !== "undefined" && (window as any).handleAutoPaint) {
+                    (window as any).handleAutoPaint();
+                  } else {
+                    alert("Terrain brush system is not loaded yet.");
+                  }
+                }
+              }}
+              className="w-full py-2 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/30 hover:border-indigo-500 text-indigo-300 hover:text-white rounded-lg transition-all duration-200 font-bold uppercase tracking-wide text-center cursor-pointer select-none shadow-[0_0_12px_rgba(99,102,241,0.15)]"
+            >
+              Auto-Paint Splat Mask
+            </button>
             <button
               onClick={() => { if (confirm("Reset seluruh warna cat dan splat di atas kanvas tanah?")) setPaintData(null); }}
-              className="w-full py-2 bg-rose-600/10 hover:bg-rose-600 border border-rose-500/20 hover:border-rose-500 text-rose-400 hover:text-white rounded-lg transition-all duration-200 font-bold uppercase tracking-wide text-center cursor-pointer select-none"
+              className="w-full py-2 bg-rose-600/10 hover:bg-rose-600 border border-rose-500/20 hover:border-rose-500 text-rose-450 hover:text-white rounded-lg transition-all duration-200 font-bold uppercase tracking-wide text-center cursor-pointer select-none"
             >
               Reset Splat Canvas
             </button>

@@ -71,6 +71,7 @@ export function PlayerRewards({ playerStats, onClose, sendClaimDailyReward }: Pl
   // Calculate cooldown countdown
   useEffect(() => {
     if (!lastDailyClaimStr) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Reset cooldown when no claim history
       setClaimCooldownSeconds(0);
       return;
     }
@@ -131,7 +132,7 @@ export function PlayerRewards({ playerStats, onClose, sendClaimDailyReward }: Pl
 
   return (
     <div className="fixed inset-0 w-screen h-[100dvh] z-[9999] bg-[#ebdcb9]/40 backdrop-blur-sm flex flex-col font-sans text-[#4a3000] pointer-events-auto select-none overflow-hidden animate-in fade-in duration-200">
-      
+
       {/* ── BACKGROUND PARCHMENT ── */}
       <div className="absolute inset-0 z-0 bg-[#fdf9f3] pointer-events-none" />
 
@@ -139,7 +140,7 @@ export function PlayerRewards({ playerStats, onClose, sendClaimDailyReward }: Pl
       <div className="relative z-10 px-6 py-3.5 flex justify-between items-center border-b border-[#dfb76c]/30 bg-[#ebdcb9]/20 shrink-0 select-none">
         {/* Left: Back & Title */}
         <div className="flex items-center gap-3">
-          <button 
+          <button
             onClick={onClose}
             className="w-9 h-9 rounded-full bg-[#fdf9f3] hover:bg-[#ebdcb9] flex items-center justify-center text-[#4a3000] border border-[#dfb76c] active:scale-95 transition-all shadow-sm"
           >
@@ -158,7 +159,7 @@ export function PlayerRewards({ playerStats, onClose, sendClaimDailyReward }: Pl
         </div>
 
         {/* Right: Close Button */}
-        <button 
+        <button
           onClick={onClose}
           className="w-9 h-9 rounded-xl hover:bg-black/5 flex items-center justify-center text-[#8c6b4f] transition-colors"
         >
@@ -168,17 +169,17 @@ export function PlayerRewards({ playerStats, onClose, sendClaimDailyReward }: Pl
 
       {/* ── MAIN CONTENT AREA ── */}
       <div className="flex-1 flex flex-col md:flex-row gap-6 p-6 items-stretch justify-center relative min-h-0 z-10 overflow-y-auto">
-        
+
         {/* LEFT COLUMN: DAY HIGHLIGHT & CLAIM PANEL */}
         <div className="w-full md:w-[380px] bg-[#ebdcb9]/20 border-2 border-[#dfb76c]/60 rounded-3xl p-6 flex flex-col items-center justify-between shadow-sm shrink-0">
           <div className="w-full flex flex-col items-center text-center">
             <div className="w-16 h-16 rounded-full bg-[#dfb76c]/20 flex items-center justify-center mb-4 text-[#8c6b4f]">
               <Sparkles className="w-8 h-8 animate-pulse text-[#b88c42]" />
             </div>
-            
+
             <h2 className="text-lg font-black tracking-wide text-[#5c3e16] mb-1">PETUALANGAN SETIAP HARI</h2>
             <p className="text-xs text-[#8c6b4f] leading-relaxed max-w-[280px]">Masuk ke game setiap hari untuk klaim hadiah premium dan percepat progres karaktermu.</p>
-            
+
             {/* Divider */}
             <div className="w-full h-[1px] bg-[#dfb76c]/30 my-5" />
 
@@ -246,15 +247,14 @@ export function PlayerRewards({ playerStats, onClose, sendClaimDailyReward }: Pl
               const isLocked = reward.day > nextDayToClaim || (reward.day === nextDayToClaim && !isClaimable);
 
               return (
-                <div 
+                <div
                   key={reward.day}
-                  className={`relative flex flex-col items-center justify-between p-4 rounded-2xl border-2 transition-all duration-200 select-none ${
-                    isClaimed 
+                  className={`relative flex flex-col items-center justify-between p-4 rounded-2xl border-2 transition-all duration-200 select-none ${isClaimed
                       ? "bg-[#ebdcb9]/15 border-dashed border-[#dfb76c]/40 opacity-70"
                       : isActive
                         ? "bg-[#fdf9f3] border-amber-500 shadow-md scale-[1.02] ring-2 ring-amber-500/20"
                         : "bg-[#fdf9f3]/60 border-[#dfb76c]/30"
-                  }`}
+                    }`}
                 >
                   {/* Top Badge: Day Count */}
                   <div className="w-full flex justify-between items-center mb-2">

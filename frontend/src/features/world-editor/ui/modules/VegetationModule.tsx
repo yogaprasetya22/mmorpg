@@ -90,6 +90,8 @@ export const VegetationModule = () => {
     setVegetationRadius,
     vegetationDensity,
     setVegetationDensity,
+    vegetationFixedScale,
+    setVegetationFixedScale,
 
     // Prototype states
     vegetationPrototypes,
@@ -149,11 +151,16 @@ export const VegetationModule = () => {
   // Determine active preview URL (hovered takes priority)
   const previewModelUrl = hoveredBlueprint?.modelUrl || selectedBlueprint?.modelUrl;
 
-  const handleSelectBlueprint = (id: string) => {
+  const handleSelectBlueprint = (id: string, isMulti: boolean) => {
     setSelectedBlueprintId(id);
-    // Automatically toggle prototype inclusion for painting if chosen
-    if (!selectedPrototypeIds.includes(id)) {
-      togglePrototypeSelection(id);
+    if (isMulti) {
+      const current = useEditorStore.getState().selectedPrototypeIds;
+      const next = current.includes(id)
+        ? current.filter(x => x !== id)
+        : [...current, id];
+      useEditorStore.setState({ selectedPrototypeIds: next });
+    } else {
+      useEditorStore.setState({ selectedPrototypeIds: [id] });
     }
   };
 
@@ -227,6 +234,7 @@ export const VegetationModule = () => {
         <BlueprintGridVirtualized
           blueprints={filteredBlueprints}
           selectedBlueprintId={assetLibrary.selectedBlueprintId}
+          selectedBlueprintIds={selectedPrototypeIds}
           onSelect={handleSelectBlueprint}
           onHover={(bp) => {
             setHoveredBlueprint(bp);
@@ -303,6 +311,20 @@ export const VegetationModule = () => {
             type="range" min="5" max="100" step="5"
             value={vegetationDensity}
             onChange={e => setVegetationDensity(parseInt(e.target.value))}
+            className="w-full accent-emerald-500 h-1 bg-zinc-900 rounded appearance-none cursor-pointer"
+          />
+        </div>
+
+        {/* Scale Slider */}
+        <div className="flex flex-col gap-1">
+          <div className="flex justify-between items-center text-[8.5px] font-bold text-zinc-500">
+            <span className="uppercase tracking-wider">Asset Scale (Ukuran)</span>
+            <span className="text-emerald-400 font-mono font-bold">{vegetationFixedScale === 0 ? 'Random/Default' : `${vegetationFixedScale.toFixed(2)}x`}</span>
+          </div>
+          <input
+            type="range" min="0" max="4" step="0.05"
+            value={vegetationFixedScale}
+            onChange={e => setVegetationFixedScale(parseFloat(e.target.value))}
             className="w-full accent-emerald-500 h-1 bg-zinc-900 rounded appearance-none cursor-pointer"
           />
         </div>

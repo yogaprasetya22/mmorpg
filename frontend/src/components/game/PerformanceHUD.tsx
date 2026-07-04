@@ -35,11 +35,11 @@ export const PerformanceHUD = ({ connectedPlayersRef, worldMonstersRef }: Perfor
   const monsterEl = useRef<HTMLElement | null>(null);
   const visibleRef = useRef(true);
 
-  // Frame tracking
+  // Frame tracking — lazy init to avoid impure calls during render
   const frameTimes = useRef<number[]>([]);
-  const lastFrameTime = useRef(performance.now());
+  const lastFrameTime = useRef<number>(null!);
   const frameCount = useRef(0);
-  const lastFpsUpdate = useRef(performance.now());
+  const lastFpsUpdate = useRef<number>(null!);
   // Track peak render stats within the update window (gl.info resets per frame,
   // and post-processing may overwrite values, so we capture the max seen).
   const peakDrawCalls = useRef(0);
@@ -73,6 +73,9 @@ export const PerformanceHUD = ({ connectedPlayersRef, worldMonstersRef }: Perfor
     playerEl.current = document.getElementById('perf-players');
     monsterEl.current = document.getElementById('perf-monsters');
 
+    // Lazy-init timing refs inside effect (not during render)
+    if (lastFrameTime.current === null) lastFrameTime.current = performance.now();
+    if (lastFpsUpdate.current === null) lastFpsUpdate.current = performance.now();
     return () => {
       if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
     };

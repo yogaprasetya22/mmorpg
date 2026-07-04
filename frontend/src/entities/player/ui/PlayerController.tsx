@@ -265,6 +265,7 @@ export const PlayerController = (props: PlayerProps) => {
   // Reset spawn stabilizer when unpaused (e.g. when loading screen fades out)
   useEffect(() => {
     if (!paused) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Spawn stabilization state management
       setIsSpawning(true);
       const timer = setTimeout(() => {
         setIsSpawning(false);
@@ -331,6 +332,7 @@ export const PlayerController = (props: PlayerProps) => {
   const [currentPose, setCurrentPose] = useState("Idle");
   const [currentTimeScale, setCurrentTimeScale] = useState(1.0);
 
+  // ponytail: playerStatsRef is stable ref, read .current inside useMemo only for initial value
   const localCustomization = useMemo(() => {
     const hasStats = playerStats && typeof playerStats.hp !== 'undefined' && playerStats.hp !== -1;
     const stats = hasStats
@@ -343,15 +345,10 @@ export const PlayerController = (props: PlayerProps) => {
       (stats as any).hair_style || (stats as any).hairStyle || 1,
       (stats as any).hair_color || (stats as any).hairColor || '#5A3E2D'
     );
-  }, [selectedCharacter, playerStats, playerClass]);
+  }, [selectedCharacter, playerStats, playerClass, playerStatsRef]);
 
-  /**
-   * Stable callback for AvatarModel's onAttackLoop prop.
-   * useRef ensures the function reference never changes across renders,
-   * so AvatarModel's useEffect (which deps on onAttackLoop) only runs once.
-   * releaseNextPendingArrow is module-level — no stale closure risk.
-   */
-  const _attackLoopRef = useRef((now: number) => releaseNextPendingArrow(now));
+  // State mirror to avoid passing ref.current as prop child
+  const [onAttackLoop] = useState(() => (now: number) => releaseNextPendingArrow(now));
 
   // --- RESET CAMERA ON GAME START ---
   const gameState = useStore(s => s.gameState);
@@ -1117,7 +1114,7 @@ export const PlayerController = (props: PlayerProps) => {
       >
         <group ref={characterRef} dispose={null} position={[0, -1.18, 0]}>
           <Suspense fallback={null}>
-            <AvatarModel customization={localCustomization} pose={currentPose} timeScale={currentTimeScale} onAttackLoop={_attackLoopRef.current} />
+            <AvatarModel customization={localCustomization} pose={currentPose} timeScale={currentTimeScale} onAttackLoop={onAttackLoop} />
           </Suspense>
 
           <group ref={stunVFXRef} position={[0, 2.3, 0]} visible={false}>

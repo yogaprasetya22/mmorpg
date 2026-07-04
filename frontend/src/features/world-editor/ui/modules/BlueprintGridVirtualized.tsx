@@ -9,11 +9,12 @@ import { API_BASE_URL } from '@/src/core/config';
 type Props = {
   blueprints: AssetBlueprint[];
   selectedBlueprintId: string | null;
-  onSelect: (id: string) => void;
+  selectedBlueprintIds?: string[];
+  onSelect: (id: string, isMulti: boolean) => void;
   onHover?: (blueprint: AssetBlueprint | null) => void;
 };
 
-export const BlueprintGridVirtualized = memo(({ blueprints, selectedBlueprintId, onSelect, onHover }: Props) => {
+export const BlueprintGridVirtualized = memo(({ blueprints, selectedBlueprintId, selectedBlueprintIds, onSelect, onHover }: Props) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const COLUMNS = 3;
   const rowCount = Math.ceil(blueprints.length / COLUMNS);
@@ -55,12 +56,14 @@ export const BlueprintGridVirtualized = memo(({ blueprints, selectedBlueprintId,
                 }}
               >
                 {rowItems.map((bp) => {
-                  const isSelected = selectedBlueprintId === bp.id;
+                  const isSelected = selectedBlueprintIds
+                    ? selectedBlueprintIds.includes(bp.id)
+                    : selectedBlueprintId === bp.id;
                   const thumbSrc = bp.thumbnailUrl ? `${API_BASE_URL}${bp.thumbnailUrl}` : null;
                   return (
                     <div
                       key={bp.id}
-                      onClick={() => onSelect(bp.id)}
+                      onClick={(e) => onSelect(bp.id, e.ctrlKey || e.metaKey || e.shiftKey)}
                       onMouseEnter={() => onHover?.(bp)}
                       className={`p-1 border rounded-lg flex flex-col items-center justify-center gap-1 transition-all cursor-pointer truncate ${
                         isSelected
@@ -69,11 +72,16 @@ export const BlueprintGridVirtualized = memo(({ blueprints, selectedBlueprintId,
                       }`}
                       style={{ height: '58px' }}
                     >
-                      <div className="w-full rounded bg-zinc-950 flex items-center justify-center overflow-hidden border border-zinc-900">
+                      <div className="w-full rounded bg-zinc-950 flex items-center justify-center overflow-hidden border border-zinc-900 relative">
                         {thumbSrc ? (
                           <img src={thumbSrc} alt={bp.name} className="w-full h-full object-contain pointer-events-none" />
                         ) : (
                           <span className="text-xs">📦</span>
+                        )}
+                        {isSelected && (
+                          <div className="absolute top-0.5 right-0.5 w-2 h-2 bg-indigo-500 rounded-full border border-zinc-950 flex items-center justify-center shadow-sm">
+                            <div className="w-1 h-1 bg-white rounded-full" />
+                          </div>
                         )}
                       </div>
                       <span className="text-[6.5px] font-black truncate max-w-full text-zinc-400 uppercase px-0.5">

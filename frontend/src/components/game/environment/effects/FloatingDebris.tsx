@@ -5,6 +5,7 @@ import * as THREE from 'three';
 export const FloatingDebris = ({ count = 40 }: { count?: number }) => {
     const meshRef = useRef<THREE.InstancedMesh>(null!);
     const dummy = useMemo(() => new THREE.Object3D(), []);
+    // eslint-disable-next-line react-hooks/purity -- Math.random() intentional for randomized debris seed positions
     const seeds = useMemo(() => Array.from({ length: count }, () => Math.random() * Math.PI * 2), [count]);
 
     useEffect(() => {

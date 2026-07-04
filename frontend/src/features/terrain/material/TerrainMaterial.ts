@@ -16,6 +16,8 @@ import { PainterlyShaderUtils } from "@jagres/shared";
 export const TerrainMaterial = new THREE.MeshStandardMaterial({
   roughness: 0.85,
   metalness: 0.15,
+  envMapIntensity: 1.5,
+  aoMapIntensity: 1.0,
 }) as any;
 
 TerrainMaterial.uniforms = {
@@ -52,6 +54,7 @@ TerrainMaterial.onBeforeCompile = (shader: any) => {
     varying float vElevation;
     varying vec2 vTerrainUv;
     varying vec3 vWorldPosition;
+    varying vec3 vWorldNormal;
     ${shader.vertexShader}
   `.replace(
     "#include <begin_vertex>",
@@ -60,6 +63,7 @@ TerrainMaterial.onBeforeCompile = (shader: any) => {
     vTerrainUv = uv;
     vElevation = position.z;
     vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+    vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
     `
   );
 
@@ -68,6 +72,7 @@ TerrainMaterial.onBeforeCompile = (shader: any) => {
     varying float vElevation;
     varying vec2 vTerrainUv;
     varying vec3 vWorldPosition;
+    varying vec3 vWorldNormal;
     uniform vec3 baseColor;
     uniform vec3 peakColor;
     uniform vec3 rockColor;
@@ -105,7 +110,7 @@ TerrainMaterial.onBeforeCompile = (shader: any) => {
     "vec4 diffuseColor = vec4( diffuse, opacity );",
     `
     // ─── TRIPLANAR TEXTURE SAMPLING ───
-    vec3 _triplanarNorm = normalize(cross(dFdx(vWorldPosition), dFdy(vWorldPosition)));
+    vec3 _triplanarNorm = normalize(vWorldNormal);
     vec3 _triplanarBlend = abs(_triplanarNorm);
     _triplanarBlend = pow(_triplanarBlend, vec3(4.0));
     _triplanarBlend /= dot(_triplanarBlend, vec3(1.0));
@@ -126,6 +131,10 @@ TerrainMaterial.onBeforeCompile = (shader: any) => {
 
     // ─── MULTI-LAYER SPLAT PAINT ───
     vec4 splat = texture2D(uPaintMap, vTerrainUv);
+
+    if (uUsePaint > 0.5 && splat.a < 0.1) {
+      discard;
+    }
 
     vec3 splatBase0 = uUseSplat0 > 0.5
       ? sampleTriplanar(uSplatTex0, vWorldPosition, _triplanarBlend, _TEX_SCALE)

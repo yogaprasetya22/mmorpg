@@ -12,32 +12,32 @@ interface SkillBarProps {
 
 // Maps SkillBar slot key → archerSkillCDs key (from archerSkills.ts)
 const SLOT_TO_SKILL_ID: Record<string, string> = {
-  "2":  "double_strafe",
-  "3":  "arrow_shower",
-  "4":  "arrow_repel",
-  "5":  "ankle_snare",
-  "6":  "improve_concentration",
+  "2": "double_strafe",
+  "3": "arrow_shower",
+  "4": "arrow_repel",
+  "5": "ankle_snare",
+  "6": "improve_concentration",
   "F1": "rain_of_arrows",
 };
 
 // Cooldown durations in ms (mirrors ARCHER_SKILLS config for UI display)
 const SKILL_CD_MS: Record<string, number> = {
-  double_strafe:           1500,
-  arrow_shower:            4000,
-  arrow_repel:             6000,
-  ankle_snare:            10000,
-  improve_concentration:  30000,
-  rain_of_arrows:         45000,
+  double_strafe: 1500,
+  arrow_shower: 4000,
+  arrow_repel: 6000,
+  ankle_snare: 10000,
+  improve_concentration: 30000,
+  rain_of_arrows: 45000,
 };
 
 // Damage multiplier per skill (for tooltip display)
 const SKILL_DMG_LABEL: Record<string, string> = {
-  double_strafe:          "2.0× ATK",
-  arrow_shower:           "1.2× ATK AoE",
-  arrow_repel:            "1.8× ATK",
-  ankle_snare:            "Trap",
-  improve_concentration:  "Buff",
-  rain_of_arrows:         "3.5× ATK AoE",
+  double_strafe: "2.0× ATK",
+  arrow_shower: "1.2× ATK AoE",
+  arrow_repel: "1.8× ATK",
+  ankle_snare: "Trap",
+  improve_concentration: "Buff",
+  rain_of_arrows: "3.5× ATK AoE",
 };
 
 // Archer skill metadata for tooltips and icons
@@ -61,8 +61,6 @@ function getRemainingCD(skillId: string): number {
 }
 
 export function SkillBar({ selectedCharacter, isAutoMode, setIsAutoMode }: SkillBarProps) {
-  if (!selectedCharacter) return null;
-
   const playerClass = selectedCharacter?.class || "Warrior";
   const isArcher = playerClass === "Beginner";
 
@@ -71,7 +69,7 @@ export function SkillBar({ selectedCharacter, isAutoMode, setIsAutoMode }: Skill
   const rafRef = useRef(0);
 
   useEffect(() => {
-    if (!isArcher) return;
+    if (!isArcher || !selectedCharacter) return;
     let running = true;
 
     const tick = () => {
@@ -89,7 +87,7 @@ export function SkillBar({ selectedCharacter, isAutoMode, setIsAutoMode }: Skill
       running = false;
       clearTimeout(rafRef.current);
     };
-  }, [isArcher]);
+  }, [isArcher, selectedCharacter]);
 
   const handleAttackDispatch = useCallback(() => {
     const e = new MouseEvent("mousedown", { button: 0 });
@@ -113,6 +111,8 @@ export function SkillBar({ selectedCharacter, isAutoMode, setIsAutoMode }: Skill
       }
     }
   }, [handleAttackDispatch, handleSkillKeyDispatch]);
+
+  if (!selectedCharacter) return null;
 
   // Predefined keys for the grid layout
   const topRowKeys = ["7", "8", "9", "0", "-", "="];
@@ -222,7 +222,7 @@ export function SkillBar({ selectedCharacter, isAutoMode, setIsAutoMode }: Skill
 
   return (
     <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-end gap-3.5 bg-black/45 backdrop-blur-md border border-white/10 px-5 py-3 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.55)] pointer-events-auto select-none z-30">
-      
+
       {/* LEFT: Locked Utility Slots */}
       <div className="flex gap-1.5">
         <div className="relative flex flex-col items-center">
@@ -329,11 +329,10 @@ export function SkillBar({ selectedCharacter, isAutoMode, setIsAutoMode }: Skill
         <div className="flex items-center gap-1.5 bg-black/20 px-2 py-1.5 rounded-xl border border-white/5">
           <button
             onClick={() => setIsAutoMode(v => !v)}
-            className={`flex flex-col items-center justify-center w-[40px] h-[40px] rounded-xl border transition-all ${
-              isAutoMode 
-                ? "bg-[#10b981]/25 border-[#10b981] text-[#10b981] shadow-[0_0_10px_rgba(16,185,129,0.35)]" 
-                : "bg-zinc-900/40 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700"
-            }`}
+            className={`flex flex-col items-center justify-center w-[40px] h-[40px] rounded-xl border transition-all ${isAutoMode
+              ? "bg-[#10b981]/25 border-[#10b981] text-[#10b981] shadow-[0_0_10px_rgba(16,185,129,0.35)]"
+              : "bg-zinc-900/40 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700"
+              }`}
           >
             <Sword className={`w-4 h-4 ${isAutoMode ? "animate-pulse" : ""}`} />
             <span className="text-[6.5px] font-extrabold mt-0.5 uppercase tracking-wide">Auto (Z)</span>

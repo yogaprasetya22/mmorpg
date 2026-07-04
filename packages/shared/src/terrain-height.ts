@@ -45,17 +45,23 @@ export function getTerrainElevation(
             baseDistance + 60.0,
         );
 
+        // Domain Warping: offset the lookup coordinates by a secondary lower frequency noise
+        const warpX = noise.noise((x + seed) * 0.003 * s, (z + seed) * 0.003 * s) * 80.0;
+        const warpZ = noise.noise((x + seed + 100) * 0.003 * s, (z + seed + 100) * 0.003 * s) * 80.0;
+        const wx = x + warpX;
+        const wz = z + warpZ;
+
         const n1 = Math.max(
             0,
-            noise.noise((x + seed) * 0.008 * s, (z + seed) * 0.008 * s),
+            noise.noise((wx + seed) * 0.008 * s, (wz + seed) * 0.008 * s),
         );
         const n2 = Math.max(
             0,
-            noise.noise((x + seed) * 0.025 * s, (z + seed) * 0.025 * s),
+            noise.noise((wx + seed) * 0.025 * s, (wz + seed) * 0.025 * s),
         );
         const n3 = Math.max(
             0,
-            noise.noise((x + seed) * 0.08 * s, (z + seed) * 0.08 * s),
+            noise.noise((wx + seed) * 0.08 * s, (wz + seed) * 0.08 * s),
         );
 
         let combined = (n1 + n2 * 0.3 + n3 * 0.1) / 1.4;
@@ -85,9 +91,10 @@ export function getTerrainElevation(
         const u = (x + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
         const v = (z + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
 
-        const px = Math.max(0, Math.min(255, Math.round(u * 255)));
-        const py = Math.max(0, Math.min(255, Math.round((1 - v) * 255)));
-        const idx = py * 256 + px;
+        const size = Math.round(Math.sqrt(heights.length));
+        const px = Math.max(0, Math.min(size - 1, Math.round(u * (size - 1))));
+        const py = Math.max(0, Math.min(size - 1, Math.round((1 - v) * (size - 1))));
+        const idx = py * size + px;
         const sculptOffset = heights[idx] || 0;
         elevation += sculptOffset;
     }
