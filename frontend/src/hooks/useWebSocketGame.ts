@@ -107,6 +107,11 @@ export const useWebSocketGame = (
         return () => {
             ws.close();
         };
+        // onStateReceived and onChatReceived intentionally excluded from deps.
+        // Including them would reconnect the WebSocket every time the parent re-renders
+        // (these callbacks are recreated each render unless wrapped in useCallback upstream).
+        // WebSocket connection lifecycle must only depend on serverUrl, token, characterId.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [serverUrl, token, characterId]);
 
     // Send local player state at max 20Hz — prevents flooding WS with 60fps movement updates

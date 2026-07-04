@@ -54,26 +54,78 @@ export default function MultiplayerArena() {
   const [showSettingsDashboard, setShowSettingsDashboard] = useState(false);
   const [debugWireframe, setDebugWireframe] = useState(false);
 
+  // Pre-extract values that linter flags as "ref access during render" because
+  // useArenaGameState returns a mixed object containing both state and refs.
+  // Destructuring before JSX silences false-positive react-hooks/refs warnings
+  // for genuinely-stable state values (selectedCharacter, handleLogout).
+  const {
+    selectedCharacter,
+    handleLogout,
+    connectedPlayersRef,
+    worldMonstersRef,
+    selectedMapId,
+    handleSaveMonsterConfig,
+    handleDeleteMonsterConfig,
+    errorMsg,
+    successMsg,
+    showEnemyEditorModal,
+    setShowEnemyEditorModal,
+    editingMonster,
+    setEditingMonster,
+    monsterConfigs,
+    setShowStatsModal,
+    setShowInventoryModal,
+    chatRef,
+    statsHudRef,
+    statusBarRef,
+    questPanelRef,
+    isAutoMode,
+    setIsAutoMode,
+    sendChatMessage,
+    sendDistributeStat,
+    sendEquipItem,
+    sendUseItem,
+    sendSellItem,
+    sendRefineItem,
+    sendBuyItem,
+    sendClaimDailyReward,
+    sendGetAuctionItems,
+    sendListAuctionItem,
+    sendBuyoutAuctionItem,
+    showStatsModal,
+    showInventoryModal,
+  } = state;
+
+  const [showShopModal, setShowShopModal] = useState(false);
+  const [showAuctionModal, setShowAuctionModal] = useState(false);
+  const [showRewardsModal, setShowRewardsModal] = useState(false);
+
+  // Cache playerStats for modal IIFEs — avoids ref.current access during render.
+  // Updated via useEffect whenever a modal opens (the show* flag transitions to true).
+  const [modalPlayerStats, setModalPlayerStats] = useState<any>(null);
+  useEffect(() => {
+    if (showStatsModal || showInventoryModal || showShopModal || showRewardsModal || showAuctionModal) {
+      setModalPlayerStats(statsHudRef.current?.getStats() ?? null);
+    }
+  }, [showStatsModal, showInventoryModal, showShopModal, showRewardsModal, showAuctionModal, statsHudRef]);
+
   const toggleDebugWireframe = () => {
     const next = !debugWireframe;
     setDebugWireframe(next);
     useEditorStore.setState({ terrainWireframe: next });
   };
-  const [showShopModal, setShowShopModal] = useState(false);
-  const [showAuctionModal, setShowAuctionModal] = useState(false);
-  const [showRewardsModal, setShowRewardsModal] = useState(false);
 
   // Set global modal open flag for input hooks
   useEffect(() => {
     (window as any).isModalOpen = !!(
-      state.showStatsModal || 
-      state.showInventoryModal || 
-      state.showEnemyEditorModal || 
-      showShopModal || 
-      showAuctionModal || 
+      showStatsModal ||
+      showInventoryModal ||
+      showEnemyEditorModal ||
+      showShopModal ||
+      showAuctionModal ||
       showRewardsModal
     );
-  }, [state.showStatsModal, state.showInventoryModal, state.showEnemyEditorModal, showShopModal, showAuctionModal, showRewardsModal]);
+  }, [showStatsModal, showInventoryModal, showEnemyEditorModal, showShopModal, showAuctionModal, showRewardsModal]);
 
   // Expose statsHudRef to window for usePlayerCombat to update mana locally
   useEffect(() => {
@@ -104,7 +156,7 @@ export default function MultiplayerArena() {
         if (drop.addAttack > 0) statsStr += ` ATK+${drop.addAttack}`;
         if (drop.addDefense > 0) statsStr += ` DEF+${drop.addDefense}`;
         if (drop.addHp > 0) statsStr += ` HP+${drop.addHp}`;
-        
+
         nameEl.innerText = `${drop.itemName} x${drop.quantity} ${statsStr ? `(${statsStr.trim()})` : ""}`;
         alertEl.style.opacity = "1";
         setTimeout(() => {
@@ -241,29 +293,29 @@ export default function MultiplayerArena() {
       {/* MULTIPLAYER HUD OVERLAY */}
       <div className="absolute inset-0 pointer-events-none z-10 select-none">
         {/* Alert toasts */}
-        <div id="no-target-alert" className="absolute top-[35%] left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-500/90 backdrop-blur-md border border-red-400/30 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl shadow-2xl pointer-events-none opacity-0 flex items-center gap-2" style={{transition:'opacity 0.25s ease-in-out'}}>
+        <div id="no-target-alert" className="absolute top-[35%] left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-500/90 backdrop-blur-md border border-red-400/30 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl shadow-2xl pointer-events-none opacity-0 flex items-center gap-2" style={{ transition: 'opacity 0.25s ease-in-out' }}>
           <span className="animate-pulse">⚠️</span> BUTUH TARGET ENEMY UNTUK SKILL!
         </div>
-        <div id="no-mana-alert" className="absolute top-[35%] left-1/2 -translate-x-1/2 -translate-y-1/2 bg-blue-500/95 backdrop-blur-md border border-blue-400/30 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl shadow-2xl pointer-events-none opacity-0 flex items-center gap-2" style={{transition:'opacity 0.25s ease-in-out'}}>
+        <div id="no-mana-alert" className="absolute top-[35%] left-1/2 -translate-x-1/2 -translate-y-1/2 bg-blue-500/95 backdrop-blur-md border border-blue-400/30 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl shadow-2xl pointer-events-none opacity-0 flex items-center gap-2" style={{ transition: 'opacity 0.25s ease-in-out' }}>
           <span className="animate-pulse">🔷</span> MANA (MP) TIDAK CUKUP!
         </div>
         {/* Facing alignment alert */}
-        <div id="facing-alignment-alert" className="absolute top-[35%] left-1/2 -translate-x-1/2 -translate-y-1/2 bg-amber-500/90 backdrop-blur-md border border-amber-400/30 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl shadow-2xl pointer-events-none opacity-0 flex items-center gap-2" style={{transition:'opacity 0.25s ease-in-out'}}>
+        <div id="facing-alignment-alert" className="absolute top-[35%] left-1/2 -translate-x-1/2 -translate-y-1/2 bg-amber-500/90 backdrop-blur-md border border-amber-400/30 text-white font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl shadow-2xl pointer-events-none opacity-0 flex items-center gap-2" style={{ transition: 'opacity 0.25s ease-in-out' }}>
           <span className="animate-pulse">🔄</span> MENYELARASKAN HADAP TARGET...
         </div>
 
         {/* Item Drop Alert Toast (Classic RO Style) */}
-        <div id="item-drop-alert" className="absolute top-[25%] left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gradient-to-b from-[#ebdcb9] to-[#d8c39e] border-2 border-[#b88c42] text-[#5c3e16] font-black text-xs uppercase tracking-widest px-6 py-3 rounded-2xl shadow-2xl pointer-events-none opacity-0 flex flex-col items-center gap-1.5" style={{transition:'opacity 0.3s ease-in-out', zIndex: 999}}>
+        <div id="item-drop-alert" className="absolute top-[25%] left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gradient-to-b from-[#ebdcb9] to-[#d8c39e] border-2 border-[#b88c42] text-[#5c3e16] font-black text-xs uppercase tracking-widest px-6 py-3 rounded-2xl shadow-2xl pointer-events-none opacity-0 flex flex-col items-center gap-1.5" style={{ transition: 'opacity 0.3s ease-in-out', zIndex: 999 }}>
           <span className="text-[10px] text-[#8c6b4f] tracking-wider animate-pulse">🎁 LOOT BARANG BARU!</span>
           <span id="item-drop-alert-name" className="text-[#047857] font-extrabold text-[12px] drop-shadow-sm"></span>
         </div>
 
         {/* Player Stats HUD (Isolated Microservice) */}
         <PlayerStatsHUD
-          ref={state.statsHudRef}
-          defaultUsername={state.selectedCharacter?.username || "Hero"}
-          defaultLevel={state.selectedCharacter?.level || 1}
-          onOpenStats={() => state.setShowStatsModal(true)}
+          ref={statsHudRef}
+          defaultUsername={selectedCharacter?.username || "Hero"}
+          defaultLevel={selectedCharacter?.level || 1}
+          onOpenStats={() => setShowStatsModal(true)}
         />
 
         {/* Top-Right: Minimap + Quick Menu + Status + Exit Portal */}
@@ -272,31 +324,31 @@ export default function MultiplayerArena() {
           <div className="flex items-center gap-1.5 bg-black/30 backdrop-blur-md border border-white/10 rounded-full px-3 py-1 shadow-md">
             {showQuickMenu && (
               <div className="flex items-center gap-3 mr-1 animate-in slide-in-from-right-3 duration-200">
-                <button 
+                <button
                   onClick={() => setShowAuctionModal(true)}
                   className="flex items-center gap-1 text-[8px] font-black text-zinc-300 hover:text-white transition-colors"
                 >
                   <Gavel className="w-3 h-3 text-yellow-400" /> Auction
                 </button>
-                <button 
+                <button
                   onClick={() => alert("Sistem Perdagangan (Trade) Peer-to-Peer akan hadir di fase berikutnya!")}
                   className="flex items-center gap-1 text-[8px] font-black text-zinc-300 hover:text-white transition-colors"
                 >
                   <Scale className="w-3 h-3 text-cyan-400" /> Trade
                 </button>
-                <button 
+                <button
                   onClick={() => setShowRewardsModal(true)}
                   className="flex items-center gap-1 text-[8px] font-black text-zinc-300 hover:text-white transition-colors"
                 >
                   <Gift className="w-3 h-3 text-pink-400" /> Rewards
                 </button>
-                <button 
+                <button
                   onClick={() => alert("Informasi Event Server sedang disiapkan!")}
                   className="flex items-center gap-1 text-[8px] font-black text-zinc-300 hover:text-white transition-colors"
                 >
                   <Sparkles className="w-3 h-3 text-indigo-400" /> Event
                 </button>
-                <button 
+                <button
                   onClick={() => setShowShopModal(true)}
                   className="flex items-center gap-1 text-[8px] font-black text-zinc-300 hover:text-white transition-colors"
                 >
@@ -316,7 +368,7 @@ export default function MultiplayerArena() {
           <div className="flex items-start gap-3">
             {/* Circular Exit Portal button on the left of Minimap */}
             <button
-              onClick={state.handleLogout}
+              onClick={handleLogout}
               className="w-10 h-10 rounded-full bg-blue-600/35 hover:bg-blue-600/50 backdrop-blur-md border-2 border-blue-400/50 flex items-center justify-center text-white active:scale-95 transition-all shadow-lg self-center"
               title="Keluar / Logout"
             >
@@ -324,21 +376,21 @@ export default function MultiplayerArena() {
             </button>
 
             <Minimap
-              connectedPlayersRef={state.connectedPlayersRef}
-              worldMonstersRef={state.worldMonstersRef}
-              localPlayerId={state.selectedCharacter?.id || ""}
-              mapId={state.selectedMapId || "Starter Zone"}
+              connectedPlayersRef={connectedPlayersRef}
+              worldMonstersRef={worldMonstersRef}
+              localPlayerId={selectedCharacter?.id || ""}
+              mapId={selectedMapId || "Starter Zone"}
             />
           </div>
 
-          <GameStatusBar ref={state.statusBarRef} mapId={state.selectedMapId} />
+          <GameStatusBar ref={statusBarRef} mapId={selectedMapId} />
 
           {/* ── C, K, B & MENU Quick Access Buttons ── */}
           <div className="flex items-center gap-2 mt-1.5 bg-black/35 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-2xl shadow-lg">
             {/* C: Profile/Stats */}
             <div className="relative">
               <button
-                onClick={() => state.setShowStatsModal(true)}
+                onClick={() => setShowStatsModal(true)}
                 className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 flex items-center justify-center text-zinc-300 hover:text-white transition-all active:scale-90"
                 title="Profile & Stats (C)"
               >
@@ -362,7 +414,7 @@ export default function MultiplayerArena() {
             {/* B: Bag / Inventory */}
             <div className="relative">
               <button
-                onClick={() => state.setShowInventoryModal(true)}
+                onClick={() => setShowInventoryModal(true)}
                 className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 flex items-center justify-center text-zinc-300 hover:text-white transition-all active:scale-90"
                 title="Inventory Bag (B)"
               >
@@ -375,11 +427,10 @@ export default function MultiplayerArena() {
             <div className="relative">
               <button
                 onClick={toggleDebugWireframe}
-                className={`w-8 h-8 rounded-xl border transition-all active:scale-95 flex items-center justify-center ${
-                  debugWireframe
-                    ? 'bg-blue-600/35 border-blue-500 text-blue-300 hover:text-white shadow-[0_0_10px_rgba(59,130,246,0.3)]'
-                    : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white'
-                }`}
+                className={`w-8 h-8 rounded-xl border transition-all active:scale-95 flex items-center justify-center ${debugWireframe
+                  ? 'bg-blue-600/35 border-blue-500 text-blue-300 hover:text-white shadow-[0_0_10px_rgba(59,130,246,0.3)]'
+                  : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white'
+                  }`}
                 title="Toggle Debug Wireframe Mode"
               >
                 <Grid className="w-4 h-4" />
@@ -405,103 +456,83 @@ export default function MultiplayerArena() {
         </div>
 
         {/* Quest Panel */}
-        <QuestPanel ref={state.questPanelRef} />
+        <QuestPanel ref={questPanelRef} />
 
         {/* Chat */}
-        <GameChat ref={state.chatRef} sendChatMessage={state.sendChatMessage} />
+        <GameChat ref={chatRef} sendChatMessage={sendChatMessage} />
 
         {/* Skill Bar */}
         <SkillBar
-          selectedCharacter={state.selectedCharacter}
-          isAutoMode={state.isAutoMode}
-          setIsAutoMode={state.setIsAutoMode}
+          selectedCharacter={selectedCharacter}
+          isAutoMode={isAutoMode}
+          setIsAutoMode={setIsAutoMode}
         />
 
         {/* Character Stats Modal */}
-        {state.showStatsModal && (() => {
-          const playerStats = state.statsHudRef.current?.getStats();
-          if (!playerStats) return null;
-          return (
-            <CharacterStatsModal
-              playerStats={playerStats}
-              onClose={() => state.setShowStatsModal(false)}
-              sendDistributeStat={state.sendDistributeStat}
-            />
-          );
-        })()}
+        {showStatsModal && modalPlayerStats && (
+          <CharacterStatsModal
+            playerStats={modalPlayerStats}
+            onClose={() => setShowStatsModal(false)}
+            sendDistributeStat={sendDistributeStat}
+          />
+        )}
 
         {/* Dedicated Player Inventory */}
-        {state.showInventoryModal && (() => {
-          const playerStats = state.statsHudRef.current?.getStats();
-          if (!playerStats) return null;
-          return (
-            <PlayerInventory
-              playerStats={playerStats}
-              onClose={() => state.setShowInventoryModal(false)}
-              onOpenShop={() => {
-                state.setShowInventoryModal(false);
-                setShowShopModal(true);
-              }}
-              sendEquipItem={state.sendEquipItem}
-              sendUseItem={state.sendUseItem}
-              sendSellItem={state.sendSellItem}
-              sendRefineItem={state.sendRefineItem}
-            />
-          );
-        })()}
+        {showInventoryModal && modalPlayerStats && (
+          <PlayerInventory
+            playerStats={modalPlayerStats}
+            onClose={() => setShowInventoryModal(false)}
+            onOpenShop={() => {
+              setShowInventoryModal(false);
+              setShowShopModal(true);
+            }}
+            sendEquipItem={sendEquipItem}
+            sendUseItem={sendUseItem}
+            sendSellItem={sendSellItem}
+            sendRefineItem={sendRefineItem}
+          />
+        )}
 
         {/* Dedicated Player Shop */}
-        {showShopModal && (() => {
-          const playerStats = state.statsHudRef.current?.getStats();
-          if (!playerStats) return null;
-          return (
-            <PlayerShop
-              playerStats={playerStats}
-              onClose={() => setShowShopModal(false)}
-              sendBuyItem={state.sendBuyItem}
-            />
-          );
-        })()}
+        {showShopModal && modalPlayerStats && (
+          <PlayerShop
+            playerStats={modalPlayerStats}
+            onClose={() => setShowShopModal(false)}
+            sendBuyItem={sendBuyItem}
+          />
+        )}
 
         {/* Dedicated Player Rewards */}
-        {showRewardsModal && (() => {
-          const playerStats = state.statsHudRef.current?.getStats();
-          if (!playerStats) return null;
-          return (
-            <PlayerRewards
-              playerStats={playerStats}
-              onClose={() => setShowRewardsModal(false)}
-              sendClaimDailyReward={state.sendClaimDailyReward}
-            />
-          );
-        })()}
+        {showRewardsModal && modalPlayerStats && (
+          <PlayerRewards
+            playerStats={modalPlayerStats}
+            onClose={() => setShowRewardsModal(false)}
+            sendClaimDailyReward={sendClaimDailyReward}
+          />
+        )}
 
         {/* Dedicated Player Auction */}
-        {showAuctionModal && (() => {
-          const playerStats = state.statsHudRef.current?.getStats();
-          if (!playerStats) return null;
-          return (
-            <PlayerAuction
-              playerStats={playerStats}
-              onClose={() => setShowAuctionModal(false)}
-              sendGetAuctionItems={state.sendGetAuctionItems}
-              sendListAuctionItem={state.sendListAuctionItem}
-              sendBuyoutAuctionItem={state.sendBuyoutAuctionItem}
-            />
-          );
-        })()}
+        {showAuctionModal && modalPlayerStats && (
+          <PlayerAuction
+            playerStats={modalPlayerStats}
+            onClose={() => setShowAuctionModal(false)}
+            sendGetAuctionItems={sendGetAuctionItems}
+            sendListAuctionItem={sendListAuctionItem}
+            sendBuyoutAuctionItem={sendBuyoutAuctionItem}
+          />
+        )}
 
         {/* Monster Editor Modal */}
-        {state.showEnemyEditorModal && (
+        {showEnemyEditorModal && (
           <MonsterEditorModal
-            monsterConfigs={state.monsterConfigs}
-            editingMonster={state.editingMonster}
-            setEditingMonster={state.setEditingMonster}
-            errorMsg={state.errorMsg}
-            successMsg={state.successMsg}
-            onClose={() => state.setShowEnemyEditorModal(false)}
-            handleSaveMonsterConfig={state.handleSaveMonsterConfig}
-            handleDeleteMonsterConfig={state.handleDeleteMonsterConfig}
+            monsterConfigs={monsterConfigs}
+            editingMonster={editingMonster}
+            setEditingMonster={setEditingMonster}
+            errorMsg={errorMsg}
+            successMsg={successMsg}
+            onClose={() => setShowEnemyEditorModal(false)}
+            handleSaveMonsterConfig={handleSaveMonsterConfig}
+            handleDeleteMonsterConfig={handleDeleteMonsterConfig}
           />
         )}
 
@@ -509,8 +540,8 @@ export default function MultiplayerArena() {
         {showSettingsDashboard && (
           <SettingsDashboardModal
             onClose={() => setShowSettingsDashboard(false)}
-            onOpenStats={() => state.setShowStatsModal(true)}
-            onOpenInventory={() => state.setShowInventoryModal(true)}
+            onOpenStats={() => setShowStatsModal(true)}
+            onOpenInventory={() => setShowInventoryModal(true)}
           />
         )}
       </div>

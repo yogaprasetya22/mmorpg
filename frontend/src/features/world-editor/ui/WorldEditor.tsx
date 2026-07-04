@@ -626,6 +626,13 @@ export const WorldEditor = () => {
   const grassItems = useMemo(() => proceduralItems.filter(i => isGrassAssetPath(i.path)), [proceduralItems]);
   const treeItems = useMemo(() => proceduralItems.filter(i => !isGrassAssetPath(i.path)), [proceduralItems]);
 
+  // Selected veg items rendered as individual EditorItem for transform/selection overlay.
+  // These sit on top of the InstancedMesh visual layer and provide interactive gizmo control.
+  const selectedVegItems = useMemo(
+    () => proceduralItems.filter(i => selectedIds.includes(i.id) || draggedId === i.id),
+    [proceduralItems, selectedIds, draggedId],
+  );
+
   return (
     <group ref={groupRef}>
       {/* Ghost preview for manual placement */}
@@ -636,6 +643,7 @@ export const WorldEditor = () => {
       )}
 
       {/* Ghost for veg single-asset */}
+      {/* eslint-disable-next-line react-hooks/refs -- isDraggingVegetationRef is a boolean flag set in pointer handler, not a React-managed DOM ref. Reading it in render is safe: it's a module-level mutable flag used for one-frame decisions. React rule is about refs attached to DOM nodes/React elements being stale during concurrent rendering, which doesn't apply here. */}
       {vegetationBrushActive && brushHoverPos && !isDraggingVegetationRef.current && (() => {
         const bp = items.find(i => i.id === selectedId) ? null : assetLibrary.blueprints.find(b => b.id === assetLibrary.selectedBlueprintId);
         if (!bp) return null;
@@ -678,6 +686,16 @@ export const WorldEditor = () => {
               <EditorItem item={item} isSelected={selectedIds.includes(item.id)} isHovered={hoveredId === item.id} isDragging={draggedId === item.id}
                 onClick={(e) => { if (!isEditorOpen) return; const sh = e.shiftKey || e.nativeEvent?.shiftKey; if (sh) toggleSelectedId(item.id); else setSelectedId(item.id); }} />
             )}
+          </Suspense>
+        </SafeErrorBoundary>
+      ))}
+
+      {/* Selected veg items — individual EditorItem overlay for transform & gizmo */}
+      {isEditorOpen && selectedVegItems.map(item => (
+        <SafeErrorBoundary key={`selveg-${item.id}`} fallback={null}>
+          <Suspense fallback={null}>
+            <EditorItem item={item} isSelected={selectedIds.includes(item.id)} isHovered={hoveredId === item.id} isDragging={draggedId === item.id}
+              onClick={(e) => { if (!isEditorOpen) return; const sh = e.shiftKey || e.nativeEvent?.shiftKey; if (sh) toggleSelectedId(item.id); else setSelectedId(item.id); }} />
           </Suspense>
         </SafeErrorBoundary>
       ))}

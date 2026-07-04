@@ -113,7 +113,9 @@ export const WorldEditorUI = () => {
     fetchMapList();
     const timer = setTimeout(() => setIsInitializing(false), 800);
     return () => clearTimeout(timer);
-  }, []);
+    // fetchMapList, fetchDynamicAssets, loadFromDatabase are Zustand store actions with stable references.
+    // Included in deps to satisfy react-hooks/exhaustive-deps; they never change identity at runtime.
+  }, [fetchMapList, fetchDynamicAssets, loadFromDatabase]);
 
   // Handle menu action
   const handleMenuAction = (action: string) => {
