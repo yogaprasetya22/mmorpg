@@ -2,14 +2,14 @@ import * as THREE from "three";
 
 // Zero-allocation raycaster setup
 const raycaster = new THREE.Raycaster();
-raycaster.firstHitOnly = true; 
+raycaster.firstHitOnly = true;
 const origin = new THREE.Vector3();
 const direction = new THREE.Vector3(0, -1, 0); // Downward
 
 // Global list of meshes to raycast against
 export const colliders: THREE.Mesh[] = [];
 export const nonInstancedColliders: THREE.Mesh[] = [];
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
     (window as any).globalColliders = colliders;
     (window as any).globalNonInstancedColliders = nonInstancedColliders;
 }
@@ -54,7 +54,11 @@ export const unregisterCollider = (obj: THREE.Object3D) => {
     });
 };
 
-export const getGroundHeight = (x: number, z: number, fallbackY: number): number => {
+export const getGroundHeight = (
+    x: number,
+    z: number,
+    fallbackY: number,
+): number => {
     // 1. HIGH-SPEED BVH DIRECT RAYCAST:
     // If we have a cached terrain mesh, only raycast against it directly!
     // This is extremely fast (O(log N) due to three-mesh-bvh) and avoids scanning hundreds of tree meshes!
@@ -76,7 +80,9 @@ export const getGroundHeight = (x: number, z: number, fallbackY: number): number
 
     const hits = raycaster.intersectObjects(colliders, false);
     if (hits.length > 0) {
-        const terrainHit = hits.find((h: THREE.Intersection) => h.object.name === "terrain");
+        const terrainHit = hits.find(
+            (h: THREE.Intersection) => h.object.name === "terrain",
+        );
         if (terrainHit) {
             return terrainHit.point.y;
         }
@@ -86,5 +92,5 @@ export const getGroundHeight = (x: number, z: number, fallbackY: number): number
     return fallbackY;
 };
 
-if (typeof window !== 'undefined') (window as any).getGroundHeight = getGroundHeight;
-
+if (typeof window !== "undefined")
+    (window as any).getGroundHeight = getGroundHeight;

@@ -1091,11 +1091,11 @@ export const PlayerController = (props: PlayerProps) => {
         position={spawnPosition}
         colliderCapsuleArgs={[0.28, 1.1, 4, 8]}
         floatCheckType="SHAPECAST"
-        floatHeight={0.35}
-        floatPullBackHeight={0.5}
-        floatSensorRadius={0.32}
-        floatSpringK={220}
-        floatDampingC={40}
+        floatHeight={0.2}
+        floatPullBackHeight={0.25}
+        floatSensorRadius={0.12}
+        floatSpringK={600}
+        floatDampingC={28}
         maxWalkSpeed={currentSpeed * 0.45}
         maxRunSpeed={currentSpeed}
         acceleration={65}
@@ -1106,10 +1106,10 @@ export const PlayerController = (props: PlayerProps) => {
         fallGravityFactor={1.8}
         maxFallSpeed={45}
         mass={1}
-        maxSlope={1.45}
+        maxSlope={1}
         collisionCheckIteration={3}
-        collisionPushBackVelocity={1.0}
-        collisionPushBackDamping={0.06}
+        collisionPushBackVelocity={3}
+        collisionPushBackDamping={0.1}
         collisionPushBackThreshold={0.01}
       >
         <group ref={characterRef} dispose={null} position={[0, -1.18, 0]}>
