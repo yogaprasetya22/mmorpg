@@ -246,6 +246,15 @@ const InstancedModelGroup = ({ path, instances, sectorCenter, debug }: {
       if (child.geometry && !child.geometry.boundsTree) {
         child.geometry.computeBoundsTree({ maxDepth: 64, maxLeafSize: 10 });
       }
+      // Tag materials for smart transparency vs zoom logic
+      if (child.material) {
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        mats.forEach((m: any) => {
+          if (!m.userData?.occlusionBehavior) {
+            m.userData.occlusionBehavior = 'zoom';
+          }
+        });
+      }
       extracted.push({
         geometry: child.geometry,
         material: child.material,

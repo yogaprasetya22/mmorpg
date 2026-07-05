@@ -131,14 +131,22 @@ export function updatePlayerCamera(camera: THREE.Camera, delta: number) {
         });
 
     if (intersects.length > 0) {
-        const hitDist = intersects[0].distance;
-        const safeDist = Math.max(0.4, hitDist - 0.4);
-        _camDesired.copy(_rayOrigin).add(_rayDir.multiplyScalar(safeDist));
+        const hitObj = intersects[0].object as THREE.Mesh;
+        // Decision logic: check occlusion behavior tag
+        // 'zoom' = terrain/cliffs → snap zoom in
+        // 'transparent' = leaves/pillars → skip zoom, let CameraOcclusionManager handle
+        const occlusionBehavior = hitObj.userData?.occlusionBehavior;
 
-        // INSTANT SNAP on collision
-        camPosX[0] = _camDesired.x;
-        camPosY[0] = _camDesired.y;
-        camPosZ[0] = _camDesired.z;
+        if (occlusionBehavior !== "transparent") {
+            const hitDist = intersects[0].distance;
+            const safeDist = Math.max(0.4, hitDist - 0.4);
+            _camDesired.copy(_rayOrigin).add(_rayDir.multiplyScalar(safeDist));
+
+            // INSTANT SNAP on collision (only for zoom-type obstacles)
+            camPosX[0] = _camDesired.x;
+            camPosY[0] = _camDesired.y;
+            camPosZ[0] = _camDesired.z;
+        }
     }
 
     // PREVENT UNDERWORLD CAMERA (Hard Floor)

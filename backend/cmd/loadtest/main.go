@@ -463,29 +463,29 @@ func main() {
 					} else {
 						stateTicks--
 						if stateTicks <= 0 {
-							// Roll for next state with weighted probabilities
+							// Roll for next state with weighted probabilities (calmer durations)
 							roll := rand.Float64()
 							switch {
-							case roll < 0.15:
+							case roll < 0.25:
 								state = stateIdle
-								stateTicks = rand.Intn(30) + 10 // idle 0.5-2s
+								stateTicks = rand.Intn(100) + 40 // idle 2-7s
 								currentAnim = "Idle"
-							case roll < 0.40:
+							case roll < 0.60:
 								state = stateWalk
-								stateTicks = rand.Intn(60) + 20 // walk 1-4s
+								stateTicks = rand.Intn(160) + 60 // walk 3-11s
 								currentAnim = "Walk"
-							case roll < 0.75:
+							case roll < 0.85:
 								state = stateRun
-								stateTicks = rand.Intn(80) + 30 // run 1.5-5.5s
+								stateTicks = rand.Intn(120) + 60 // run 3-9s
 								currentAnim = "Run"
-							case roll < 0.90 && *enableAttack:
+							case roll < 0.95 && *enableAttack:
 								state = stateAttack
-								stateTicks = rand.Intn(8) + 4 // attack 0.2-0.6s
+								stateTicks = rand.Intn(10) + 6 // attack 0.3-0.8s
 								currentAnim = "Attack"
 								animLockTicks = stateTicks
 							default:
 								state = stateSkill
-								stateTicks = rand.Intn(12) + 8 // skill 0.4-1s
+								stateTicks = rand.Intn(16) + 8 // skill 0.4-1.2s
 								currentAnim = "Skill"
 								animLockTicks = stateTicks
 							}
@@ -500,13 +500,13 @@ func main() {
 						pz = centerZ + radius*math.Sin(angle)
 						rotY = float32(-angle + math.Pi/2)
 					case stateWalk:
-						angle += 0.02 // slow movement
+						angle += 0.006 // slow, normal walking speed
 						px = centerX + radius*math.Cos(angle)
 						pz = centerZ + radius*math.Sin(angle)
 						rotY = float32(-angle + math.Pi/2)
 						currentAnim = "Walk"
 					case stateRun:
-						angle += 0.05 // fast movement
+						angle += 0.015 // normal running speed (down from 0.05)
 						px = centerX + radius*math.Cos(angle)
 						pz = centerZ + radius*math.Sin(angle)
 						rotY = float32(-angle + math.Pi/2)

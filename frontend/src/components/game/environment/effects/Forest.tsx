@@ -62,12 +62,13 @@ function setupLeafMaterial(mat: THREE.Material | THREE.Material[]) {
             m.alphaTest = 0.5;
             m.side = THREE.DoubleSide;
             m.needsUpdate = true;
-            // Opt out of CameraOcclusionManager's second discard shader.
-            // Leaf material already discards via alphaTest — a second discard
-            // destroys early‑Z and kills GPU perf inside dense canopies.
-            m.userData.excludeFromOcclusionCutout = true;
+            // ponytail: re-enable excludeFromOcclusionCutout if GPU frame time
+            // spikes in dense forest areas. Trade-off: visibility through leaves
+            // vs early-Z perf. Add distance threshold (<15m from player) if needed.
             // Tag for camera collision — camera raycast skips leaf hits
             m.userData.isLeafMaterial = true;
+            // Smart transparency: leaves trigger occlusion cutout, not zoom-in
+            m.userData.occlusionBehavior = 'transparent';
         }
     });
 }
@@ -103,6 +104,10 @@ function extractMeshParts(
         mats.forEach(m => {
             if (isGrassAssetPath(path)) {
                 applyWindSway(m, path);
+            }
+            // Tag trunk/branch meshes (non-leaf) for zoom-in behavior
+            if (!m.userData.occlusionBehavior) {
+                m.userData.occlusionBehavior = 'zoom';
             }
         });
 

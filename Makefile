@@ -228,6 +228,10 @@ loadtest-massive-enemies:
 	@echo "⚠️  Make sure backend is running with: make run-backend-heavy-monsters"
 	@cd backend && go run cmd/loadtest/main.go -players=50 -duration=45s -attack=true -radius=15.0
 
+loadtest-normal:
+	@echo "🔥 Starting Normal Game Server Load Test (10 players, normal speed, 3s attack-rate)..."
+	@cd backend && go run cmd/loadtest/main.go -players=10 -duration=60s -attack=true -attack-rate=60 -radius=8.0
+
 loadtest-anim-stress:
 	@echo "🎭 Running Animation Stress Test (20 players, diverse idle/walk/run/attack/skill states)..."
 	@cd backend && go run cmd/loadtest/main.go -players=20 -duration=60s -attack=true -attack-rate=15 -radius=12.0

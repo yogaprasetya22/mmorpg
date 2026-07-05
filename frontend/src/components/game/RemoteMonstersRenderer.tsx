@@ -163,6 +163,8 @@ export const RemoteMonsterInstance = ({
   const prevHp = useRef(-1);
   const flinchEndTime = useRef(0);
   const _lastAnimUpdate = useRef(0); // throttle for far monster animation updates
+  const lastTerrainY = useRef<number | null>(null);
+  const terrainCheckCounter = useRef(Math.floor(Math.random() * 10)); // Stagger checks across entities
 
   useEffect(() => {
     return () => {
@@ -213,22 +215,28 @@ export const RemoteMonsterInstance = ({
 
     const isCurrentlyVisible = !isDensityCulled && camDistSq <= MONSTER_FAR_SQ;
 
-    // Get client terrain elevation with spatial cache (avoids 600+ BVH raycasts/sec)
-    let terrainY = data.y;
-    terrainY = getCachedTerrainHeight(data.x, data.z, () => {
-      if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
-        const raycastH = (window as any).getGroundHeight(data.x, data.z, -999);
-        if (raycastH !== -999) return raycastH;
+    // Get client terrain elevation with spatial cache (Throttled/Staggered every 10 frames to save CPU)
+    terrainCheckCounter.current++;
+    if (terrainCheckCounter.current >= 10 || lastTerrainY.current === null) {
+      terrainCheckCounter.current = 0;
+      let calculatedY = data.y;
+      calculatedY = getCachedTerrainHeight(data.x, data.z, () => {
+        if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
+          const raycastH = (window as any).getGroundHeight(data.x, data.z, -999);
+          if (raycastH !== -999) return raycastH;
+          const activeEnv = useStore.getState().environment;
+          const terrainConfig = useEditorStore.getState().terrainConfig;
+          const baseDistance = activeEnv === "STORM" ? 45.0 : 35.0;
+          return getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
+        }
         const activeEnv = useStore.getState().environment;
         const terrainConfig = useEditorStore.getState().terrainConfig;
         const baseDistance = activeEnv === "STORM" ? 45.0 : 35.0;
         return getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
-      }
-      const activeEnv = useStore.getState().environment;
-      const terrainConfig = useEditorStore.getState().terrainConfig;
-      const baseDistance = activeEnv === "STORM" ? 45.0 : 35.0;
-      return getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
-    });
+      });
+      lastTerrainY.current = calculatedY;
+    }
+    const terrainY = lastTerrainY.current ?? data.y;
 
     // Snap position and rotation if culled to keep state synchronized
     if (!isCurrentlyVisible) {

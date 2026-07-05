@@ -185,9 +185,6 @@ export const RemotePlayerInstance = ({
   // ── Refs for per-frame values (zero React re-renders) ──
   const poseRef = useRef("Idle");
   const timeScaleRef = useRef(1.0);
-  // State mirrors for useFrame-updated values — avoid passing ref.current as prop
-  const [pose, setPose] = useState("Idle");
-  const [timeScale, setTimeScale] = useState(1.0);
   const avatarControlRef = useRef<AvatarHandle>(null);
   const shadowEnabledRef = useRef(true);  // Track shadow state to avoid redundant toggles
   const animPausedRef = useRef(false);    // Track animation pause state to avoid per-frame calls
@@ -221,6 +218,8 @@ export const RemotePlayerInstance = ({
   const smoothPos = useRef<{ x: number, y: number, z: number } | null>(null);
   const smoothRot = useRef(0);
   const pendingArrowsRef = useRef<any[]>([]);
+  const lastTerrainY = useRef<number | null>(null);
+  const terrainCheckCounter = useRef(Math.floor(Math.random() * 10)); // Stagger checks across entities
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
@@ -254,22 +253,28 @@ export const RemotePlayerInstance = ({
     const isCurrentlyVisible = !isDensityCulled && camDistSq <= FAR_SQ;
 
     // Get client terrain elevation to map desynced or flat server coordinates cleanly onto 3D sculpted landscape
-    // ─── Terrain height with spatial cache ──────────────────────────────────
-    let terrainY = data.y;
-    terrainY = getCachedTerrainHeight(data.x, data.z, () => {
-      if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
-        const raycastH = (window as any).getGroundHeight(data.x, data.z, -999);
-        if (raycastH !== -999) return raycastH;
+    // ─── Terrain height with spatial cache (Throttled/Staggered every 10 frames to save CPU) ───
+    terrainCheckCounter.current++;
+    if (terrainCheckCounter.current >= 10 || lastTerrainY.current === null) {
+      terrainCheckCounter.current = 0;
+      let calculatedY = data.y;
+      calculatedY = getCachedTerrainHeight(data.x, data.z, () => {
+        if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
+          const raycastH = (window as any).getGroundHeight(data.x, data.z, -999);
+          if (raycastH !== -999) return raycastH;
+          const activeEnv = useStore.getState().environment;
+          const terrainConfig = useEditorStore.getState().terrainConfig;
+          const baseDistance = activeEnv === "STORM" ? 45.0 : 35.0;
+          return getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
+        }
         const activeEnv = useStore.getState().environment;
         const terrainConfig = useEditorStore.getState().terrainConfig;
         const baseDistance = activeEnv === "STORM" ? 45.0 : 35.0;
         return getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
-      }
-      const activeEnv = useStore.getState().environment;
-      const terrainConfig = useEditorStore.getState().terrainConfig;
-      const baseDistance = activeEnv === "STORM" ? 45.0 : 35.0;
-      return getTerrainElevation(data.x, data.z, activeEnv, baseDistance, terrainConfig);
-    });
+      });
+      lastTerrainY.current = calculatedY;
+    }
+    const terrainY = lastTerrainY.current ?? data.y;
 
     // Snapping position and rotation if culled to keep state synchronized
     if (!isCurrentlyVisible) {
@@ -293,7 +298,8 @@ export const RemotePlayerInstance = ({
     }
 
     // ─── Distance-based shadow toggle (avoid expensive shadow map render for far players) ──
-    const SHADOW_DIST_SQ = 40 * 40;  // 40 units
+    const isCrowded = _connectedPlayersRef.current && _connectedPlayersRef.current.length > 12;
+    const SHADOW_DIST_SQ = isCrowded ? 15 * 15 : 40 * 40; // aggressively shrink shadow distance when crowded!
     const shouldShadow = camDistSq < SHADOW_DIST_SQ;
     if (shouldShadow !== shadowEnabledRef.current) {
       shadowEnabledRef.current = shouldShadow;
@@ -401,7 +407,6 @@ export const RemotePlayerInstance = ({
     // Drive animation imperatively — zero React re-renders
     if (nextPose !== poseRef.current) {
       poseRef.current = nextPose;
-      setPose(nextPose);
       avatarControlRef.current?.setPose(nextPose);
     }
 
@@ -428,7 +433,6 @@ export const RemotePlayerInstance = ({
     }
     if (Math.abs(nextTimeScale - timeScaleRef.current) > 0.05) {
       timeScaleRef.current = nextTimeScale;
-      setTimeScale(nextTimeScale);
       avatarControlRef.current?.setTimeScale(nextTimeScale);
     }
 
@@ -829,8 +833,8 @@ export const RemotePlayerInstance = ({
         <Suspense fallback={null}>
           <AvatarModel
             customization={remoteCustomization}
-            pose={pose}
-            timeScale={timeScale}
+            pose="Idle"
+            timeScale={1.0}
             controlRef={avatarControlRef}
             skipAnimControl
           />

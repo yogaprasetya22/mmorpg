@@ -5,14 +5,14 @@ package game
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"time"
 
 	"mmorpg-backend/internal/domain"
 )
 
-// initMonsters pre-spawns 30 monsters across the world map using biome-like zone clustering.
-// Zones: Beginner (SW), Mid (central/E), Danger (N/far), Boss Arena (center).
+// initMonsters pre-spawns 10 monsters across the world map spread out in a circle.
 func (u *gameUsecase) initMonsters() {
 	rand.Seed(0) // Seeded externally in NewGameUsecase; kept for safety
 
@@ -20,11 +20,15 @@ func (u *gameUsecase) initMonsters() {
 	configs, err := u.configRepo.GetMonsterConfigs()
 	if err != nil || len(configs) == 0 {
 		fmt.Printf("⚠️ Gagal mengambil konfigurasi monster dari database (atau kosong): %v. Menggunakan fallback spawn!\n", err)
-		u.SpawnMonster("Training Dummy", "dummy", 0.0, 0.0, 10.0)
+		for idx := 0; idx < 10; idx++ {
+			angle := float64(idx) * 2 * math.Pi / 10.0
+			r := 6.0
+			mx := float32(r * math.Cos(angle))
+			mz := float32(r * math.Sin(angle))
+			u.SpawnMonster(fmt.Sprintf("Training Dummy %d", idx+1), "dummy", mx, 0.0, mz)
+		}
 		return
 	}
-
-	fmt.Printf("🌱 Menghidupkan 1 monster dinamis berdasarkan database GORM (%d tipe terdaftar)...\n", len(configs))
 
 	var chosenConfig domain.MonsterConfig
 	found := false
@@ -39,8 +43,15 @@ func (u *gameUsecase) initMonsters() {
 		chosenConfig = configs[0]
 	}
 
-	u.SpawnMonster(chosenConfig.Name, chosenConfig.Type, 0.0, 0.0, 10.0)
-	fmt.Println("👾 Total 1 monster dummy berhasil di-spawn!")
+	fmt.Printf("🌱 Menghidupkan 10 monster dinamis berdasarkan database GORM (%d tipe terdaftar)...\n", len(configs))
+	for idx := 0; idx < 10; idx++ {
+		angle := float64(idx) * 2 * math.Pi / 10.0
+		r := 6.0
+		mx := float32(r * math.Cos(angle))
+		mz := float32(r * math.Sin(angle))
+		u.SpawnMonster(fmt.Sprintf("%s %d", chosenConfig.Name, idx+1), chosenConfig.Type, mx, 0.0, mz)
+	}
+	fmt.Println("👾 Total 10 monster dummy berhasil di-spawn!")
 }
 
 // SpawnMonster creates a new monster entity in the world with stats from DB or fallback defaults.

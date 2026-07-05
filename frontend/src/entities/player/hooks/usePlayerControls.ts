@@ -7,6 +7,8 @@ import {
     isRightClick,
     ZOOM_MIN,
     ZOOM_MAX,
+    PITCH_MIN,
+    PITCH_MAX,
 } from "../buffers";
 
 export function usePlayerControls(settingsRef: React.RefObject<any>) {
@@ -31,7 +33,8 @@ export function usePlayerControls(settingsRef: React.RefObject<any>) {
             const s = settingsRef.current?.mouseSensitivity ?? 0.002;
             camYaw[0] -= e.movementX * s;
             camPitch[0] -= e.movementY * s;
-            camPitch[0] = Math.max(-0.4, Math.min(1.1, camPitch[0]));
+            // Strict pitch limit: clamp at input level to prevent locked-out camera state
+            camPitch[0] = Math.max(PITCH_MIN, Math.min(PITCH_MAX, camPitch[0]));
         };
 
         const onMouseDown = (e: MouseEvent) => {
@@ -92,7 +95,8 @@ export function usePlayerControls(settingsRef: React.RefObject<any>) {
             const s = settingsRef.current?.mouseSensitivity ?? 0.002;
             camYaw[0] -= e.movementX * s;
             camPitch[0] -= e.movementY * s;
-            camPitch[0] = Math.max(-0.4, Math.min(1.1, camPitch[0]));
+            // Strict pitch limit: clamp at input level
+            camPitch[0] = Math.max(PITCH_MIN, Math.min(PITCH_MAX, camPitch[0]));
         };
 
         // Capture phase keyboard interceptors to block Drei's useKeyboardControls

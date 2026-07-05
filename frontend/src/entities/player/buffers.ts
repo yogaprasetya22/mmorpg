@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from "three";
 
 // ─── ZERO-ALLOC MATH OBJECTS (module-level = never GC'd) ─────────────────────
 export const _charPos = new THREE.Vector3();
@@ -42,7 +42,7 @@ export const playerPosThrottle = new Float64Array(1); // last setPlayerPosition 
 
 // ─── ECS BUFFERS (TypedArrays — same-frame, no GC) ───────────────────────────
 // Camera state
-export const camYaw = new Float32Array(1);   // radians
+export const camYaw = new Float32Array(1); // radians
 export const camPitch = new Float32Array([0.3]);
 export const camZoom = new Float32Array([5.0]);
 export const camZoomTarget = new Float32Array([5.0]);
@@ -52,21 +52,21 @@ export const camPosZ = new Float32Array(1);
 export const lookAtX = new Float32Array(1);
 export const lookAtY = new Float32Array(1);
 export const lookAtZ = new Float32Array(1);
-export const hasCamInit = new Uint8Array(1);     // 0=false, 1=true
+export const hasCamInit = new Uint8Array(1); // 0=false, 1=true
 
 // Input state (written by DOM events, read by useFrame)
 export const isRightClick = new Uint8Array(1);
 export const isLeftClick = new Uint8Array(1);
 
 // Auto-aim state
-export const autoFireTimer = new Float64Array(1);   // last auto-fire time (ms)
+export const autoFireTimer = new Float64Array(1); // last auto-fire time (ms)
 export const aimTargetX = new Float32Array(1);
 export const aimTargetY = new Float32Array(1);
 export const aimTargetZ = new Float32Array(1);
-export const hasTarget = new Uint8Array(1);     // 0=no target, 1=has target
+export const hasTarget = new Uint8Array(1); // 0=no target, 1=has target
 
 // State machine
-export const charState = new Uint8Array(1);     // 0=NORMAL, 1=ATTACKING, 2=CHASING
+export const charState = new Uint8Array(1); // 0=NORMAL, 1=ATTACKING, 2=CHASING
 export const attackTimer = new Float64Array(1); // Time spent in attack animation
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
@@ -78,36 +78,44 @@ export const SHOULDER_OFFSET = 0.0;
 export const AUTO_AIM_RADIUS = 40.0;
 export const AUTO_AIM_RSQ = AUTO_AIM_RADIUS * AUTO_AIM_RADIUS;
 
+// Camera pitch limits (radians)
+export const PITCH_MIN = -Math.PI * 0.35; // ~-63° (looking down)
+export const PITCH_MAX = Math.PI * 0.4; // ~+72° (looking up)
+
+// Occlusion behavior tagging for smart transparency vs zoom
+export const OCCLUSION_BEHAVIOR_ZOOM = "zoom"; // terrain, hills, cliffs
+export const OCCLUSION_BEHAVIOR_TRANSPARENT = "transparent"; // leaves, branches, pillars
+
 export const animationSet = {
-  idle: 'Idle',
-  walk: 'Walking',
-  jog: 'Jogging',
-  run: 'Slow Run',
-  fastRun: 'Fast Run',
-  runWithSword: 'Run With Sword',
-  jump: 'Jump With Sword',
-  attack: 'Stable Sword Outward Slash',
-  skill: 'Magic Heal',
-  hit: 'Light Hit To Head',
-  stunned: 'Stunned',
-  dizzy: 'Dizzy',
-  death: 'Standing React Death Right',
-  deathHeavy: 'Sword And Shield Death',
-  archerDeath: 'Standing Death Forward Archer',
+    idle: "Idle",
+    walk: "Walking",
+    jog: "Jogging",
+    run: "Slow Run",
+    fastRun: "Fast Run",
+    runWithSword: "Run With Sword",
+    jump: "Jump With Sword",
+    attack: "Stable Sword Outward Slash",
+    skill: "Magic Heal",
+    hit: "Light Hit To Head",
+    stunned: "Stunned",
+    dizzy: "Dizzy",
+    death: "Standing React Death Right",
+    deathHeavy: "Sword And Shield Death",
+    archerDeath: "Standing Death Forward Archer",
 };
 
 export const ecctrlAnimationSet: Record<string, string> = {
-  IDLE: animationSet.idle,
-  WALK: animationSet.walk,
-  RUN: animationSet.run,
-  JUMP_START: animationSet.jump,
-  JUMP_IDLE: animationSet.jump,
-  JUMP_FALL: animationSet.jump,
-  JUMP_LAND: animationSet.idle,
+    IDLE: animationSet.idle,
+    WALK: animationSet.walk,
+    RUN: animationSet.run,
+    JUMP_START: animationSet.jump,
+    JUMP_IDLE: animationSet.jump,
+    JUMP_FALL: animationSet.jump,
+    JUMP_LAND: animationSet.idle,
 };
 
 // ─── ZERO-ALLOC MATH OBJECTS (module-level = never GC'd) ─────────────────────
-export const _tempFwd2   = new THREE.Vector3();
+export const _tempFwd2 = new THREE.Vector3();
 
 // Snappy Jump Gating Math Objects
 
@@ -125,7 +133,7 @@ export const _tempFwd2   = new THREE.Vector3();
 // MMORPG State Machine
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
-export const AUTO_FIRE_RATE  = 750;
+export const AUTO_FIRE_RATE = 750;
 export const ATTACK_DURATION = 600;
-export const SKILL_COOLDOWN  = 8000;
+export const SKILL_COOLDOWN = 8000;
 export const AUTO_FIRE_RATE_WARRIOR = 750;
