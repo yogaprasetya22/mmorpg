@@ -14,7 +14,7 @@
 import { useRef, useEffect, useMemo, useState, Suspense } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useKeyboardControls, Html } from '@react-three/drei';
-import BVHEcctrl, { characterStatus } from 'bvhecctrl';
+import BVHEcctrl, { characterStatus } from '@jagres/bvhecctrl';
 import * as THREE from 'three';
 import { useVFX } from '@/src/components/game/systems/VFXManager';
 import ProjectilePool, { ProjectilePoolHandle } from '@/src/components/game/systems/ProjectilePool';
@@ -417,7 +417,7 @@ export const PlayerController = (props: PlayerProps) => {
       anim = ecctrlAnimationSet[status] ?? animationSet.idle;
     }
 
-    _charPos.copy(characterStatus.position as THREE.Vector3);
+    _charPos.copy(characterStatus.position as unknown as THREE.Vector3);
     (window as any).localPlayerPos = _charPos;
     if (characterRef.current) {
       const fwd = _tempFwd.copy(_fwdAxis);
@@ -1106,7 +1106,7 @@ export const PlayerController = (props: PlayerProps) => {
         fallGravityFactor={1.8}
         maxFallSpeed={45}
         mass={1}
-        maxSlope={1}
+        maxSlope={1.3}
         collisionCheckIteration={3}
         collisionPushBackVelocity={3}
         collisionPushBackDamping={0.1}

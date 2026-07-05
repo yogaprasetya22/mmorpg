@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { useGLTF } from '@react-three/drei';
 import { SimplexNoise } from 'three-stdlib';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
-import { InstancedStaticCollider } from 'bvhecctrl';
+import { InstancedStaticCollider } from '@jagres/bvhecctrl';
 import { applyWindSway } from '@jagres/shared';
 import { isGrassAssetPath } from '../../environment/GrassField';
 
@@ -62,6 +62,12 @@ function setupLeafMaterial(mat: THREE.Material | THREE.Material[]) {
             m.alphaTest = 0.5;
             m.side = THREE.DoubleSide;
             m.needsUpdate = true;
+            // Opt out of CameraOcclusionManager's second discard shader.
+            // Leaf material already discards via alphaTest — a second discard
+            // destroys early‑Z and kills GPU perf inside dense canopies.
+            m.userData.excludeFromOcclusionCutout = true;
+            // Tag for camera collision — camera raycast skips leaf hits
+            m.userData.isLeafMaterial = true;
         }
     });
 }

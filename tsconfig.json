@@ -1,0 +1,12 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "skipLibCheck": true,
+        "strict": true,
+        "noEmit": true
+    },
+    "references": [{ "path": "./packages/bvhecctrl" }],
+    "files": []
+}

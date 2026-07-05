@@ -6,30 +6,29 @@ import * as THREE from 'three';
 import { useStore } from '@/src/state/useStore';
 
 // ---------------------------------------------------------------------------
-// Config — every magic number from the original file now lives here instead
-// of being buried inline in GLSL string templates.
+// Config
 // ---------------------------------------------------------------------------
 export interface CameraOcclusionConfig {
-  /** Radius of the cutout right around the player (meters). */
   maskRadius?: number;
-  /** Radius of the cutout right at the camera lens (meters). Bigger than
-   *  maskRadius so objects hugging the lens still get punched through. */
   nearConeRadius?: number;
-  /** Anything closer to the camera than this is force-discarded regardless
-   *  of the cone test — prevents near-plane clipping artifacts. */
   nearClipDistance?: number;
-  /** Normalized camera->player distance (0..1) below which the cutout is
-   *  active. Above this (i.e. behind the player) objects stay solid. */
   coneFalloff?: number;
-  /** Vertical offset applied to the tracked player position, e.g. to target
-   *  chest height instead of the feet/origin. */
   playerHeightOffset?: number;
-  /** How often (ms) to rescan the scene for new meshes that need patching.
-   *  Lower = new objects get occlusion sooner, at the cost of more
-   *  frequent scene.traverse calls. */
+  /** How often (ms) to scan the scene for new meshes that need patching. */
   rescanIntervalMs?: number;
-  /** Object names to always skip. Matched against Object3D.name. */
   excludedNames?: string[];
+  /** Max number of NEW materials to actually shader-patch per frame. Patching
+   *  sets `needsUpdate = true`, which forces a shader recompile on the next
+   *  render — recompiling dozens of already-rendered materials in the same
+   *  frame (e.g. right after a new area streams in) is a common source of a
+   *  visible hitch. This budget spreads that cost across several frames
+   *  instead of paying it all at once. */
+  materialPatchBudgetPerFrame?: number;
+  /** 'solid' fully discards every pixel inside the cutout radius, so the
+   *  object is genuinely invisible there. 'stipple' keeps the old 2x2
+   *  checkerboard dissolve look (half the pixels discarded) if you ever
+   *  want that dithered look back for a different effect. */
+  cutoutStyle?: 'solid' | 'stipple';
 }
 
 const DEFAULT_CONFIG: Required<CameraOcclusionConfig> = {
@@ -40,6 +39,8 @@ const DEFAULT_CONFIG: Required<CameraOcclusionConfig> = {
   playerHeightOffset: 1.0,
   rescanIntervalMs: 1000,
   excludedNames: ['terrain', 'player', 'water'],
+  materialPatchBudgetPerFrame: 4,
+  cutoutStyle: 'solid',
 };
 
 interface OcclusionUniforms {
@@ -52,21 +53,15 @@ interface OcclusionUniforms {
 }
 
 // ---------------------------------------------------------------------------
-// Shader patch — pulled out of the component so it's a pure, testable
-// function: (material, uniforms) -> mutates material.onBeforeCompile.
-//
-// Same technique as the original (onBeforeCompile injection into the
-// built-in ShaderChunk hooks), just with the constants replaced by
-// uniforms so config changes don't require a shader recompile.
+// The actual shader injection. This is the part that's "expensive" in the
+// sense that it forces a recompile — callers should budget how many of
+// these happen per frame (see the queue in the component below).
 // ---------------------------------------------------------------------------
-function patchMaterialForOcclusionCutout(
+function applyOcclusionShaderPatch(
   material: THREE.Material,
   uniforms: OcclusionUniforms,
-  patched: WeakSet<THREE.Material>
+  cutoutStyle: 'solid' | 'stipple'
 ): void {
-  if (patched.has(material)) return;
-  patched.add(material);
-
   const originalOnBeforeCompile = material.onBeforeCompile;
 
   material.onBeforeCompile = (shader, renderer) => {
@@ -93,6 +88,17 @@ function patchMaterialForOcclusionCutout(
       `
     );
 
+    const stippleHelper =
+      cutoutStyle === 'stipple'
+        ? `
+       // 2x2 checkerboard dissolve — half the pixels in-radius are discarded
+       // instead of all of them, giving a dithered "hologram" look.
+       float occlusionStipple(vec2 fragCoord) {
+         vec2 p = fragCoord / 2.0;
+         return fract((floor(p.x) + floor(p.y)) / 2.0);
+       }`
+        : '';
+
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <common>',
       `#include <common>
@@ -103,14 +109,15 @@ function patchMaterialForOcclusionCutout(
        uniform float uNearClipDistance;
        uniform float uConeFalloff;
        varying vec3 vHoloWorldPos;
-
-       // 2x2 checkerboard stipple so the cutout reads as a dissolve rather
-       // than a hard-edged hole.
-       float occlusionStipple(vec2 fragCoord) {
-         vec2 p = fragCoord / 2.0;
-         return fract((floor(p.x) + floor(p.y)) / 2.0);
-       }`
+       ${stippleHelper}`
     );
+
+    // 'solid' discards every pixel inside the cutout radius — the object is
+    // genuinely gone there, no dissolve/dither look.
+    // 'stipple' only discards half the pixels (checkerboard), which reads
+    // as a translucent dissolve rather than a clean hole.
+    const discardCondition =
+      cutoutStyle === 'stipple' ? 'occlusionStipple(gl_FragCoord.xy) == 0.0' : 'true';
 
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <dithering_fragment>',
@@ -120,25 +127,17 @@ function patchMaterialForOcclusionCutout(
        vec3 ba = uPlayerPos - uCamPos;
        float baSq = max(dot(ba, ba), 1e-5);
 
-       // Normalized position along the camera->player segment:
-       // 0.0 = at the camera lens, 1.0 = at the player.
        float hRaw = dot(pa, ba) / baSq;
        float h = clamp(hRaw, 0.0, 1.0);
        float distToCam = length(pa);
 
-       // Only cut out between the camera and the player (hRaw < coneFalloff).
-       // Objects beyond the player (hRaw >= coneFalloff) stay solid.
        if (hRaw < uConeFalloff) {
-         // Cone effect: cutout radius is wide near the camera (so objects
-         // hugging the lens still get punched through) and narrows down
-         // to maskRadius near the player.
          float targetRadius = mix(uNearConeRadius, sqrt(uMaskRadiusSq), h);
-
          vec3 perp = pa - (ba * h);
          float distSq = dot(perp, perp);
 
          if (distSq < targetRadius * targetRadius || distToCam < uNearClipDistance) {
-           if (occlusionStipple(gl_FragCoord.xy) == 0.0) discard;
+           if (${discardCondition}) discard;
          }
        }
       `
@@ -149,9 +148,7 @@ function patchMaterialForOcclusionCutout(
 }
 
 // ---------------------------------------------------------------------------
-// Object filtering — name-based exclusion kept for backwards compatibility,
-// plus an opt-in userData flag so callers aren't forced to rely on magic
-// string names as the scene grows.
+// Object/material filtering
 // ---------------------------------------------------------------------------
 function shouldExcludeObject(object: THREE.Object3D, excludedNames: Set<string>): boolean {
   if (excludedNames.has(object.name)) return true;
@@ -163,7 +160,8 @@ function collectMaterials(object: THREE.Object3D): THREE.Material[] {
   const mesh = object as THREE.Mesh;
   if (!(mesh as any).isMesh && !(mesh as any).isInstancedMesh) return [];
   if (!mesh.material) return [];
-  return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  return mats.filter((m: any) => !m.userData?.excludeFromOcclusionCutout);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,29 +182,31 @@ export const CameraOcclusionManager = (props: CameraOcclusionConfig = {}) => {
       uNearClipDistance: { value: config.nearClipDistance },
       uConeFalloff: { value: config.coneFalloff },
     }),
-    // Deliberately created once. If you need these to react to live config
-    // changes, update `.value` on the existing uniforms instead of
-    // recreating this object (recreating would desync already-patched
-    // materials, which hold a reference to the original uniform objects).
     []
   );
 
-  const patchedMaterials = useRef<WeakSet<THREE.Material>>(new WeakSet());
+  // `claimedMaterials` marks a material as "already discovered" the moment
+  // scanAndPatchScene finds it, so a repeat scan while it's still waiting
+  // in the queue doesn't enqueue it a second time.
+  const claimedMaterials = useRef<WeakSet<THREE.Material>>(new WeakSet());
+  const pendingPatchQueue = useRef<THREE.Material[]>([]);
   const playerPosScratch = useRef(new THREE.Vector3());
   const elapsedSinceLastScan = useRef(0);
 
-  const scanAndPatchScene = () => {
+  const scanAndQueueNewMaterials = () => {
     scene.traverse((child) => {
       if (shouldExcludeObject(child, excludedNames)) return;
       for (const material of collectMaterials(child)) {
-        patchMaterialForOcclusionCutout(material, uniforms, patchedMaterials.current);
+        if (!claimedMaterials.current.has(material)) {
+          claimedMaterials.current.add(material);
+          pendingPatchQueue.current.push(material);
+        }
       }
     });
   };
 
-  // Patch whatever's already in the scene on mount.
   useEffect(() => {
-    scanAndPatchScene();
+    scanAndQueueNewMaterials();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene]);
 
@@ -222,13 +222,26 @@ export const CameraOcclusionManager = (props: CameraOcclusionConfig = {}) => {
       uniforms.uCamPos.value.copy(camera.position);
     }
 
-    // Time-based rescan instead of a frame-count modulo, so the interval
-    // stays correct regardless of actual frame rate (the original `% 60`
-    // approach assumed a steady 60fps and would drift on slower devices).
+    // Drain the patch queue at a fixed budget per frame. This is the fix
+    // for the "everything recompiles at once" hitch: even if 200 materials
+    // get discovered in a single scan (e.g. a new area just streamed in),
+    // only `materialPatchBudgetPerFrame` of them actually get patched (and
+    // therefore trigger a shader recompile) on any given frame — the rest
+    // wait their turn over the following frames.
+    let patchedThisFrame = 0;
+    while (
+      pendingPatchQueue.current.length > 0 &&
+      patchedThisFrame < config.materialPatchBudgetPerFrame
+    ) {
+      const material = pendingPatchQueue.current.shift()!;
+      applyOcclusionShaderPatch(material, uniforms, config.cutoutStyle);
+      patchedThisFrame++;
+    }
+
     elapsedSinceLastScan.current += delta * 1000;
     if (elapsedSinceLastScan.current >= config.rescanIntervalMs) {
       elapsedSinceLastScan.current = 0;
-      scanAndPatchScene();
+      scanAndQueueNewMaterials();
     }
   });
 
@@ -236,23 +249,17 @@ export const CameraOcclusionManager = (props: CameraOcclusionConfig = {}) => {
 };
 
 /**
- * KNOWN LIMITATIONS (carried over from the original design, documented so
- * they're a conscious tradeoff rather than a surprise):
- *
- * - New objects wait up to `rescanIntervalMs` before getting the occlusion
- *   patch. If you spawn something that must be occluded immediately (e.g.
- *   a projectile that can pass between camera and player), call
- *   `patchMaterialForOcclusionCutout` on it directly at spawn time instead
- *   of waiting for the next scan — that function is exported-shape but
- *   currently module-private; hoist it out if you need that hook.
- * - There's no unpatch/revert path. If this manager unmounts mid-session,
- *   already-patched materials keep their onBeforeCompile override. Three.js
- *   doesn't expose a clean way to revert a shader patch short of disposing
- *   and recreating the material, which is out of scope here.
- * - This still calls scene.traverse() on every scan, same as the original.
- *   For very large scenes, consider patching materials at asset-load time
- *   (wherever your trees/props/monsters are instantiated) instead of
- *   discovering them via periodic traversal — that removes the scan
- *   entirely and the occlusion patch is applied the instant the object is
- *   created.
+ * IF STILL HITCHING AFTER THIS:
+ * - Lower `materialPatchBudgetPerFrame` further (e.g. to 1-2) if a single
+ *   area transition still streams in more new materials than the budget
+ *   can smooth out within an acceptable window.
+ * - Confirm with the browser performance profiler (Chrome DevTools
+ *   Performance tab, or `renderer.info.programs`) that recompiles are
+ *   actually clustering around the hitch — if they aren't, the freeze is
+ *   coming from somewhere else (asset decode, GC from an unrelated
+ *   allocation spike, etc.) and this queue won't fix it.
+ * - scene.traverse() itself still walks the full graph every
+ *   `rescanIntervalMs`. For a very large open world, patching materials at
+ *   asset-instantiation time (wherever trees/props/monsters are created)
+ *   removes the scan and this queue entirely.
  */

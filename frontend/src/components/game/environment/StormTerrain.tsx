@@ -17,7 +17,7 @@
 import { useMemo, useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
-import { StaticCollider } from 'bvhecctrl';
+import { StaticCollider } from '@jagres/bvhecctrl';
 import * as THREE from 'three';
 
 import { useEditorStore } from '@/src/features/world-editor/store/useEditorStore';
@@ -71,8 +71,8 @@ export const StormTerrain = ({
       const x = pos.getX(i);
       const y = pos.getY(i);
       const elev = getTerrainElevation(x, y, 'STORM', baseDistance, terrainConfig, true);
-      const u  = (x + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
-      const v  = (y + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+      const u = (x + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+      const v = (y + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
       const px = Math.max(0, Math.min(SCULPT_RES - 1, Math.round(u * (SCULPT_RES - 1))));
       const py = Math.max(0, Math.min(SCULPT_RES - 1, Math.round((1 - v) * (SCULPT_RES - 1))));
       pos.setZ(i, elev + (heights[py * SCULPT_RES + px] || 0));
@@ -93,8 +93,8 @@ export const StormTerrain = ({
       const x = pos.getX(i);
       const y = pos.getY(i);
       const elev = getTerrainElevation(x, y, 'STORM', baseDistance, terrainConfig, true);
-      const u  = (x + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
-      const v  = (y + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+      const u = (x + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+      const v = (y + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
       const px = Math.max(0, Math.min(SCULPT_RES - 1, Math.round(u * (SCULPT_RES - 1))));
       const py = Math.max(0, Math.min(SCULPT_RES - 1, Math.round((1 - v) * (SCULPT_RES - 1))));
       pos.setZ(i, elev + (heights[py * SCULPT_RES + px] || 0));
@@ -117,8 +117,8 @@ export const StormTerrain = ({
         const x = pos.getX(i);
         const y = pos.getY(i);
         const elev = getTerrainElevation(x, y, 'STORM', baseDistance, terrainConfig, true);
-        const u  = (x + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
-        const v  = (y + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+        const u = (x + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+        const v = (y + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
         const px = Math.max(0, Math.min(SCULPT_RES - 1, Math.round(u * (SCULPT_RES - 1))));
         const py = Math.max(0, Math.min(SCULPT_RES - 1, Math.round((1 - v) * (SCULPT_RES - 1))));
         pos.setZ(i, elev + (heights[py * SCULPT_RES + px] || 0));
@@ -137,8 +137,8 @@ export const StormTerrain = ({
         const x = pos.getX(i);
         const y = pos.getY(i);
         const elev = getTerrainElevation(x, y, 'STORM', baseDistance, terrainConfig, true);
-        const u  = (x + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
-        const v  = (y + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+        const u = (x + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
+        const v = (y + TERRAIN_SIZE / 2) / TERRAIN_SIZE;
         const px = Math.max(0, Math.min(SCULPT_RES - 1, Math.round(u * (SCULPT_RES - 1))));
         const py = Math.max(0, Math.min(SCULPT_RES - 1, Math.round((1 - v) * (SCULPT_RES - 1))));
         pos.setZ(i, elev + (heights[py * SCULPT_RES + px] || 0));
@@ -235,17 +235,17 @@ export const StormTerrain = ({
 
       {/* ── Ring brush: lingkaran penanda radius kuas ── */}
       {paintMode && brushHoverPos && (() => {
-        const R    = brushSize * BRUSH_WORLD_RADIUS_FACTOR;
+        const R = brushSize * BRUSH_WORLD_RADIUS_FACTOR;
         const SEGS = 64;
-        const cx   = brushHoverPos[0];
-        const cz   = brushHoverPos[2];
-        const pts  = new Float32Array((SEGS + 1) * 3);
+        const cx = brushHoverPos[0];
+        const cz = brushHoverPos[2];
+        const pts = new Float32Array((SEGS + 1) * 3);
 
         for (let i = 0; i <= SEGS; i++) {
-          const a  = (i / SEGS) * Math.PI * 2;
+          const a = (i / SEGS) * Math.PI * 2;
           const wx = cx + Math.cos(a) * R;
           const wz = cz + Math.sin(a) * R;
-          let   wy = getTerrainElevation(wx, wz, 'STORM' as any, baseDistance, terrainConfig);
+          let wy = getTerrainElevation(wx, wz, 'STORM' as any, baseDistance, terrainConfig);
           if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
             const h = (window as any).getGroundHeight(wx, wz, -9999);
             if (h !== -9999) wy = h;

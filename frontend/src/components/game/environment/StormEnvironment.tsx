@@ -7,7 +7,7 @@
 import { Component, ReactNode, useState, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Environment, Sky } from "@react-three/drei";
-import { characterStatus } from "bvhecctrl";
+import { characterStatus } from "@jagres/bvhecctrl";
 import * as THREE from "three";
 
 import { useStore } from "@/src/state/useStore";

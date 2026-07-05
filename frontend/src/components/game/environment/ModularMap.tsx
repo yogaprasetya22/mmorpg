@@ -16,7 +16,7 @@ import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import { useEditorStore } from '@/src/features/world-editor/store/useEditorStore';
 import { useStore } from '@/src/state/useStore';
-import { InstancedStaticCollider } from 'bvhecctrl';
+import { InstancedStaticCollider } from '@jagres/bvhecctrl';
 import * as THREE from 'three';
 import { registerCollider, unregisterCollider } from '@/src/core/utils/globalRaycaster';
 import { windUniforms } from '@jagres/shared';

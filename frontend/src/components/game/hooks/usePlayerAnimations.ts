@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import * as THREE from "three";
-import { useAnimationStore, characterStatus } from "bvhecctrl";
+import { useAnimationStore, characterStatus } from "@jagres/bvhecctrl";
 import {
     charState,
     ATTACK_DURATION,

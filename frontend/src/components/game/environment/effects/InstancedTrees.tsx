@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { applyPainterlyStyle, getTerrainElevation } from '@jagres/shared';
 import { registerCollider, unregisterCollider } from '@/src/core/utils/globalRaycaster';
-import { InstancedStaticCollider } from 'bvhecctrl';
+import { InstancedStaticCollider } from '@jagres/bvhecctrl';
 
 const TREE_COUNT = 120;
 

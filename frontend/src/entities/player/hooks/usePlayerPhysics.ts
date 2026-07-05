@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { characterStatus } from "bvhecctrl";
+import { characterStatus } from "@jagres/bvhecctrl";
 import { useEditorStore } from "@/src/features/world-editor/store/useEditorStore";
 import { getTerrainElevation } from "@jagres/shared";
 import {
@@ -98,7 +98,7 @@ export function handlePlayerPhysicsJump(
             const allColliders = (window as any).globalColliders || [];
             const hits = _downRaycaster.intersectObjects(allColliders, false);
 
-            const maxSlope = 1.0;
+            const maxSlope = 1.3;
             const minUpDot = Math.cos(maxSlope);
 
             for (const hit of hits) {
