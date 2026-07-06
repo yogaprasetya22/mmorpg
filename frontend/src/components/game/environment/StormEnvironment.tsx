@@ -158,8 +158,8 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
         position={sunPosition}
         intensity={lightIntensity ?? (sky === 'night' ? 0.15 : 0.8)}
         castShadow
-        shadow-mapSize-width={isEditorOpen ? 2048 : 1024}
-        shadow-mapSize-height={isEditorOpen ? 2048 : 1024}
+        shadow-mapSize-width={isEditorOpen ? 2048 : 512}
+        shadow-mapSize-height={isEditorOpen ? 2048 : 512}
         shadow-bias={-0.0005}
         shadow-normalBias={0.06}
         shadow-camera-near={0.5}

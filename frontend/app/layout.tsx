@@ -1,3 +1,4 @@
+
 if (typeof window === "undefined" && !("ProgressEvent" in global)) {
   // Polyfill ProgressEvent in Node.js/SSR environment to avoid ReferenceError
   // when browser-only dependencies (like three.js/drei splat loaders) are imported.
@@ -12,6 +13,7 @@ if (typeof window === "undefined" && !("ProgressEvent" in global)) {
     }
   };
 }
+
 
 import type { Metadata } from "next";
 import "./globals.css";

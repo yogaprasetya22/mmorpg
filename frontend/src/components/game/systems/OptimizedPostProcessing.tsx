@@ -24,6 +24,8 @@ interface OptimizedPostProcessingProps {
     bloomThreshold?: number;
     bloomStrength?: number;
     bloomRadius?: number;
+    /** Bloom render-target scale factor (1 = full res, 0.25 = 1/4 res). Default 0.25. */
+    bloomResolution?: number;
     toneMapping?: THREE.ToneMapping;
     exposure?: number;
 }
@@ -33,6 +35,7 @@ export const OptimizedPostProcessing = ({
     bloomThreshold = 1.0,
     bloomStrength = 0.5,
     bloomRadius = 0.4,
+    bloomResolution = 0.25,
     toneMapping = THREE.ACESFilmicToneMapping,
     exposure = 1.0,
 }: OptimizedPostProcessingProps) => {
@@ -54,8 +57,10 @@ export const OptimizedPostProcessing = ({
             const renderPass = new RenderPass(scene, camera);
             composer.addPass(renderPass);
 
+            const w = Math.max(1, Math.floor(size.width * bloomResolution));
+            const h = Math.max(1, Math.floor(size.height * bloomResolution));
             const bloomPass = new UnrealBloomPass(
-                new THREE.Vector2(size.width, size.height),
+                new THREE.Vector2(w, h),
                 bloomStrength,
                 bloomRadius,
                 bloomThreshold,

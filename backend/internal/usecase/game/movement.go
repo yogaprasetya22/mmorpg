@@ -1,7 +1,6 @@
 package game
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"time"
@@ -85,10 +84,12 @@ func (u *gameUsecase) UpdatePlayerMovement(playerID string, x, y, z, rotation fl
 	}
 	u.activePlayersMu.Unlock()
 
-	// Cache to Redis asynchronously (non-blocking, only network state not DB)
-	go func() {
-		_ = u.stateRepo.SavePlayerState(context.Background(), pState)
-	}()
+	// Cache to Redis via batcher channel — no goroutine-per-move.
+	// Drops if batcher saturated (Redis slow); positions are approximate anyway.
+	select {
+	case u.redisWriteCh <- pState:
+	default:
+	}
 
 	// NOTE: Heavy GORM/Postgres DB write is intentionally removed from here.
 	// Player coordinates are persisted during autosave every ~10 seconds AND on disconnect.

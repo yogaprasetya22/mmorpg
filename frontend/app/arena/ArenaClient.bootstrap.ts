@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { useGLTF } from '@react-three/drei';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
+
 import { MeshoptDecoder } from 'meshoptimizer';
 import { API_BASE_URL } from '@/src/core/config';
 import { PRELOAD_MODELS } from './ArenaClient.constants';

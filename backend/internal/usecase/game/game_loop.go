@@ -36,13 +36,15 @@ func (u *gameUsecase) StartGameLoop(ctx context.Context) {
 
 			// 2. Fetch all real-time players and monsters states
 			payload := u.GetStatePayload()
-			
-			// 3. Broadcast game state asynchronously agar game loop tidak block
+
+			// 3. Broadcast game state — blocking but non-blocking channel inside
+			// No `go` wrapper: goroutine leak source when hub fan-out lags.
+			// BroadcastGameState uses select/default — drops frame if full, never blocks.
 			if u.broadcastCallback != nil {
-				go u.broadcastCallback(payload)
+				u.broadcastCallback(payload)
 			}
 
-			// 4. Periodic autosave
+			// 4. Periodic autosave — batched into 1 goroutine (not N per player)
 			autosaveCounter++
 			if autosaveCounter >= 200 {
 				autosaveCounter = 0
@@ -107,10 +109,11 @@ func (u *gameUsecase) autosaveActivePlayers() {
 	}
 	u.activePlayersMu.RUnlock()
 
-	// Save each player asynchronously to avoid blocking the game tick loop
-	for _, p := range players {
-		go func(player *domain.Player) {
-			_ = u.playerRepo.Update(player)
-		}(p)
-	}
+	// Save all players in a single goroutine — no goroutine-per-player leak.
+	// Sequential writes are fine at 10s intervals; the N goroutines were the OOM source.
+	go func(batch []*domain.Player) {
+		for _, p := range batch {
+			_ = u.playerRepo.Update(p)
+		}
+	}(players)
 }

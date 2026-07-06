@@ -221,10 +221,8 @@ func (u *gameUsecase) RegisterPlayer(playerID string, username string) {
 		MaxHP: pData.MaxHP,
 	})
 
-	// Save initial position in Redis cache asynchronously
-	go func() {
-		_ = u.stateRepo.SavePlayerState(context.Background(), state)
-	}()
+	// Save initial position in Redis cache via batcher — no goroutine-per-connect.
+	u.redisWriteCh <- state
 
 	fmt.Printf("👤 Player %s (%s) registered and cached in memory!\n", username, playerID)
 }
@@ -255,12 +253,12 @@ func (u *gameUsecase) UnregisterPlayer(playerID string) {
 	// Remove player from party on disconnect
 	u.LeaveParty(playerID)
 
-	// Clean up Redis position
-	go func() {
-		_ = u.stateRepo.DeletePlayerState(context.Background(), playerID)
-	}()
+	// Clean up Redis position — synchronous, fast HDel operation.
+	// Redis calls are <1ms; no need for goroutine here.
+	_ = u.stateRepo.DeletePlayerState(context.Background(), playerID)
 
-	// Save final player data to GORM Postgres asynchronously on disconnect
+	// Save final player data to Postgres synchronously on disconnect.
+	// Disconnect is rate-limited by human action — single Save call is fine.
 	u.activePlayersMu.Lock()
 	if pData, exists := u.activePlayers[playerID]; exists {
 		if stateExists {
@@ -268,9 +266,8 @@ func (u *gameUsecase) UnregisterPlayer(playerID string) {
 			pData.LastY = lastY
 			pData.LastZ = lastZ
 		}
-		go func(p *domain.Player) {
-			_ = u.playerRepo.Update(p)
-		}(pData)
+		// Synchronous — no goroutine leak on reconnect storms.
+		_ = u.playerRepo.Update(pData)
 		delete(u.activePlayers, playerID)
 	}
 	u.activePlayersMu.Unlock()

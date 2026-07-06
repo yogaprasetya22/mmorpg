@@ -1,4 +1,8 @@
 'use client';
+import { mergeMeshesInScene } from "@/src/lib/merge-skinned-meshes";
+import { clampBones } from "@/src/lib/clamp-bones";
+
+
 
 import { useState, useEffect, useRef, useMemo, Suspense } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
@@ -112,6 +116,12 @@ export const RemoteMonsterInstance = ({
   const { scene, animations } = useGLTF(modelPath, true, true, (l: any) => l.setMeshoptDecoder(MeshoptDecoder)) as any;
   const clone = useMemo(() => {
     const cloned = SkeletonUtils.clone(scene);
+
+    // Merge sub-meshes into 1-2 draw calls per monster
+    mergeMeshesInScene(cloned);
+    // Clamp bones to 30 for GPU skinning perf
+    clampBones(cloned);
+
     cloned.traverse((child: any) => {
       if (child.isMesh) {
         // No shadow on monsters — removes shadow pass draw calls (cuts ~50%)

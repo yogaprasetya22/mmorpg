@@ -134,7 +134,7 @@ export const AvatarAsset = ({
           morphTargetDictionary={item.morphTargetDictionary}
           morphTargetInfluences={item.morphTargetInfluences}
           castShadow
-          receiveShadow
+          receiveShadow={false}
         />
       ))}
     </>

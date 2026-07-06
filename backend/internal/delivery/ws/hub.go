@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/vmihailenco/msgpack/v5"
 	"mmorpg-backend/internal/domain"
 	"mmorpg-backend/internal/usecase/game"
+
+	"github.com/vmihailenco/msgpack/v5"
 )
 
 // sendBufSize — large enough for 50 concurrent clients without dropping frames at 20Hz tick.
@@ -35,9 +36,9 @@ type Hub struct {
 
 func NewHub(gameUsecase game.GameUsecase) *Hub {
 	return &Hub{
-		// Broadcast buffer sized to handle bursts without stalling the game loop goroutine.
-		// With 50 players, fan-out per tick takes ~1-5ms; a buffer of 16 prevents back-pressure.
-		Broadcast:   make(chan []byte, 16),
+		// Broadcast buffer — 64 slots provides ~3.2s headroom at 20Hz,
+		// enough for hub fan-out to recover from transient lag spikes.
+		Broadcast:   make(chan []byte, 64),
 		Register:    make(chan *Client, 32),
 		Unregister:  make(chan *Client, 32),
 		clients:     make(map[*Client]bool),
@@ -108,7 +109,8 @@ func (h *Hub) BroadcastGameState(payload domain.GameStatePayload) {
 	}
 }
 
-// BroadcastChatMessage sends a text-based JSON chat message to all connected clients immediately.
+// BroadcastChatMessage sends chat through the hub Broadcast channel.
+// Uses hub's single goroutine fan-out — no clientMu lock contention with Run loop.
 func (h *Hub) BroadcastChatMessage(sender string, msg string) {
 	payload := map[string]string{
 		"type": "chat",
@@ -120,33 +122,22 @@ func (h *Hub) BroadcastChatMessage(sender string, msg string) {
 		return
 	}
 
-	h.clientsMu.RLock()
-	defer h.clientsMu.RUnlock()
-
-	for client := range h.clients {
-		select {
-		case client.Send <- data:
-		default:
-			// Non-blocking send to prevent one slow client from lagging the chat stream
-		}
+	select {
+	case h.Broadcast <- data:
+	default:
 	}
 }
 
-// BroadcastGenericJSON sends a generic JSON object to all connected clients.
+// BroadcastGenericJSON sends generic JSON through hub Broadcast channel.
+// Same lock-contention-free path as BroadcastChatMessage.
 func (h *Hub) BroadcastGenericJSON(payload interface{}) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return
 	}
 
-	h.clientsMu.RLock()
-	defer h.clientsMu.RUnlock()
-
-	for client := range h.clients {
-		select {
-		case client.Send <- data:
-		default:
-			// Non-blocking send to prevent stalling
-		}
+	select {
+	case h.Broadcast <- data:
+	default:
 	}
 }

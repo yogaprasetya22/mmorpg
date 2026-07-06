@@ -1,8 +1,9 @@
+'use client';
 /** Model cache warmer — triggers useGLTF downloads for NPC/monster glTF + lazy animation cache.
  *  No forced GPU compilation (that causes freeze). Models compile naturally when first rendered. */
-'use client';
 
 import { useGLTF } from '@react-three/drei';
+
 import { MeshoptDecoder } from 'meshoptimizer';
 import { API_BASE_URL } from '@/src/core/config';
 

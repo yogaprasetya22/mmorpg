@@ -85,6 +85,9 @@ type gameUsecase struct {
 
 	broadcastCallback func(payload domain.GameStatePayload)
 	eventCallback     func(eventType string, data interface{})
+
+	// Batched Redis position writer — avoids goroutine-per-move.
+	redisWriteCh chan *domain.PlayerNetworkState
 }
 
 func NewGameUsecase(
@@ -109,7 +112,15 @@ func NewGameUsecase(
 		patrolWaiting:     make(map[string]time.Time),
 		broadcastCallback: broadcastCallback,
 		eventCallback:     func(eventType string, data interface{}) {}, // Fallback default
+		redisWriteCh:      make(chan *domain.PlayerNetworkState, 256),
 	}
+
+	// Single goroutine draining redisWriteCh — replaces goroutine-per-move.
+	go func() {
+		for state := range u.redisWriteCh {
+			_ = u.stateRepo.SavePlayerState(context.Background(), state)
+		}
+	}()
 
 	// Pre-spawn monsters in the world (see monster_spawner.go)
 	u.initMonsters()

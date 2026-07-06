@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"mmorpg-backend/internal/domain"
 	"mmorpg-backend/internal/usecase/auth"
@@ -93,6 +94,10 @@ func (s *KCPServer) Start(addr string) {
 		sess.SetWindowSize(128, 128)
 		sess.SetMtu(1400)
 
+		// Read deadline prevents goroutine leak on silent disconnect.
+		// After 30s of no data, Read returns timeout and handleSession exits.
+		sess.SetReadDeadline(time.Now().Add(30 * time.Second))
+
 		go s.handleSession(sess)
 	}
 }
@@ -109,6 +114,10 @@ func (s *KCPServer) handleSession(sess *kcp.UDPSession) {
 	var username string
 
 	for {
+		// Refresh read deadline each iteration — extends for active connections.
+		// Dead connection hits 30s timeout and cleans up.
+		sess.SetReadDeadline(time.Now().Add(30 * time.Second))
+
 		n, err := sess.Read(buf)
 		if err != nil {
 			if err != io.EOF {
@@ -142,6 +151,11 @@ func (s *KCPServer) handleSession(sess *kcp.UDPSession) {
 				}
 
 				s.sessionsMu.Lock()
+				// Remove stale session before adding new one — prevents session map leak
+				// on reconnect storms where old session goroutine still blocks on Read.
+				if oldSess, exists := s.sessions[playerID]; exists {
+					_ = oldSess.Close()
+				}
 				s.sessions[playerID] = sess
 				s.sessionsMu.Unlock()
 
