@@ -1,5 +1,11 @@
 import * as THREE from "three";
 
+// ponytail: WebGPU compatibility.
+// applyWindSway uses onBeforeCompile (WebGL-only hook).
+// For WebGPU, skip calling this — NodeMaterial with TSL wind swaves
+// would replace it. Add when NodeMaterial-based wind sway is implemented.
+// Consumer files check gl.isWebGPUBackend and skip this hook.
+
 export const windUniforms = {
     time: { value: 0 },
 };
@@ -35,7 +41,10 @@ export const applyWindSway = (material: THREE.Material, path: string) => {
 
     const originalOnBeforeCompile = material.onBeforeCompile;
 
-    material.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms, renderer: THREE.WebGLRenderer) => {
+    material.onBeforeCompile = (
+        shader: THREE.WebGLProgramParametersWithUniforms,
+        renderer: THREE.WebGLRenderer,
+    ) => {
         if (originalOnBeforeCompile) {
             originalOnBeforeCompile(shader, renderer);
         }

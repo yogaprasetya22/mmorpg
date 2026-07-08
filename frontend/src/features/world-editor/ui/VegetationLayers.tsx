@@ -162,7 +162,7 @@ const SectorGroup = memo(({ geometry, material, items, localMatrix, sectorCenter
             frustumCulled
             castShadow={castShadow}
             receiveShadow={receiveShadow}
-            onClick={(e: any) => {
+            onPointerDown={(e: any) => {
                 if (activeAsset || paintMode || vegetationBrushActive) return;
                 e.stopPropagation();
                 const instId = e.instanceId;
@@ -175,6 +175,10 @@ const SectorGroup = memo(({ geometry, material, items, localMatrix, sectorCenter
                         setSelectedId(item.id);
                     }
                 }
+            }}
+            onPointerUp={(e: any) => {
+                if (activeAsset || paintMode || vegetationBrushActive) return;
+                e.stopPropagation();
             }}
         />
     );

@@ -3,6 +3,7 @@
 import { useRef, useMemo, useEffect, Suspense } from 'react';
 import * as THREE from 'three';
 import { useGLTF } from '@react-three/drei';
+import { useThree } from '@react-three/fiber';
 import { SimplexNoise } from 'three-stdlib';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 import { InstancedStaticCollider } from '@jagres/bvhecctrl';
@@ -79,6 +80,7 @@ function setupLeafMaterial(mat: THREE.Material | THREE.Material[]) {
 function extractMeshParts(
     scene: THREE.Group,
     path: string,
+    skipWindSway = false,
 ): { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[] }[] {
     const parts: { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[] }[] = [];
     scene.updateMatrixWorld(true);
@@ -102,7 +104,8 @@ function extractMeshParts(
         const mats = Array.isArray(mat) ? mat : [mat];
         // Forest only contains trees, but guard against future non-grass additions
         mats.forEach(m => {
-            if (isGrassAssetPath(path)) {
+            // ponytail: applyWindSway uses onBeforeCompile — skip for WebGPU.
+            if (isGrassAssetPath(path) && !skipWindSway) {
                 applyWindSway(m, path);
             }
             // Tag trunk/branch meshes (non-leaf) for zoom-in behavior
@@ -174,11 +177,13 @@ interface VariantProps {
 
 const TreeVariantInstances = ({ path, positions, scales, rotations, globalScale }: VariantProps) => {
     const { scene } = useGLTF(path) as any;
+    const { gl } = useThree();
+    const isWebGPU = !!(gl as any).isWebGPUBackend;
 
     const parts = useMemo(() => {
         if (!scene) return [];
-        return extractMeshParts(scene, path);
-    }, [scene, path]);
+        return extractMeshParts(scene, path, isWebGPU);
+    }, [scene, path, isWebGPU]);
 
     const count = positions.length;
     if (count === 0 || parts.length === 0) return null;

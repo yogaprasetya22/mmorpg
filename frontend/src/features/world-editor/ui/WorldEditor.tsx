@@ -5,11 +5,18 @@
  *
  * Handles:
  *  - Zustand state integration
- *  - Pointer events (down/move/up)
+ *  - R3F native pointer events via editorPointerRefs bridge (StormTerrain delegates)
+ *  - EditorItem native pointer events for drag/select
  *  - Wheel events (rotate/scale/brush)
- *  - useFrame (raycasting, brush position, spray, camera focus)
+ *  - useFrame (camera focus, brush sync, spray, drag lerp, hover highlight)
  *
- * Rendering sub-components imported from ./editor/*.tsx
+ * Brush indicator ring lives in BrushIndicator.tsx (standalone, zero entanglement).
+ * Shared module-level refs: brushWorldPosRef, hasBrushWorldPosRef.
+ *
+ * Pointer event architecture (WebGPU-safe):
+ *   StormTerrain terrain mesh → onPointerDown/Up/Move → editorPointerRefs → WorldEditor
+ *   EditorItem group → onPointerDown/Up → WorldEditor state
+ *   No window event listeners, no manual NDC, no parent-traversal.
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
@@ -30,46 +37,67 @@ import { HolographicBrushProjection, PlacedMaskProjection } from './BrushProject
 import { EditorItem } from './EditorItem';
 import { ProceduralVegetationLayer } from './VegetationLayers';
 
+// Standalone brush indicator shared refs (module-level, zero React overhead)
+import { brushWorldPosRef, hasBrushWorldPosRef } from './BrushIndicator';
+
+// Bridge refs for StormTerrain → WorldEditor delegation (no window listeners)
+import { editorPointerRefs } from '../core/editorPointerRefs';
+
 // ─── WORLD EDITOR COMPONENT ───
 
 export const WorldEditor = () => {
-  const { scene, raycaster, camera, gl } = useThree();
+  const { scene, gl } = useThree();
   const {
-    items, setItems, selectedId, setSelectedId, selectedIds, toggleSelectedId,
-    activeAsset, setActiveAsset, isEditorOpen, updateItemsWithHistory,
-    undo, redo, loadFromStorage, gridSize, gridEnabled,
-    paintMode, brushSize, brushHoverPos, setBrushHoverPos,
-    brushMaskId, brushStrength, setBrushStrength, terrainMode,
-    brushRotation, brushColor, lastUsedScales, setLastUsedScale,
-    lastUsedRotations, setLastUsedRotation, environment, terrainConfig,
-    vegetationBrushActive, setVegetationBrushActive,
-    vegetationFixedScale, vegetationDensity,
+    // Selection & items
+    items, selectedId, selectedIds,
+    activeAsset,
+    isEditorOpen,
+    // Grid
+    gridSize, gridEnabled,
+    // Load / persist
+    loadFromStorage,
+    // Brush hover (read via .getState() in handlers, but destructured for JSX + useFrame)
+    paintMode,
+    brushSize, brushStrength, brushMaskId,
+    // Camera focus
     cameraFocusTarget, setCameraFocusTarget, cameraFocusObjectId, setCameraFocusObjectId,
-    assetLibrary, vegetationRadius,
+    // Environment / terrain
+    environment, terrainConfig,
+    // Vegetation (closure-captured in useCallback handlers)
+    vegetationBrushActive,
+    vegetationFixedScale,
+    vegetationDensity,
+    vegetationRadius,
+    // Last-used transform cache
+    lastUsedScales, lastUsedRotations,
+    // Asset library
+    assetLibrary,
   } = useEditorStore();
 
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [hasHoverPos, setHasHoverPos] = useState(false);
+  // React state mirror of hasBrushWorldPosRef (ref alone can't trigger conditional JSX)
+  const [showBrush, setShowBrush] = useState(false);
   const hoverPosRef = useRef<THREE.Vector3 | null>(null);
   const groupRef = useRef<THREE.Group>(null);
-  const [isOverUI, setIsOverUI] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [isShiftPressed, setIsShiftPressed] = useState(false);
 
-  const getRaycastTargets = useCallback(() => {
-    const targets: THREE.Object3D[] = [];
-    const terrain = scene.getObjectByName('terrain');
-    if (terrain) targets.push(terrain);
+  // Refs for volatile state — avoids constant effect re-registration.
+  // Handlers read from .getState() or these refs instead of closure.
+  const itemsRef = useRef<MapItem[]>(items);
+  const activeAssetRef = useRef(activeAsset);
+  const vegetationBrushActiveRef = useRef(vegetationBrushActive);
+  const paintModeRef = useRef(paintMode);
+  const draggedIdRef = useRef<string | null>(null);
+  const isUIOverRef = useRef(false);
 
-    if (groupRef.current) {
-      groupRef.current.children.forEach(child => {
-        if (child.name && (child.name.startsWith('item_') || items.some(it => it.id === child.name))) {
-          targets.push(child);
-        }
-      });
-    }
-    return targets.length > 0 ? targets : scene.children;
-  }, [scene, items]);
+  // Sync refs every render so handlers always see latest
+  itemsRef.current = items;
+  activeAssetRef.current = activeAsset;
+  vegetationBrushActiveRef.current = vegetationBrushActive;
+  paintModeRef.current = paintMode;
+  draggedIdRef.current = draggedId;
 
   // Refs
   const isDraggingVegetationRef = useRef(false);
@@ -80,8 +108,113 @@ export const WorldEditor = () => {
   const smoothHoverPosRef = useRef<THREE.Vector3>(new THREE.Vector3());
   const targetDragPosRef = useRef<THREE.Vector3>(new THREE.Vector3());
   const dragElevationOffsetRef = useRef(0);
-  const pointerStartRef = useRef<{ time: number; x: number; y: number } | null>(null);
   const lastDraggedIdRef = useRef<string | null>(null);
+
+  // ─── UI OVER DETECTION (via pointermove on document, lightweight) ───
+  useEffect(() => {
+    if (!isEditorOpen) return;
+    const onMove = (e: PointerEvent) => {
+      const target = e.target as HTMLElement;
+      isUIOverRef.current = !!(
+        target.closest('.world-editor-ui, [data-leva], #leva__root') ||
+        ['BUTTON', 'INPUT', 'SELECT', 'LABEL'].includes(target.tagName)
+      );
+    };
+    document.addEventListener('pointermove', onMove, { passive: true });
+    return () => document.removeEventListener('pointermove', onMove);
+  }, [isEditorOpen]);
+
+  // ─── STORM TERRAIN BRIDGE ───
+  // StormTerrain fires editorPointerRefs on pointer events.
+  // This effect installs the handlers once. They delegate to imperative logic.
+  useEffect(() => {
+    editorPointerRefs.onTerrainPointerDown = (_point: THREE.Vector3, button: number) => {
+      if (isUIOverRef.current) return;
+      setIsShiftPressed((window as any)._shiftKey === true);
+
+      if (vegetationBrushActiveRef.current) {
+        if (button === 0) {
+          isDraggingVegetationRef.current = true;
+          sprayBufferRef.current = [];
+          lastSprayPosRef.current = null;
+        }
+        return;
+      }
+      if (paintModeRef.current) {
+        // Paint mode click-to-place-mask handled in onUp
+        return;
+      }
+      if (button === 2) {
+        cancelActiveDragOrPlacement();
+        return;
+      }
+      if (button === 0 && draggedIdRef.current) {
+        // Already dragging — ignore down during drag
+        return;
+      }
+    };
+
+    editorPointerRefs.onTerrainPointerUp = (point: THREE.Vector3, button: number) => {
+      if (isUIOverRef.current) return;
+      setIsShiftPressed((window as any)._shiftKey === true);
+      const st = useEditorStore.getState() as any;
+
+      if (vegetationBrushActiveRef.current) {
+        if (button === 0) {
+          isDraggingVegetationRef.current = false;
+          if (sprayBufferRef.current && sprayBufferRef.current.length > 0) {
+            const buf = sprayBufferRef.current;
+            sprayBufferRef.current = null;
+            st.updateItemsWithHistory((prev: MapItem[]) => [...prev, ...buf]);
+          }
+          lastSprayPosRef.current = null;
+        }
+        return;
+      }
+
+      if (paintModeRef.current) {
+        if (button === 0 && st.terrainMode === 'paint' && ['star', 'hexagon', 'square', 'starOutline'].includes(st.brushMaskId)) {
+          const newItem: MapItem = {
+            id: 'item_mask_' + Math.random().toString(36).substr(2, 9),
+            type: 'mask_projection',
+            path: st.brushMaskId,
+            pos: [point.x, point.y, point.z],
+            rot: [0, (st.brushRotation * Math.PI) / 180, 0],
+            sca: [st.brushSize, st.brushSize, st.brushSize],
+            color: st.brushColor,
+          };
+          st.updateItemsWithHistory((prev: MapItem[]) => [...prev, newItem]);
+        }
+        return;
+      }
+
+      if (button === 2) return;
+      if (button !== 0) return;
+
+      // Normal mode: check if dragging finished or spawn
+      if (draggedIdRef.current) {
+        commitPlacement(draggedIdRef.current);
+      } else if (activeAssetRef.current) {
+        spawnAtPoint(point);
+      }
+    };
+
+    editorPointerRefs.onTerrainPointerMove = (point: THREE.Vector3) => {
+      if (isUIOverRef.current) return;
+      // Brush position already handled by BrushIndicator useFrame.
+      // Vegetation drag: set lastSprayPosRef (read in useFrame).
+      if (vegetationBrushActiveRef.current) {
+        lastSprayPosRef.current = [point.x, point.y, point.z];
+      }
+    };
+
+    return () => {
+      editorPointerRefs.onTerrainPointerDown = null;
+      editorPointerRefs.onTerrainPointerUp = null;
+      editorPointerRefs.onTerrainPointerMove = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // stable — refs capture the latest via .current
 
   useEffect(() => { loadFromStorage(); }, [loadFromStorage]);
 
@@ -95,53 +228,96 @@ export const WorldEditor = () => {
   const commitPlacement = useCallback((id: string) => {
     const obj = scene.getObjectByName(id);
     if (!obj) return;
-    updateItemsWithHistory(prev => prev.map(i => i.id === id ? { ...i, pos: [obj.position.x, obj.position.y, obj.position.z], rot: [obj.rotation.x, obj.rotation.y, obj.rotation.z], sca: [obj.scale.x, obj.scale.y, obj.scale.z] } : i));
+    const store = useEditorStore.getState() as any;
+    const pos: [number, number, number] = [obj.position.x, obj.position.y, obj.position.z];
+    const rot: [number, number, number] = [obj.rotation.x, obj.rotation.y, obj.rotation.z];
+    const sca: [number, number, number] = [obj.scale.x, obj.scale.y, obj.scale.z];
+    store.updateItemsWithHistory((prev: MapItem[]) => prev.map(i => i.id === id ? { ...i, pos, rot, sca } : i));
     setDraggedId(null);
     dragStartRef.current = null;
-  }, [updateItemsWithHistory, scene]);
+  }, [scene]);
 
   const cancelActiveDragOrPlacement = useCallback(() => {
-    if (draggedId) {
+    const store = useEditorStore.getState() as any;
+    const localDraggedId = draggedIdRef.current;
+    if (localDraggedId) {
       const start = dragStartRef.current;
-      const activeId = draggedId;
       setDraggedId(null);
       dragStartRef.current = null;
       if (start) {
-        const obj = scene.getObjectByName(activeId);
+        const obj = scene.getObjectByName(localDraggedId);
         if (obj) { obj.position.set(...start.pos); obj.rotation.set(...start.rot); obj.scale.set(...start.sca); }
-        setItems(items.map(i => i.id === activeId ? { ...i, pos: start.pos, rot: start.rot, sca: start.sca } : i));
+        store.setItems(store.items.map((i: MapItem) => i.id === localDraggedId ? { ...i, pos: start.pos, rot: start.rot, sca: start.sca } : i));
       }
-    } else if (activeAsset) {
-      setActiveAsset(null);
-    } else if (selectedId) { setSelectedId(null); }
-    if (vegetationBrushActive) setVegetationBrushActive(false);
-  }, [draggedId, activeAsset, selectedId, items, setItems, scene, setActiveAsset, setSelectedId, vegetationBrushActive, setVegetationBrushActive]);
+    } else if (store.activeAsset) {
+      store.setActiveAsset(null);
+    } else if (store.selectedId) { store.setSelectedId(null); }
+    if (store.vegetationBrushActive) store.setVegetationBrushActive(false);
+  }, [scene]);
 
   const spawnAtPoint = useCallback((point: THREE.Vector3) => {
-    if (!activeAsset || paintMode || vegetationBrushActive) return;
-    const snappedX = snap(point.x); const snappedZ = snap(point.z);
-    let snapY = getTerrainElevation(snappedX, snappedZ, environment, 24, terrainConfig);
+    const store = useEditorStore.getState() as any;
+    const { activeAsset: aa, paintMode: pm, vegetationBrushActive: vba, environment: env, terrainConfig: tc, gridEnabled: ge, gridSize: gs } = store;
+    if (!aa || pm || vba) return;
+    const snapFn = (val: number) => ge ? Math.round(val / gs) * gs : val;
+    const snappedX = snapFn(point.x); const snappedZ = snapFn(point.z);
+    let snapY = getTerrainElevation(snappedX, snappedZ, env, 24, tc);
     if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
       const h = (window as any).getGroundHeight(snappedX, snappedZ, -999);
       if (h !== -999) snapY = h;
     }
     const snappedPos: [number, number, number] = [snappedX, snapY, snappedZ];
-    const cachedScale = lastUsedScales[activeAsset.path] || [1, 1, 1];
-    const cachedRotation = lastUsedRotations[activeAsset.path] || [0, 0, 0];
-    const newItem: MapItem = { id: 'item_' + Math.random().toString(36).substr(2, 9), type: activeAsset.name, path: activeAsset.path, pos: snappedPos, rot: cachedRotation, sca: cachedScale };
-    updateItemsWithHistory(prev => [...prev, newItem]);
-    setSelectedId(newItem.id);
+    const cachedScale = store.lastUsedScales?.[aa.path] || [1, 1, 1];
+    const cachedRotation = store.lastUsedRotations?.[aa.path] || [0, 0, 0];
+    const newItem: MapItem = { id: 'item_' + Math.random().toString(36).substr(2, 9), type: aa.name, path: aa.path, pos: snappedPos, rot: cachedRotation, sca: cachedScale };
+    store.updateItemsWithHistory((prev: MapItem[]) => [...prev, newItem]);
+    store.setSelectedId(newItem.id);
     setDraggedId(newItem.id);
     dragStartRef.current = { pos: snappedPos, rot: cachedRotation, sca: cachedScale };
-    setActiveAsset(null);
-  }, [activeAsset, updateItemsWithHistory, setSelectedId, snap, lastUsedScales, lastUsedRotations, paintMode, vegetationBrushActive, environment, terrainConfig]);
+    store.setActiveAsset(null);
+  }, []);
 
   const deleteSelected = useCallback(() => {
-    if (selectedIds.length > 0) {
-      updateItemsWithHistory(prev => prev.filter(i => !selectedIds.includes(i.id)));
-      setSelectedId(null); setDraggedId(null); dragStartRef.current = null;
+    const store = useEditorStore.getState() as any;
+    const { selectedIds: sIds, updateItemsWithHistory: uih, setSelectedId: ssi } = store;
+    if (sIds.length > 0) {
+      uih((prev: MapItem[]) => prev.filter(i => !sIds.includes(i.id)));
+      ssi(null); setDraggedId(null); dragStartRef.current = null;
     }
-  }, [selectedIds, updateItemsWithHistory, setSelectedId]);
+  }, []);
+
+  // ─── EDITOR ITEM HANDLERS ───
+  // Called via onPointerDown/Up on EditorItem group (no parent-traversal needed)
+  const handleItemPointerDown = useCallback((_e: any, itemId: string) => {
+    if (!isEditorOpen || isUIOverRef.current) return;
+    const st = useEditorStore.getState() as any;
+    if (vegetationBrushActiveRef.current || paintModeRef.current) return;
+    const item = st.items.find((i: MapItem) => i.id === itemId);
+    if (!item) return;
+    if (st.mode === 'translate') {
+      setDraggedId(itemId);
+      dragStartRef.current = { pos: [item.pos[0], item.pos[1], item.pos[2]], rot: [item.rot[0], item.rot[1], item.rot[2]], sca: [item.sca[0], item.sca[1], item.sca[2]] };
+    }
+    st.setSelectedId(itemId);
+    if (activeAssetRef.current) st.setActiveAsset(null);
+  }, [isEditorOpen]);
+
+  const handleItemPointerUp = useCallback((_e: any, itemId: string) => {
+    if (!isEditorOpen || isUIOverRef.current) return;
+    if (draggedIdRef.current === itemId) {
+      commitPlacement(itemId);
+    }
+  }, [isEditorOpen, commitPlacement]);
+
+  const handleItemPointerOver = useCallback((_e: any, itemId: string) => {
+    if (!isEditorOpen || isUIOverRef.current || vegetationBrushActiveRef.current || paintModeRef.current) return;
+    setHoveredId(itemId);
+  }, [isEditorOpen]);
+
+  const handleItemPointerOut = useCallback((_e: any, itemId: string) => {
+    if (!isEditorOpen) return;
+    setHoveredId(prev => prev === itemId ? null : prev);
+  }, [isEditorOpen]);
 
   // Block context menu
   useEffect(() => {
@@ -154,17 +330,19 @@ export const WorldEditor = () => {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setIsShiftPressed(true);
-      if (!isEditorOpen) return;
+      (window as any)._shiftKey = e.shiftKey;
+      const st = useEditorStore.getState() as any;
+      if (!st.isEditorOpen) return;
       if (e.key === 'Escape') { e.preventDefault(); cancelActiveDragOrPlacement(); }
-      if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
-      if (e.ctrlKey && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); redo(); }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.length > 0 && !document.activeElement?.matches('input, textarea')) deleteSelected();
+      if (e.ctrlKey && e.key === 'z') { e.preventDefault(); st.undo(); }
+      if (e.ctrlKey && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); st.redo(); }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && st.selectedIds.length > 0 && !document.activeElement?.matches('input, textarea')) deleteSelected();
     };
-    const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Shift') setIsShiftPressed(false); };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Shift') setIsShiftPressed(false); (window as any)._shiftKey = e.shiftKey; };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); };
-  }, [isEditorOpen, undo, redo, selectedIds, deleteSelected, cancelActiveDragOrPlacement]);
+  }, [cancelActiveDragOrPlacement, deleteSelected]);
 
   // ─── SPRAY HANDLER ───
   const handleSprayVegetation = useCallback((center: [number, number, number], flushImmediate: boolean) => {
@@ -186,12 +364,14 @@ export const WorldEditor = () => {
     const radius = vegetationRadius;
 
     if (isShiftPressed) {
-      const nextItems = items.filter((item) => {
+      const st2 = useEditorStore.getState() as any;
+      const storeItems = st2.items as MapItem[];
+      const nextItems = storeItems.filter((item) => {
         if (item.type !== 'procedural-vegetation') return true;
         const [px, , pz] = item.pos;
         return Math.hypot(px - cx, pz - cz) > radius;
       });
-      if (nextItems.length !== items.length) updateItemsWithHistory(nextItems);
+      if (nextItems.length !== storeItems.length) st2.updateItemsWithHistory(nextItems);
       return;
     }
 
@@ -277,209 +457,119 @@ export const WorldEditor = () => {
     }
 
     if (newTrees.length === 0) return;
+    const store = useEditorStore.getState() as any;
     if (flushImmediate) {
-      updateItemsWithHistory((prev: MapItem[]) => [...prev, ...newTrees]);
+      store.updateItemsWithHistory((prev: MapItem[]) => [...prev, ...newTrees]);
     } else {
       if (!sprayBufferRef.current) sprayBufferRef.current = [];
       sprayBufferRef.current.push(...newTrees);
     }
-  }, [vegetationDensity, environment, terrainConfig, items, updateItemsWithHistory, isShiftPressed, vegetationFixedScale]);
+  }, [vegetationDensity, environment, terrainConfig, isShiftPressed, vegetationFixedScale]);
 
   // ─── POINTER EVENTS ───
-  useEffect(() => {
-    if (!isEditorOpen) return;
-    const onMove = (e: PointerEvent) => {
-      setIsShiftPressed(e.shiftKey);
-      setIsOverUI(!!(e.target as HTMLElement).closest('.world-editor-ui, [data-leva], #leva__root') || ['BUTTON', 'INPUT', 'SELECT', 'LABEL'].includes((e.target as HTMLElement).tagName));
-    };
-    const onDown = (e: PointerEvent) => {
-      setIsShiftPressed(e.shiftKey);
-      if (isOverUI) return;
-      const t = e.target as HTMLElement;
-      if (t.closest('.world-editor-ui, [data-leva], #leva__root') || ['BUTTON', 'INPUT', 'SELECT', 'LABEL'].includes(t.tagName)) return;
-      if (vegetationBrushActive) { if (e.button === 0) { isDraggingVegetationRef.current = true; sprayBufferRef.current = []; lastSprayPosRef.current = null; } return; }
-      pointerStartRef.current = { time: Date.now(), x: e.clientX, y: e.clientY };
-    };
-    const onUp = (e: PointerEvent) => {
-      setIsShiftPressed(e.shiftKey);
-      if (isOverUI) return;
-      if (vegetationBrushActive) {
-        if (e.button === 0) {
-          isDraggingVegetationRef.current = false;
-          if (sprayBufferRef.current && sprayBufferRef.current.length > 0) {
-            const buf = sprayBufferRef.current;
-            sprayBufferRef.current = null;
-            updateItemsWithHistory((prev: MapItem[]) => [...prev, ...buf]);
-          }
-          lastSprayPosRef.current = null;
-        }
-        return;
-      }
-      if (paintMode) {
-        if (e.button === 0 && terrainMode === 'paint' && ['star', 'hexagon', 'square', 'starOutline'].includes(brushMaskId)) {
-          if (!pointerStartRef.current) return;
-          const elapsed = Date.now() - pointerStartRef.current.time;
-          const dist = Math.hypot(e.clientX - pointerStartRef.current.x, e.clientY - pointerStartRef.current.y);
-          pointerStartRef.current = null;
-          if (elapsed > 300 || dist > 5) return;
-          const rect = gl.domElement.getBoundingClientRect();
-          const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-          const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-          const exactMouse = new THREE.Vector2(ndcX, ndcY);
-          raycaster.setFromCamera(exactMouse, camera);
-          const hits = raycaster.intersectObjects(getRaycastTargets(), true);
-          const terrainHit = hits.find(i => i.object.name === 'terrain');
-          if (terrainHit) {
-            const hp = terrainHit.point;
-            const newItem: MapItem = { id: 'item_mask_' + Math.random().toString(36).substr(2, 9), type: 'mask_projection', path: brushMaskId, pos: [hp.x, hp.y, hp.z], rot: [0, (brushRotation * Math.PI) / 180, 0], sca: [brushSize, brushSize, brushSize], color: brushColor };
-            updateItemsWithHistory(prev => [...prev, newItem]);
-          }
-        }
-        return;
-      }
-      if (e.button === 2) { e.preventDefault(); cancelActiveDragOrPlacement(); return; }
-      if (e.button !== 0 || !pointerStartRef.current) return;
-      const elapsed = Date.now() - pointerStartRef.current.time;
-      const dist = Math.hypot(e.clientX - pointerStartRef.current.x, e.clientY - pointerStartRef.current.y);
-      pointerStartRef.current = null;
-      if (elapsed > 300 || dist > 5) return;
-      const rect = gl.domElement.getBoundingClientRect();
-      const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-      const exactMouse = new THREE.Vector2(ndcX, ndcY);
-      raycaster.setFromCamera(exactMouse, camera);
-      const hits = raycaster.intersectObjects(getRaycastTargets(), true);
-      const filtered = draggedId ? hits.filter(i => { let c: any = i.object; while (c) { if (c.name === draggedId) return false; c = c.parent; } return true; }) : hits;
-      if (filtered.length === 0) { if (draggedId) commitPlacement(draggedId); else setSelectedId(null); return; }
-      const itemHit = filtered.find(i => { let c: any = i.object; while (c) { if (c.name && (c.name.startsWith('item_') || items.some(it => it.id === c.name))) return true; c = c.parent; } return false; });
-      if (itemHit) {
-        let c: any = itemHit.object;
-        while (c) {
-          if (c.name && (c.name.startsWith('item_') || items.some(it => it.id === c.name))) {
-            const hitId = c.name;
-            if (draggedId) { commitPlacement(draggedId); return; }
-            if (selectedId === hitId) {
-              const it = items.find(i2 => i2.id === hitId);
-              if (it) { setDraggedId(hitId); dragStartRef.current = { pos: [...it.pos], rot: [...it.rot], sca: [...it.sca] }; }
-            } else {
-              setSelectedId(hitId);
-              const it = items.find(i2 => i2.id === hitId);
-              if (it) { setDraggedId(hitId); dragStartRef.current = { pos: [...it.pos], rot: [...it.rot], sca: [...it.sca] }; }
-              if (activeAsset) setActiveAsset(null);
-            }
-            return;
-          }
-          c = c.parent;
-        }
-      }
-      const groundHit = filtered.find(i => i.object.name && (i.object.name.toLowerCase().includes('terrain') || i.object.name.toLowerCase().includes('ground')));
-      if (groundHit) { if (draggedId) commitPlacement(draggedId); else if (activeAsset) spawnAtPoint(groundHit.point); else setSelectedId(null); }
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerdown', onDown, { passive: true });
-    window.addEventListener('pointerup', onUp);
-    return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerdown', onDown); window.removeEventListener('pointerup', onUp); };
-  }, [isEditorOpen, isOverUI, selectedId, draggedId, activeAsset, paintMode, vegetationBrushActive, setActiveAsset, scene, camera, gl, raycaster, spawnAtPoint, setSelectedId, commitPlacement, cancelActiveDragOrPlacement, items]);
+  // REMOVED: window event listeners for pointerdown/move/up.
+  // StormTerrain fires editorPointerRefs (above).
+  // EditorItem fires onPointerDown/Up natively.
 
   // ─── WHEEL EVENTS ───
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
-      const activeId = draggedId || selectedId;
+      const st = useEditorStore.getState() as any;
+      const localDraggedId = draggedIdRef.current;
+      const localActiveAsset = activeAssetRef.current;
+      const localSelectedId = st.selectedId;
+      const activeId = localDraggedId || localSelectedId;
       const direction = e.deltaY > 0 ? -1 : 1;
       const isShift = e.shiftKey, isCtrl = e.ctrlKey, isAlt = e.altKey;
 
-      if (vegetationBrushActive) {
+      if (st.vegetationBrushActive) {
         e.preventDefault();
         if (isShift && isAlt) {
-          const { vegetationFixedScale: vfs, setVegetationFixedScale: svfs } = useEditorStore.getState();
-          const nextScale = Math.max(0, Math.min(4.0, vfs + 0.05 * direction));
-          svfs(parseFloat(nextScale.toFixed(2)));
+          const nextScale = Math.max(0, Math.min(4.0, st.vegetationFixedScale + 0.05 * direction));
+          st.setVegetationFixedScale(parseFloat(nextScale.toFixed(2)));
         } else if (isCtrl && !isShift) {
-          const { vegetationDensity: vd, setVegetationDensity: svd } = useEditorStore.getState();
-          svd(Math.max(5, Math.min(100, vd + 5 * direction)));
+          st.setVegetationDensity(Math.max(5, Math.min(100, st.vegetationDensity + 5 * direction)));
         } else if (isShift && !isAlt) {
-          const { vegetationRadius: vr, setVegetationRadius: svr } = useEditorStore.getState();
-          svr(Math.max(2, Math.min(30, vr + 0.5 * direction)));
+          st.setVegetationRadius(Math.max(2, Math.min(30, st.vegetationRadius + 0.5 * direction)));
         }
         return;
       }
 
-      if (isCtrl && !isAlt && !isShift && selectedId === 'terrain') { e.preventDefault(); setBrushStrength(Math.max(0.01, Math.min(1.0, brushStrength + 0.05 * direction))); return; }
+      if (isCtrl && !isAlt && !isShift && localSelectedId === 'terrain') { e.preventDefault(); st.setBrushStrength(Math.max(0.01, Math.min(1.0, st.brushStrength + 0.05 * direction))); return; }
       if (isCtrl && !isAlt && activeId && activeId !== 'terrain') {
         e.preventDefault();
         const yStep = (isShift ? 0.03 : 0.2) * direction;
-        const item = items.find(i => i.id === activeId);
+        const item = st.items.find((i: MapItem) => i.id === activeId);
         if (item) {
           const obj = scene.getObjectByName(activeId);
           if (obj) obj.position.y += yStep;
 
-          if (draggedId === activeId) {
+          if (localDraggedId === activeId) {
             dragElevationOffsetRef.current += yStep;
             targetDragPosRef.current.y += yStep;
           } else {
-            updateItemsWithHistory(prev => prev.map(i => i.id === activeId ? { ...i, pos: [i.pos[0], i.pos[1] + yStep, i.pos[2]] } : i));
+            st.updateItemsWithHistory((prev: MapItem[]) => prev.map(i => i.id === activeId ? { ...i, pos: [i.pos[0], i.pos[1] + yStep, i.pos[2]] } : i));
           }
         }
         return;
       }
       if (isShift && !isAlt) {
-        if (selectedId === 'terrain') {
+        if (localSelectedId === 'terrain') {
           e.preventDefault();
-          const { brushSize: cbs, setBrushSize: sbs } = useEditorStore.getState();
-          sbs(Math.max(1, Math.min(150, cbs + 2 * direction)));
+          st.setBrushSize(Math.max(1, Math.min(150, st.brushSize + 2 * direction)));
           return;
         }
         return;
       }
       if (!isAlt) return;
-      if (!activeId && !activeAsset) return;
+      if (!activeId && !localActiveAsset) return;
       e.preventDefault();
       if (isShift && isAlt) {
         const scaleStep = 0.05 * direction;
         if (activeId) {
-          const item = items.find(i => i.id === activeId);
+          const item = st.items.find((i: MapItem) => i.id === activeId);
           if (item) {
             const obj = scene.getObjectByName(activeId);
             const currentSca = obj ? obj.scale.x : item.sca[0];
             const nextSca = Math.max(0.1, currentSca + scaleStep);
-            setLastUsedScale(item.path, [nextSca, nextSca, nextSca]);
+            st.setLastUsedScale(item.path, [nextSca, nextSca, nextSca]);
             if (obj) obj.scale.set(nextSca, nextSca, nextSca);
-            if (draggedId !== activeId) {
-              updateItemsWithHistory(prev => prev.map(i => i.id === activeId ? { ...i, sca: [nextSca, nextSca, nextSca] } : i));
+            if (localDraggedId !== activeId) {
+              st.updateItemsWithHistory((prev: MapItem[]) => prev.map(i => i.id === activeId ? { ...i, sca: [nextSca, nextSca, nextSca] } : i));
             }
           }
-        } else if (activeAsset) {
-          const cur = lastUsedScales[activeAsset.path] || [1, 1, 1];
-          setLastUsedScale(activeAsset.path, [Math.max(0.1, cur[0] + scaleStep), Math.max(0.1, cur[0] + scaleStep), Math.max(0.1, cur[0] + scaleStep)]);
+        } else if (localActiveAsset) {
+          const cur = st.lastUsedScales?.[localActiveAsset.path] || [1, 1, 1];
+          st.setLastUsedScale(localActiveAsset.path, [Math.max(0.1, cur[0] + scaleStep), Math.max(0.1, cur[0] + scaleStep), Math.max(0.1, cur[0] + scaleStep)]);
         }
       } else {
         const rotStep = (Math.PI / 24) * direction;
         if (activeId) {
-          const item = items.find(i => i.id === activeId);
+          const item = st.items.find((i: MapItem) => i.id === activeId);
           if (item) {
             const obj = scene.getObjectByName(activeId);
             const currentYaw = obj ? obj.rotation.y : item.rot[1];
             const nextYaw = currentYaw + rotStep;
-            setLastUsedRotation(item.path, [item.rot[0], nextYaw, item.rot[2]]);
+            st.setLastUsedRotation(item.path, [item.rot[0], nextYaw, item.rot[2]]);
             if (obj) obj.rotation.y = nextYaw;
-            if (draggedId !== activeId) {
-              updateItemsWithHistory(prev => prev.map(i => i.id === activeId ? { ...i, rot: [i.rot[0], nextYaw, i.rot[2]] } : i));
+            if (localDraggedId !== activeId) {
+              st.updateItemsWithHistory((prev: MapItem[]) => prev.map(i => i.id === activeId ? { ...i, rot: [i.rot[0], nextYaw, i.rot[2]] } : i));
             }
           }
-        } else if (activeAsset) {
-          const cur = lastUsedRotations[activeAsset.path] || [0, 0, 0];
-          setLastUsedRotation(activeAsset.path, [cur[0], cur[1] + rotStep, cur[2]]);
+        } else if (localActiveAsset) {
+          const cur = st.lastUsedRotations?.[localActiveAsset.path] || [0, 0, 0];
+          st.setLastUsedRotation(localActiveAsset.path, [cur[0], cur[1] + rotStep, cur[2]]);
         }
       }
     };
     const el = gl.domElement;
     el.addEventListener('wheel', handleWheel, { passive: false });
     return () => el.removeEventListener('wheel', handleWheel);
-  }, [draggedId, selectedId, selectedIds, activeAsset, items, updateItemsWithHistory, setLastUsedScale, setLastUsedRotation, lastUsedScales, lastUsedRotations, gl, scene, brushStrength, setBrushStrength, vegetationBrushActive]);
+  }, [gl, scene]);
 
   // ─── USE FRAME ───
   useFrame((state, delta) => {
-    const { camera, scene, clock, raycaster, mouse } = state;
+    const { camera, scene, clock, raycaster, pointer } = state;
     windUniforms.time.value = clock.getElapsedTime();
 
     // Camera focus
@@ -503,23 +593,29 @@ export const WorldEditor = () => {
       }
     }
 
-    if (!isEditorOpen || isOverUI) {
+    // ─── SHOW BRUSH SYNC ───
+    // Mirror module-level hasBrushWorldPosRef → React showBrush (transition only, not every frame)
+    if (hasBrushWorldPosRef.current && !showBrush) {
+      setShowBrush(true);
+    } else if (!hasBrushWorldPosRef.current && showBrush) {
+      setShowBrush(false);
+      if (paintMode) useEditorStore.getState().setBrushHoverPos?.(null);
+    }
+
+    if (!isEditorOpen || isUIOverRef.current) {
       hoverPosRef.current = null;
+      if (showBrush) setShowBrush(false);
       if (hasHoverPos) setHasHoverPos(false);
       if (hoveredId) setHoveredId(null);
-      if (brushHoverPos) setBrushHoverPos(null);
       document.body.style.cursor = 'auto';
       return;
     }
 
     // VEGETATION MODE
     if (vegetationBrushActive) {
-      raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(getRaycastTargets(), true);
-      const terrainHit = intersects.find(i => i.object.name && (i.object.name.toLowerCase().includes('terrain') || i.object.name.toLowerCase().includes('ground')));
-      if (terrainHit) {
-        const p = terrainHit.point;
-        setBrushHoverPos([p.x, p.y, p.z]);
+      // Read terrain hit from module-level ref (set by BrushIndicator)
+      if (hasBrushWorldPosRef.current) {
+        const p = brushWorldPosRef.current;
         lastSprayPosRef.current = [p.x, p.y, p.z];
         if (isDraggingVegetationRef.current) {
           handleSprayVegetation(lastSprayPosRef.current, false);
@@ -529,7 +625,9 @@ export const WorldEditor = () => {
           const ctrls = (state as any).controls as any;
           if (ctrls && !ctrls.enabled && !draggedId) ctrls.enabled = true;
         }
-      } else { setBrushHoverPos(null); if (!isDraggingVegetationRef.current) lastSprayPosRef.current = null; }
+      } else {
+        if (!isDraggingVegetationRef.current) lastSprayPosRef.current = null;
+      }
       hoverPosRef.current = null;
       if (hasHoverPos) setHasHoverPos(false);
       if (hoveredId) setHoveredId(null);
@@ -537,16 +635,22 @@ export const WorldEditor = () => {
       return;
     }
 
-    // FULL RAYCAST (non-veg modes)
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(getRaycastTargets(), true);
+    // FULL RAYCAST (non-veg modes) — using state.raycaster & state.pointer (WebGPU-safe)
+    raycaster.setFromCamera(pointer, camera);
+    const targets: THREE.Object3D[] = [];
+    const terrain = scene.getObjectByName('terrain');
+    if (terrain) targets.push(terrain);
+    if (groupRef.current) {
+      groupRef.current.children.forEach(child => {
+        if (child.name && (child.name.startsWith('item_') || items.some(it => it.id === child.name))) {
+          targets.push(child);
+        }
+      });
+    }
+    const intersects = raycaster.intersectObjects(targets.length > 0 ? targets : scene.children, true);
 
-    // Paint mode
+    // Paint mode — brush position already synced by BrushIndicator
     if (paintMode) {
-      const terrainHit = intersects.find(i => i.object.name === 'terrain');
-      if (terrainHit) {
-        setBrushHoverPos([terrainHit.point.x, terrainHit.point.y, terrainHit.point.z]);
-      } else { setBrushHoverPos(null); }
       hoverPosRef.current = null;
       if (hasHoverPos) setHasHoverPos(false);
       if (hoveredId) setHoveredId(null);
@@ -593,7 +697,8 @@ export const WorldEditor = () => {
       smoothHoverPosRef.current.lerp(new THREE.Vector3(snapX, snapY, snapZ), 1 - Math.exp(-18 * delta));
       hoverPosRef.current = smoothHoverPosRef.current;
       if (!hasHoverPos) setHasHoverPos(true);
-    } else {
+    } else if (!vegetationBrushActive && !paintMode) {
+      // Only clear hoverPos in normal mode — veg/paint use refs
       hoverPosRef.current = null;
       if (hasHoverPos) setHasHoverPos(false);
     }
@@ -612,8 +717,10 @@ export const WorldEditor = () => {
       if (ctrls && !ctrls.enabled && !isDraggingVegetationRef.current) ctrls.enabled = true;
     }
 
-    // Hover highlight
-    const itemHit = intersects.find(i => { let c: any = i.object; while (c) { if (c.name && (c.name.startsWith('item_') || items.some(it => it.id === c.name))) return true; c = c.parent; } return false; });
+    // Hover highlight — via useFrame raycast (fallback; EditorItem onPointerOver also fires)
+    // This catches items that miss R3F pointer-over due to scene graph quirks.
+    const allHits = intersects; // reuse from above
+    const itemHit = allHits.find(i => { let c: any = i.object; while (c) { if (c.name && (c.name.startsWith('item_') || items.some(it => it.id === c.name))) return true; c = c.parent; } return false; });
     if (itemHit) {
       let c: any = itemHit.object;
       while (c) { if (c.name && (c.name.startsWith('item_') || items.some(it => it.id === c.name))) { if (hoveredId !== c.name) setHoveredId(c.name); document.body.style.cursor = 'pointer'; return; } c = c.parent; }
@@ -634,7 +741,15 @@ export const WorldEditor = () => {
   );
 
   return (
-    <group ref={groupRef}>
+    <group
+      ref={groupRef}
+      onPointerMissed={(e) => {
+        const st = useEditorStore.getState() as any;
+        if (e.button === 0 && !st.activeAsset && !st.paintMode && !st.vegetationBrushActive) {
+          st.setSelectedId(null);
+        }
+      }}
+    >
       {/* Ghost preview for manual placement */}
       {hasHoverPos && activeAsset && (
         <Suspense fallback={null}>
@@ -643,11 +758,11 @@ export const WorldEditor = () => {
       )}
 
       {/* Ghost for veg single-asset */}
-      {/* eslint-disable-next-line react-hooks/refs -- isDraggingVegetationRef is a boolean flag set in pointer handler, not a React-managed DOM ref. Reading it in render is safe: it's a module-level mutable flag used for one-frame decisions. React rule is about refs attached to DOM nodes/React elements being stale during concurrent rendering, which doesn't apply here. */}
-      {vegetationBrushActive && brushHoverPos && !isDraggingVegetationRef.current && (() => {
+      {vegetationBrushActive && showBrush && !isDraggingVegetationRef.current && (() => {
         const bp = items.find(i => i.id === selectedId) ? null : assetLibrary.blueprints.find(b => b.id === assetLibrary.selectedBlueprintId);
         if (!bp) return null;
-        _ghostPreviewPos.set(brushHoverPos[0], brushHoverPos[1], brushHoverPos[2]);
+        const _gp = brushWorldPosRef.current;
+        _ghostPreviewPos.set(_gp.x, _gp.y, _gp.z);
         const modelPath = bp.modelUrl.startsWith('http') ? bp.modelUrl : `${API_BASE_URL}${bp.modelUrl}`;
         return (
           <Suspense fallback={null}>
@@ -657,24 +772,33 @@ export const WorldEditor = () => {
         );
       })()}
 
-      {/* Vegetation spray ring */}
-      {vegetationBrushActive && brushHoverPos && (() => {
+      {/* Vegetation spray ring — LineSegments (LineLoop unsupported in WebGPU) */}
+      {vegetationBrushActive && showBrush && (() => {
+        const bp = brushWorldPosRef.current;
         const worldRadius = vegetationRadius;
-        const vegPts = buildProjectedCirclePoints(brushHoverPos[0], brushHoverPos[1], brushHoverPos[2], worldRadius, 64, environment, terrainConfig);
+        const vegPts = buildProjectedCirclePoints(bp.x, bp.y, bp.z, worldRadius, 64, environment, terrainConfig);
+        // Duplicate vertices to form connected segments: [0-1, 1-2, ... n-1-0]
+        const segPts: number[] = [];
+        for (let i = 0; i < vegPts.length / 3; i++) {
+          const next = (i + 1) % (vegPts.length / 3);
+          for (const k of [0, 1, 2]) segPts.push(vegPts[i * 3 + k]);
+          for (const k of [0, 1, 2]) segPts.push(vegPts[next * 3 + k]);
+        }
         return (
-          <lineLoop>
-            <bufferGeometry><float32BufferAttribute attach="attributes-position" args={[vegPts, 3]} /></bufferGeometry>
+          <lineSegments>
+            <bufferGeometry><float32BufferAttribute attach="attributes-position" args={[segPts, 3]} /></bufferGeometry>
             <lineBasicMaterial color={isShiftPressed ? '#ef4444' : '#10b981'} linewidth={2} transparent opacity={0.85} depthWrite={false} />
-          </lineLoop>
+          </lineSegments>
         );
       })()}
 
       {/* Paint brush projection */}
-      {paintMode && brushHoverPos && (
-        <HolographicBrushProjection maskId={brushMaskId} size={brushSize} strength={brushStrength} position={brushHoverPos} environment={environment} terrainConfig={terrainConfig} />
+      {paintMode && showBrush && (
+        <HolographicBrushProjection maskId={brushMaskId} size={brushSize} strength={brushStrength}
+          position={[brushWorldPosRef.current.x, brushWorldPosRef.current.y, brushWorldPosRef.current.z]}
+          environment={environment} terrainConfig={terrainConfig} />
       )}
 
-      {/* Normal items */}
       {normalItems.map(item => (
         <SafeErrorBoundary key={item.id} fallback={<mesh position={item.pos} rotation={item.rot} scale={item.sca}><boxGeometry args={[1.1, 1.1, 1.1]} /><meshBasicMaterial color="#ef4444" wireframe transparent opacity={0.6} /></mesh>}>
           <Suspense fallback={<mesh position={item.pos} rotation={item.rot} scale={item.sca}><boxGeometry args={[1, 1, 1]} /><meshBasicMaterial color="#6366f1" wireframe transparent opacity={0.4} /></mesh>}>
@@ -684,7 +808,10 @@ export const WorldEditor = () => {
                 onPointerOut={(e) => { e.stopPropagation(); if (hoveredId === item.id) setHoveredId(null); }} />
             ) : (
               <EditorItem item={item} isSelected={selectedIds.includes(item.id)} isHovered={hoveredId === item.id} isDragging={draggedId === item.id}
-                onClick={(e) => { if (!isEditorOpen) return; const sh = e.shiftKey || e.nativeEvent?.shiftKey; if (sh) toggleSelectedId(item.id); else setSelectedId(item.id); }} />
+                onPointerDown={(e) => handleItemPointerDown(e, item.id)}
+                onPointerUp={(e) => handleItemPointerUp(e, item.id)}
+                onPointerOver={(e) => handleItemPointerOver(e, item.id)}
+                onPointerOut={(e) => handleItemPointerOut(e, item.id)} />
             )}
           </Suspense>
         </SafeErrorBoundary>
@@ -695,7 +822,10 @@ export const WorldEditor = () => {
         <SafeErrorBoundary key={`selveg-${item.id}`} fallback={null}>
           <Suspense fallback={null}>
             <EditorItem item={item} isSelected={selectedIds.includes(item.id)} isHovered={hoveredId === item.id} isDragging={draggedId === item.id}
-              onClick={(e) => { if (!isEditorOpen) return; const sh = e.shiftKey || e.nativeEvent?.shiftKey; if (sh) toggleSelectedId(item.id); else setSelectedId(item.id); }} />
+              onPointerDown={(e) => handleItemPointerDown(e, item.id)}
+              onPointerUp={(e) => handleItemPointerUp(e, item.id)}
+              onPointerOver={(e) => handleItemPointerOver(e, item.id)}
+              onPointerOut={(e) => handleItemPointerOut(e, item.id)} />
           </Suspense>
         </SafeErrorBoundary>
       ))}

@@ -5,78 +5,41 @@
  * Billboard quad, faces camera, 1 draw call.
  */
 import * as THREE from 'three';
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 
 const MAX_FLASHES = 150;
 
 import { VFX_TEXTURES } from './VFXAssets';
 
-const ShadowBurstMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
-    uniforms: { tDiffuse: { value: tex }, uTime: { value: 0 } },
-    vertexShader: `
-        varying vec2 vUv;
-        varying vec3 vColor;
-        #ifndef USE_INSTANCING_COLOR
-            attribute vec3 instanceColor;
-        #endif
-        void main() {
-            vUv = uv;
-            vColor = instanceColor;
-            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-        }
-    `,
-    fragmentShader: `
-        uniform sampler2D tDiffuse;
-        uniform float uTime;
-        varying vec2 vUv;
-        varying vec3 vColor;
-        void main() {
-            vec4 tex = texture2D(tDiffuse, vUv);
-            float dist = length(vUv - 0.5);
-            // Inverting and boosting for a shadow-kinetic look
-            vec3 shadow = mix(vColor * 0.2, vec3(1.0), tex.r);
-            gl_FragColor = vec4(shadow * 1.5 * tex.rgb, tex.a * smoothstep(0.5, 0.2, dist));
-            if (gl_FragColor.a < 0.05) discard;
-        }
-    `,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-});
+const ShadowBurstMat = (NodeMaterial: any, tsl: any, tex: THREE.Texture) => {
+    const { vec3, vec4, uv, texture, vertexColor, float, length, smoothstep, mix } = tsl;
+    const m = new NodeMaterial();
+    m.transparent = true; m.depthWrite = false;
+    m.blending = THREE.AdditiveBlending;
+    m.vertexColors = true; m.alphaTest = 0.05;
+    const t = texture(tex, uv());
+    const dist = length(uv().sub(0.5));
+    const vc = vertexColor();
+    const shadow = mix(vc.rgb.mul(0.2), vec3(1.0), t.r);
+    m.colorNode = vec4(shadow.mul(1.5).mul(t.rgb), t.a.mul(smoothstep(float(0.5), float(0.2), dist)));
+    return m;
+};
 
 // ─── Luxurious Lethal Scratch Material ───────────────────────────────────────
-const LuxuriousCritMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
-    uniforms: { tDiffuse: { value: tex } },
-    vertexShader: `
-        varying vec2 vUv;
-        #ifndef USE_INSTANCING_COLOR
-            attribute vec3 instanceColor;
-        #endif
-        varying vec3 vColor;
-        void main() {
-            vUv = uv;
-            vColor = instanceColor;
-            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-        }
-    `,
-    fragmentShader: `
-        uniform sampler2D tDiffuse;
-        varying vec2 vUv;
-        varying vec3 vColor;
-        void main() {
-            vec4 tex = texture2D(tDiffuse, vUv);
-            // Ultra-bright intensity
-            float bright = pow(tex.r, 2.5) * 1.2;
-            vec3 finalCol = mix(vColor * 1.5, vec3(2.0), bright);
-            gl_FragColor = vec4(finalCol * tex.rgb, tex.a * 0.95);
-            if (gl_FragColor.a < 0.04) discard;
-        }
-    `,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-});
+const LuxuriousCritMat = (NodeMaterial: any, tsl: any, tex: THREE.Texture) => {
+    const { vec3, vec4, uv, texture, vertexColor, float, pow, mix } = tsl;
+    const m = new NodeMaterial();
+    m.transparent = true; m.depthWrite = false;
+    m.blending = THREE.AdditiveBlending;
+    m.vertexColors = true; m.alphaTest = 0.04;
+    const t = texture(tex, uv());
+    const bright = pow(t.r, float(2.5)).mul(1.2);
+    const vc = vertexColor();
+    const finalCol = mix(vc.rgb.mul(1.5), vec3(2.0), bright);
+    m.colorNode = vec4(finalCol.mul(t.rgb), t.a.mul(0.95));
+    return m;
+};
 
 export function AssassinSpellEffect({ assassinSpellsRef, simTimeRef }: { assassinSpellsRef: React.RefObject<any[]>, simTimeRef: React.RefObject<number> }) {
     const meshRef = useRef<THREE.InstancedMesh>(null!);
@@ -86,22 +49,44 @@ export function AssassinSpellEffect({ assassinSpellsRef, simTimeRef }: { assassi
     const _col = useMemo(() => new THREE.Color(), []);
 
     const geo = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
-    const mat = useMemo(() => LuxuriousCritMat(VFX_TEXTURES.slashes[0]), []);
-    const sMat = useMemo(() => LuxuriousCritMat(VFX_TEXTURES.critical), []);
-    const bMat = useMemo(() => ShadowBurstMat(VFX_TEXTURES.twirl), []);
+    const [materials, setMaterials] = useState<any>(null);
+
+    useEffect(() => {
+        let isMounted = true;
+        async function loadWebGPU() {
+            try {
+                const tsl = await import('three/tsl');
+                const { NodeMaterial } = await import('three/webgpu');
+
+                if (!isMounted) return;
+
+                const loaded = {
+                    mat: LuxuriousCritMat(NodeMaterial, tsl, VFX_TEXTURES.slashes[0]),
+                    sMat: LuxuriousCritMat(NodeMaterial, tsl, VFX_TEXTURES.critical),
+                    bMat: ShadowBurstMat(NodeMaterial, tsl, VFX_TEXTURES.twirl),
+                };
+
+                setMaterials(loaded);
+            } catch (err) {
+                console.error("Gagal memuat WebGPU materials:", err);
+            }
+        }
+        loadWebGPU();
+        return () => { isMounted = false; };
+    }, []);
 
     useFrame((state) => {
-        if (!meshRef.current || !assassinSpellsRef.current || !sparkRef.current || !burstRef.current) return;
+        if (!materials || !meshRef.current || !assassinSpellsRef.current || !sparkRef.current || !burstRef.current) return;
         const spells = assassinSpellsRef.current;
         const simTime = performance.now();
         void simTimeRef.current;
-        const time = state.clock.elapsedTime;
+        const elapsed = state.clock.elapsedTime;
         const mesh = meshRef.current;
         const sMesh = sparkRef.current;
         const bMesh = burstRef.current;
-        
-        const slashIdx = Math.floor(time * 18) % 4;
-        mat.uniforms.tDiffuse.value = VFX_TEXTURES.slashes[slashIdx];
+
+        // ponytail: flipbook requires texture uniform update — NodeMaterial uses static texture() ref.
+        // add when: animated sprite flipbook needed
 
         let n = 0; let sn = 0; let bn = 0;
 
@@ -120,7 +105,7 @@ export function AssassinSpellEffect({ assassinSpellsRef, simTimeRef }: { assassi
             const age = simTime - s.startTime;
             const isTeleport = (s as any).isTeleport;
             const duration = isTeleport ? 800 : 250;
-            const t = age / duration; 
+            const t = age / duration;
             if (t >= 1) { s.active = false; continue; }
 
             const ease = 1 - t;
@@ -142,9 +127,9 @@ export function AssassinSpellEffect({ assassinSpellsRef, simTimeRef }: { assassi
                 // NERFED Layer 1: The Scratches (Regular Attack) - Reduced to 1 scratch for non-teleport
                 for (let k = 0; k < 1; k++) {
                     if (n >= MAX_FLASHES) break;
-                    _obj.position.set(s.x, s.y + k*0.1, s.z);
+                    _obj.position.set(s.x, s.y + k * 0.1, s.z);
                     _obj.quaternion.copy(state.camera.quaternion);
-                    _obj.rotateZ(i * 1.57 + k * 0.8 + time * 0.5);
+                    _obj.rotateZ(i * 1.57 + k * 0.8 + elapsed * 0.5);
                     const sc = (1.0 + t * 3.0) * ease * 1.8 * rScale;
                     _obj.scale.setScalar(sc);
                     _obj.updateMatrix();
@@ -181,14 +166,16 @@ export function AssassinSpellEffect({ assassinSpellsRef, simTimeRef }: { assassi
         bMesh.instanceMatrix.needsUpdate = true;
         if (bMesh.instanceColor) bMesh.instanceColor.needsUpdate = true;
 
-        bMat.uniforms.uTime.value = time;
+        // ponytail: time uniforms removed — NodeMaterial reads `time` from TSL.
     });
+
+    if (!materials) return null;
 
     return (
         <group>
-            <instancedMesh ref={meshRef} args={[geo, mat, MAX_FLASHES]} frustumCulled={false} />
-            <instancedMesh ref={sparkRef} args={[geo, sMat, 100]} frustumCulled={false} />
-            <instancedMesh ref={burstRef} args={[geo, bMat, 50]} frustumCulled={false} />
+            <instancedMesh ref={meshRef} args={[geo, materials.mat, MAX_FLASHES]} frustumCulled={false} />
+            <instancedMesh ref={sparkRef} args={[geo, materials.sMat, 100]} frustumCulled={false} />
+            <instancedMesh ref={burstRef} args={[geo, materials.bMat, 50]} frustumCulled={false} />
         </group>
     );
 }

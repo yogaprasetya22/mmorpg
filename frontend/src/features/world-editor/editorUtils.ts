@@ -25,6 +25,30 @@ export const _scratchTarget = new THREE.Vector3();
 
 // ─── TERRAIN PROJECTION HELPERS ───
 
+/**
+ * Convert a closed-loop float32 vertex array [x,y,z, x,y,z, ...] into
+ * a lineSegments-compatible array (each edge duplicated) so it works
+ * with both WebGL and WebGPU (LineLoop unsupported in WebGPU).
+ */
+export function loopToSegments(pts: Float32Array): Float32Array {
+    const n = pts.length / 3;
+    if (n < 2) return pts;
+    const out = new Float32Array(n * 6); // 2 vertices per edge
+    for (let i = 0; i < n; i++) {
+        const next = (i + 1) % n;
+        const oi = i * 6,
+            ni = next * 3,
+            ci = i * 3;
+        out[oi] = pts[ci];
+        out[oi + 1] = pts[ci + 1];
+        out[oi + 2] = pts[ci + 2];
+        out[oi + 3] = pts[ni];
+        out[oi + 4] = pts[ni + 1];
+        out[oi + 5] = pts[ni + 2];
+    }
+    return out;
+}
+
 export const buildProjectedCirclePoints = (
     cx: number,
     _cy: number,

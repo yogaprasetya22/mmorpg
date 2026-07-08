@@ -1,10 +1,10 @@
 'use client';
 import * as THREE from 'three';
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { VFX_TEXTURES } from './VFXAssets';
 
-const MAX_SLASHES = 600; 
+const MAX_SLASHES = 600;
 const MAX_RINGS = 200;
 const MAX_BURSTS = 150;
 
@@ -12,111 +12,91 @@ const MAX_BURSTS = 150;
  * INNOVATION: Kinetic Fracture Shader
  * Ultra-bright energy ripple with volumetric noise.
  */
-const KineticFractureMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
-    uniforms: { tDiffuse: { value: tex }, uTime: { value: 0 } },
-    vertexShader: `
-        varying vec2 vUv;
-        varying vec3 vColor;
-        #ifndef USE_INSTANCING_COLOR
-            attribute vec3 instanceColor;
-        #endif
-        void main() {
-            vUv = uv;
-            vColor = instanceColor;
-            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-        }
-    `,
-    fragmentShader: `
-        uniform sampler2D tDiffuse;
-        uniform float uTime;
-        varying vec2 vUv;
-        varying vec3 vColor;
-        void main() {
-            vec4 tex = texture2D(tDiffuse, vUv);
-            vec2 cUv = vUv - 0.5;
-            float dist = length(cUv);
-            
-            float pulse = sin(dist * 18.0 - uTime * 35.0) * 0.5 + 0.5;
-            vec3 glow = vColor * pulse * 1.5;
-            gl_FragColor = vec4(glow * tex.rgb, tex.a * smoothstep(0.5, 0.3, dist));
-            if (gl_FragColor.a < 0.05) discard;
-        }
-    `,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-});
+const KineticFractureMat = (NodeMaterial: any, tsl: any, tex: THREE.Texture) => {
+    const { time, vec4, uv, texture, vertexColor, float, sin, length, smoothstep } = tsl;
+    const m = new NodeMaterial();
+    m.transparent = true; m.depthWrite = false;
+    m.blending = THREE.AdditiveBlending;
+    m.vertexColors = true; m.alphaTest = 0.05;
+    const t = texture(tex, uv());
+    const cUv = uv().sub(0.5);
+    const dist = length(cUv);
+    const pulse = sin(dist.mul(18.0).sub(time.mul(35.0))).mul(0.5).add(0.5);
+    const vc = vertexColor();
+    m.colorNode = vec4(vc.rgb.mul(pulse).mul(1.5).mul(t.rgb), t.a.mul(smoothstep(float(0.5), float(0.3), dist)));
+    return m;
+};
 
 /**
  * INNOVATION: Wind Vortex Shader
  * Rotating wind swirls for the 'tebasan angin mutar' look.
  */
-const WindSlashMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
-    uniforms: { tDiffuse: { value: tex }, uTime: { value: 0 } },
-    vertexShader: `
-        varying vec2 vUv;
-        varying vec3 vColor;
-        #ifndef USE_INSTANCING_COLOR
-            attribute vec3 instanceColor;
-        #endif
-        void main() {
-            vUv = uv;
-            vColor = instanceColor;
-            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-        }
-    `,
-    fragmentShader: `
-        uniform sampler2D tDiffuse;
-        uniform float uTime;
-        varying vec2 vUv;
-        varying vec3 vColor;
-        void main() {
-            vec4 tex = texture2D(tDiffuse, vUv);
-            vec3 windColor = vColor * 1.2;
-            float rot = uTime * 15.0;
-            float c = cos(rot); float s = sin(rot);
-            vec2 rUv = mat2(c, -s, s, c) * (vUv - 0.5) + 0.5;
-            vec4 rTex = texture2D(tDiffuse, rUv);
-            gl_FragColor = vec4(windColor * rTex.rgb, rTex.a * 0.8);
-            if (gl_FragColor.a < 0.05) discard;
-        }
-    `,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide
-});
+const WindSlashMat = (NodeMaterial: any, tsl: any, tex: THREE.Texture) => {
+    const { time, vec2, vec4, uv, texture, vertexColor, cos, sin } = tsl;
+    const m = new NodeMaterial();
+    m.transparent = true; m.depthWrite = false;
+    m.blending = THREE.AdditiveBlending; m.side = THREE.DoubleSide;
+    m.vertexColors = true; m.alphaTest = 0.05;
+    const rot = time.mul(15.0);
+    const c = cos(rot); const s = sin(rot);
+    const rUv = vec2(uv().x.sub(0.5).mul(c).sub(uv().y.sub(0.5).mul(s)).add(0.5), uv().x.sub(0.5).mul(s).add(uv().y.sub(0.5).mul(c)).add(0.5));
+    const rTex = texture(tex, rUv);
+    const vc = vertexColor();
+    m.colorNode = vec4(vc.rgb.mul(1.2).mul(rTex.rgb), rTex.a.mul(0.8));
+    return m;
+};
 
 const _obj = new THREE.Object3D();
 const _col = new THREE.Color();
 
-interface FighterVFX { 
-    x: number; y: number; z: number; 
-    startTime: number; color: string; 
-    active: boolean; rot: number; scale: number; 
-    type: 'impact' | 'slash' | 'burst' | 'cyclone'; 
+interface FighterVFX {
+    x: number; y: number; z: number;
+    startTime: number; color: string;
+    active: boolean; rot: number; scale: number;
+    type: 'impact' | 'slash' | 'burst' | 'cyclone';
 }
 
 export function FighterSpellEffect({ fighterSpellsRef, simTimeRef }: { fighterSpellsRef: React.RefObject<any[]>, simTimeRef: React.RefObject<number> }) {
     const impactRef = useRef<THREE.InstancedMesh>(null!);
     const slashRef = useRef<THREE.InstancedMesh>(null!);
     const burstRef = useRef<THREE.InstancedMesh>(null!);
-    
-    const vfxOrder = useRef(0);
-    const pool = useRef<FighterVFX[]>(Array.from({ length: 800 }, () => ({ x:0,y:0,z:0, startTime:0, color:'#fff', active:false, rot:0, scale:1, type:'impact' })));
-    const activeIndices = useRef<number[]>([]);
-    
-    const quadGeo = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
-    const iMat = useMemo(() => KineticFractureMat(VFX_TEXTURES.shockwave), []); 
-    const sMat = useMemo(() => WindSlashMat(VFX_TEXTURES.twirl), []);
-    const bMat = useMemo(() => KineticFractureMat(VFX_TEXTURES.radiant), []); 
 
-    useFrame((state) => {
-        if (!impactRef.current || !fighterSpellsRef.current || !slashRef.current || !burstRef.current) return;
+    const vfxOrder = useRef(0);
+    const pool = useRef<FighterVFX[]>(Array.from({ length: 800 }, () => ({ x: 0, y: 0, z: 0, startTime: 0, color: '#fff', active: false, rot: 0, scale: 1, type: 'impact' })));
+    const activeIndices = useRef<number[]>([]);
+
+    const quadGeo = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
+    const [materials, setMaterials] = useState<any>(null);
+
+    useEffect(() => {
+        let isMounted = true;
+        async function loadWebGPU() {
+            try {
+                const tsl = await import('three/tsl');
+                const { NodeMaterial } = await import('three/webgpu');
+
+                if (!isMounted) return;
+
+                const loaded = {
+                    iMat: KineticFractureMat(NodeMaterial, tsl, VFX_TEXTURES.shockwave),
+                    sMat: WindSlashMat(NodeMaterial, tsl, VFX_TEXTURES.twirl),
+                    bMat: KineticFractureMat(NodeMaterial, tsl, VFX_TEXTURES.radiant),
+                };
+
+                setMaterials(loaded);
+            } catch (err) {
+                console.error("Gagal memuat WebGPU materials:", err);
+            }
+        }
+        loadWebGPU();
+        return () => { isMounted = false; };
+    }, []);
+
+    useFrame(() => {
+        if (!materials || !impactRef.current || !fighterSpellsRef.current || !slashRef.current || !burstRef.current) return;
         const spells = fighterSpellsRef.current;
         const simTime = performance.now();
         void simTimeRef.current;
-        const time = state.clock.elapsedTime;
 
         // NERFED for 4GB RAM laptops: Reduced scale and glow multiplier to save GPU fill-rate
         const RARITY_SCALE = { common: 0.9, elite: 1.1, epic: 1.2, legendary: 1.4 };
@@ -131,51 +111,51 @@ export function FighterSpellEffect({ fighterSpellsRef, simTimeRef }: { fighterSp
             const rGlow = (RARITY_GLOW as any)[r] || 8.0;
 
             const age = simTime - s.startTime;
-            const t = age / 400; 
+            const t = age / 400;
             if (t >= 1) { s.active = false; continue; }
 
             if (t < 0.05 && (s as any)._lastVFX !== s.startTime) {
                 (s as any)._lastVFX = s.startTime;
-                
+
                 if (s.isCyclone) {
                     // Wind Vortex Trigger
-                    for(let k=0; k<3; k++) {
+                    for (let k = 0; k < 3; k++) {
                         const p = pool.current[vfxOrder.current];
                         if (!p.active) activeIndices.current.push(vfxOrder.current);
                         vfxOrder.current = (vfxOrder.current + 1) % pool.current.length;
-                        p.x = s.x; p.y = 0.5 + k*0.3; p.z = s.z; p.startTime = simTime;
+                        p.x = s.x; p.y = 0.5 + k * 0.3; p.z = s.z; p.startTime = simTime;
                         p.color = s.color; p.active = true; p.type = 'cyclone';
                         p.rot = Math.random() * Math.PI;
-                        p.scale = (2.5 + k*0.5) * rScale;
+                        p.scale = (2.5 + k * 0.5) * rScale;
                         (p as any).rGlow = rGlow;
                     }
                 } else {
                     // Normal Strike sequence
-                    const p1 = pool.current[vfxOrder.current]; 
+                    const p1 = pool.current[vfxOrder.current];
                     if (!p1.active) activeIndices.current.push(vfxOrder.current);
                     vfxOrder.current = (vfxOrder.current + 1) % pool.current.length;
                     p1.x = s.x; p1.y = 0.05; p1.z = s.z; p1.startTime = simTime; p1.color = s.color || '#ff4400'; p1.active = true; p1.type = 'impact'; p1.scale = 0.8 * rScale;
-                    
+
                     const p2 = pool.current[vfxOrder.current];
                     if (!p2.active) activeIndices.current.push(vfxOrder.current);
                     vfxOrder.current = (vfxOrder.current + 1) % pool.current.length;
                     p2.x = s.x; p2.y = 1.0; p2.z = s.z; p2.startTime = simTime; p2.color = '#fff'; p2.active = true; p2.type = 'burst'; p2.scale = 1.5 * rScale;
-    
+
                     const targetX = s.targetX ?? s.x;
                     const targetZ = s.targetZ ?? s.z;
-                    
+
                     // NERFED: Spark spray for Legendary strikes reduced from 3 to 1
                     const sparkCount = 1;
-                    for(let k=0; k<sparkCount; k++) {
-                       const p3 = pool.current[vfxOrder.current];
-                       if (!p3.active) activeIndices.current.push(vfxOrder.current);
-                       vfxOrder.current = (vfxOrder.current + 1) % pool.current.length;
-                       p3.x = targetX + (Math.random()-0.5)*k; p3.y = 1.2; p3.z = targetZ + (Math.random()-0.5)*k; 
-                       p3.startTime = simTime; 
-                       p3.color = r === 'legendary' ? '#FFD700' : s.color; p3.active = true; p3.type = 'slash'; 
-                       p3.rot = (s.rotation || 0) + (Math.random()-0.5)*0.5; 
-                       p3.scale = 1.5 * rScale;
-                       (p3 as any).rGlow = rGlow;
+                    for (let k = 0; k < sparkCount; k++) {
+                        const p3 = pool.current[vfxOrder.current];
+                        if (!p3.active) activeIndices.current.push(vfxOrder.current);
+                        vfxOrder.current = (vfxOrder.current + 1) % pool.current.length;
+                        p3.x = targetX + (Math.random() - 0.5) * k; p3.y = 1.2; p3.z = targetZ + (Math.random() - 0.5) * k;
+                        p3.startTime = simTime;
+                        p3.color = r === 'legendary' ? '#FFD700' : s.color; p3.active = true; p3.type = 'slash';
+                        p3.rot = (s.rotation || 0) + (Math.random() - 0.5) * 0.5;
+                        p3.scale = 1.5 * rScale;
+                        (p3 as any).rGlow = rGlow;
                     }
 
                     // NERFED: Removed Secondary Impact Ring for Legendary to save particles
@@ -189,19 +169,19 @@ export function FighterSpellEffect({ fighterSpellsRef, simTimeRef }: { fighterSp
         for (let j = 0; j < currentActive.length; j++) {
             const idx = currentActive[j];
             const v = pool.current[idx];
-            if (!v.active) continue; 
+            if (!v.active) continue;
             const age = simTime - v.startTime;
             if (age < 0) {
-                 currentActive[writeIdx++] = idx;
-                 continue; 
+                currentActive[writeIdx++] = idx;
+                continue;
             }
-            
+
             if (v.type === 'impact') {
                 const rt = age / 500; if (rt >= 1) { v.active = false; continue; }
                 if (in_count < MAX_RINGS) {
                     const ease = 1.0 - Math.pow(rt, 3.0);
                     _obj.position.set(v.x, v.y, v.z);
-                    _obj.rotation.set(-Math.PI/2, 0, 0);
+                    _obj.rotation.set(-Math.PI / 2, 0, 0);
                     const sc = v.scale * (0.5 + Math.pow(rt, 0.2) * 1.8);
                     _obj.scale.setScalar(sc);
                     _obj.updateMatrix();
@@ -229,9 +209,9 @@ export function FighterSpellEffect({ fighterSpellsRef, simTimeRef }: { fighterSp
                     const ease = 1.0 - ct;
                     const rGlow = (v as any).rGlow || 15.0;
                     _obj.position.set(v.x, v.y, v.z);
-                    _obj.rotation.set(-Math.PI/2, 0, v.rot);
+                    _obj.rotation.set(-Math.PI / 2, 0, v.rot);
                     const sc = v.scale * (1.0 + ct * 1.5);
-                    _obj.scale.setScalar(sc); 
+                    _obj.scale.setScalar(sc);
                     _obj.updateMatrix();
                     slashRef.current.setMatrixAt(sl_count, _obj.matrix);
                     _col.set(v.color).multiplyScalar(rGlow * 0.15 * ease);
@@ -244,9 +224,9 @@ export function FighterSpellEffect({ fighterSpellsRef, simTimeRef }: { fighterSp
                     const ease = 1.0 - dt;
                     const rGlow = (v as any).rGlow || 15.0;
                     _obj.position.set(v.x, v.y, v.z);
-                    _obj.rotation.set(-Math.PI/2, 0, v.rot);
+                    _obj.rotation.set(-Math.PI / 2, 0, v.rot);
                     const sc = v.scale * (1.2 + dt * 1.5);
-                    _obj.scale.setScalar(sc); 
+                    _obj.scale.setScalar(sc);
                     _obj.updateMatrix();
                     slashRef.current.setMatrixAt(sl_count, _obj.matrix);
                     _col.set(v.color).multiplyScalar(rGlow * 0.15 * ease);
@@ -267,17 +247,17 @@ export function FighterSpellEffect({ fighterSpellsRef, simTimeRef }: { fighterSp
         slashRef.current.count = sl_count;
         slashRef.current.instanceMatrix.needsUpdate = true;
         if (slashRef.current.instanceColor) slashRef.current.instanceColor.needsUpdate = true;
-        
-        (iMat as THREE.ShaderMaterial).uniforms.uTime.value = time;
-        (sMat as THREE.ShaderMaterial).uniforms.uTime.value = time;
-        (bMat as THREE.ShaderMaterial).uniforms.uTime.value = time;
+
+        // ponytail: time uniforms removed — NodeMaterial reads `time` from TSL.
     });
+
+    if (!materials) return null;
 
     return (
         <group>
-            <instancedMesh ref={impactRef} args={[quadGeo, iMat, MAX_RINGS]} frustumCulled={false} />
-            <instancedMesh ref={burstRef} args={[quadGeo, bMat, MAX_BURSTS]} frustumCulled={false} />
-            <instancedMesh ref={slashRef} args={[quadGeo, sMat, MAX_SLASHES]} frustumCulled={false} />
+            <instancedMesh ref={impactRef} args={[quadGeo, materials.iMat, MAX_RINGS]} frustumCulled={false} />
+            <instancedMesh ref={burstRef} args={[quadGeo, materials.bMat, MAX_BURSTS]} frustumCulled={false} />
+            <instancedMesh ref={slashRef} args={[quadGeo, materials.sMat, MAX_SLASHES]} frustumCulled={false} />
         </group>
     );
 }

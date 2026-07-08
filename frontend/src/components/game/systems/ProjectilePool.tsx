@@ -1,4 +1,6 @@
-import React, { useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
+'use client';
+
+import React, { useRef, useMemo, forwardRef, useImperativeHandle, useState, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useVFX } from './VFXManager';
@@ -8,7 +10,6 @@ import { UnitRuntimeData } from '@/src/core/domain/unit.types';
 const MAX_BULLETS = 100;
 const BULLET_SPEED = 2.2;
 const BULLET_LIFETIME = 2.5;
-
 const MAX_PARTICLES = 300;
 
 // Travel-aligned orientation helpers for arrow sprites
@@ -38,175 +39,78 @@ function setArrowTravelPool(
   obj.matrixWorldNeedsUpdate = true;
 }
 
-// ─── Custom Shaders for Premium VFX ──────────────────────────────────────────
+// ─── Custom Shaders for Premium VFX (Refactored for Lazy Loading) ────────────
 
-const CoreShaderMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
-  uniforms: {
-    tDiffuse: { value: tex },
-    uTime: { value: 0 }
-  },
-  vertexShader: `
-    varying vec2 vUv;
-    varying vec3 vColor;
-    #ifndef USE_INSTANCING_COLOR
-      attribute vec3 instanceColor;
-    #endif
-    void main() {
-      vUv = uv;
-      vColor = instanceColor;
-      // Billboard behavior: make it face the camera
-      vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-      float sx = length(vec3(instanceMatrix[0][0], instanceMatrix[0][1], instanceMatrix[0][2]));
-      float sy = length(vec3(instanceMatrix[1][0], instanceMatrix[1][1], instanceMatrix[1][2]));
-      mvPosition.xy += position.xy * vec2(sx, sy);
-      gl_Position = projectionMatrix * mvPosition;
-    }
-  `,
-  fragmentShader: `
-    uniform sampler2D tDiffuse;
-    varying vec2 vUv;
-    varying vec3 vColor;
-    void main() {
-      vec4 tex = texture2D(tDiffuse, vUv);
-      vec3 col = vColor * tex.rgb * 3.5; // Over-exposed center glow
-      gl_FragColor = vec4(col, tex.a);
-      if (gl_FragColor.a < 0.02) discard;
-    }
-  `,
-  transparent: true,
-  depthWrite: false,
-  blending: THREE.AdditiveBlending,
-  side: THREE.DoubleSide
-});
+const CoreShaderMat = (NodeMaterial: any, tsl: any, tex: THREE.Texture) => {
+  const { uv, texture, vertexColor, vec4 } = tsl;
+  const m = new NodeMaterial();
+  m.transparent = true;
+  m.depthWrite = false;
+  m.blending = THREE.AdditiveBlending;
+  m.side = THREE.DoubleSide;
+  m.vertexColors = true;
+  m.alphaTest = 0.02;
 
-const TrailShaderMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
-  uniforms: {
-    tDiffuse: { value: tex },
-    uTime: { value: 0 }
-  },
-  vertexShader: `
-    varying vec2 vUv;
-    varying vec3 vColor;
-    #ifndef USE_INSTANCING_COLOR
-      attribute vec3 instanceColor;
-    #endif
-    void main() {
-      vUv = uv;
-      vColor = instanceColor;
-      gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform sampler2D tDiffuse;
-    uniform float uTime;
-    varying vec2 vUv;
-    varying vec3 vColor;
-    void main() {
-      // Scroll texture horizontally for energy motion
-      vec2 uvScroll = vec2(vUv.x - uTime * 4.0, vUv.y);
-      vec4 tex = texture2D(tDiffuse, uvScroll);
-      // Fade out tail (vUv.x is 0 at the tail, 1 at the head)
-      float fade = vUv.x * vUv.x;
-      vec3 col = vColor * tex.rgb * (1.5 + fade * 1.5);
-      gl_FragColor = vec4(col, tex.a * fade * 0.95);
-      if (gl_FragColor.a < 0.02) discard;
-    }
-  `,
-  transparent: true,
-  depthWrite: false,
-  blending: THREE.AdditiveBlending,
-  side: THREE.DoubleSide
-});
+  const texNode = texture(tex, uv());
+  const vc = vertexColor();
+  m.colorNode = vec4(vc.rgb.mul(3.5).mul(texNode.rgb), texNode.a);
+  return m as THREE.Material;
+};
 
-const ParticleShaderMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
-  uniforms: {
-    tDiffuse: { value: tex }
-  },
-  vertexShader: `
-    varying vec2 vUv;
-    varying vec3 vColor;
-    #ifndef USE_INSTANCING_COLOR
-      attribute vec3 instanceColor;
-    #endif
-    void main() {
-      vUv = uv;
-      vColor = instanceColor;
-      // Billboard behavior
-      vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-      float sc = length(vec3(instanceMatrix[0][0], instanceMatrix[0][1], instanceMatrix[0][2]));
-      mvPosition.xy += position.xy * sc;
-      gl_Position = projectionMatrix * mvPosition;
-    }
-  `,
-  fragmentShader: `
-    uniform sampler2D tDiffuse;
-    varying vec2 vUv;
-    varying vec3 vColor;
-    void main() {
-      vec4 tex = texture2D(tDiffuse, vUv);
-      gl_FragColor = vec4(vColor * tex.rgb * 2.5, tex.a);
-      if (gl_FragColor.a < 0.02) discard;
-    }
-  `,
-  transparent: true,
-  depthWrite: false,
-  blending: THREE.AdditiveBlending
-});
+const TrailShaderMat = (NodeMaterial: any, tsl: any, tex: THREE.Texture) => {
+  const { time, vec2, vec4, uv, texture, vertexColor, float } = tsl;
+  const m = new NodeMaterial();
+  m.transparent = true;
+  m.depthWrite = false;
+  m.blending = THREE.AdditiveBlending;
+  m.side = THREE.DoubleSide;
+  m.vertexColors = true;
+  m.alphaTest = 0.02;
+
+  const texNode = texture(tex, vec2(uv().x.sub(time.mul(4.0)), uv().y));
+  const fade = uv().x.mul(uv().x);
+  const vc = vertexColor();
+  const col = vc.rgb.mul(texNode.rgb).mul(float(1.5).add(fade.mul(1.5)));
+  m.colorNode = vec4(col, texNode.a.mul(fade).mul(0.95));
+  return m as THREE.Material;
+};
+
+const ParticleShaderMat = (NodeMaterial: any, tsl: any, tex: THREE.Texture) => {
+  const { uv, texture, vertexColor, vec4 } = tsl;
+  const m = new NodeMaterial();
+  m.transparent = true;
+  m.depthWrite = false;
+  m.blending = THREE.AdditiveBlending;
+  m.vertexColors = true;
+  m.alphaTest = 0.02;
+
+  const texNode = texture(tex, uv());
+  const vc = vertexColor();
+  m.colorNode = vec4(vc.rgb.mul(texNode.rgb).mul(2.5), texNode.a);
+  return m as THREE.Material;
+};
 
 // ─── Projectile Types Config ────────────────────────────────────────────────
 
 interface ProjectileConfig {
   color: string;
-  coreSize: [number, number]; // [width, height]
-  trailSize: [number, number]; // [length, width]
+  coreSize: [number, number];
+  trailSize: [number, number];
   sparkColor: string;
   sparkCount: number;
 }
 
 const PROJECTILE_CONFIGS: Record<string, ProjectileConfig> = {
-  arrow: {
-    color: '#ffd700',
-    coreSize: [0.5, 0.25],
-    trailSize: [2.5, 0.25],
-    sparkColor: '#ffea55',
-    sparkCount: 1,
-  },
-  fire: {
-    color: '#ff4500',
-    coreSize: [0.45, 0.45],
-    trailSize: [2.0, 0.45],
-    sparkColor: '#ffa500',
-    sparkCount: 2,
-  },
-  ice: {
-    color: '#00ffff',
-    coreSize: [0.35, 0.35],
-    trailSize: [1.8, 0.3],
-    sparkColor: '#b0ffff',
-    sparkCount: 1,
-  },
-  magic: {
-    color: '#d100d1',
-    coreSize: [0.4, 0.4],
-    trailSize: [2.2, 0.35],
-    sparkColor: '#ff66ff',
-    sparkCount: 2,
-  },
-  holy: {
-    color: '#ffffcc',
-    coreSize: [0.45, 0.45],
-    trailSize: [2.4, 0.3],
-    sparkColor: '#ffffff',
-    sparkCount: 1,
-  }
+  arrow: { color: '#ffd700', coreSize: [0.5, 0.25], trailSize: [2.5, 0.25], sparkColor: '#ffea55', sparkCount: 1 },
+  fire: { color: '#ff4500', coreSize: [0.45, 0.45], trailSize: [2.0, 0.45], sparkColor: '#ffa500', sparkCount: 2 },
+  ice: { color: '#00ffff', coreSize: [0.35, 0.35], trailSize: [1.8, 0.3], sparkColor: '#b0ffff', sparkCount: 1 },
+  magic: { color: '#d100d1', coreSize: [0.4, 0.4], trailSize: [2.2, 0.35], sparkColor: '#ff66ff', sparkCount: 2 },
+  holy: { color: '#ffffcc', coreSize: [0.45, 0.45], trailSize: [2.4, 0.3], sparkColor: '#ffffff', sparkCount: 1 }
 };
 
 export interface ProjectilePoolHandle {
   fire: (origin: THREE.Vector3, direction: THREE.Vector3, options?: {
-    color?: string;
-    speed?: number;
-    type?: 'arrow' | 'fire' | 'ice' | 'magic' | 'holy';
-    targetId?: string;
+    color?: string; speed?: number; type?: 'arrow' | 'fire' | 'ice' | 'magic' | 'holy'; targetId?: string;
   }) => void;
 }
 
@@ -224,32 +128,48 @@ const ProjectilePool = forwardRef<ProjectilePoolHandle, ProjectilePoolProps>((pr
 
   const { scene } = useThree();
   const { spawnVFX } = useVFX();
-  
-  // High-performance static array pool for projectiles
+
+  // State untuk menyimpan material yang di-load secara dinamis
+  const [materials, setMaterials] = useState<{
+    coreMat: THREE.Material,
+    trailMat: THREE.Material,
+    sparkMat: THREE.Material
+  } | null>(null);
+
+  // Lazy Load WebGPU dan TSL
+  useEffect(() => {
+    let isMounted = true;
+    async function initMaterials() {
+      try {
+        const tsl = await import('three/tsl');
+        const { NodeMaterial } = await import('three/webgpu');
+
+        if (!isMounted) return;
+
+        setMaterials({
+          coreMat: CoreShaderMat(NodeMaterial, tsl, VFX_TEXTURES.flare),
+          trailMat: TrailShaderMat(NodeMaterial, tsl, VFX_TEXTURES.bullet),
+          sparkMat: ParticleShaderMat(NodeMaterial, tsl, VFX_TEXTURES.star),
+        });
+      } catch (err) {
+        console.error("Gagal memuat material ProjectilePool:", err);
+      }
+    }
+    initMaterials();
+    return () => { isMounted = false; };
+  }, []);
+
   const pool = useMemo(() => Array.from({ length: MAX_BULLETS }, () => ({
-    active: false,
-    position: new THREE.Vector3(),
-    direction: new THREE.Vector3(),
-    life: 0,
-    type: 'arrow' as 'arrow' | 'fire' | 'ice' | 'magic' | 'holy',
-    color: '#ffd700',
-    speed: BULLET_SPEED,
-    targetId: null as string | null
+    active: false, position: new THREE.Vector3(), direction: new THREE.Vector3(),
+    life: 0, type: 'arrow' as 'arrow' | 'fire' | 'ice' | 'magic' | 'holy', color: '#ffd700', speed: BULLET_SPEED, targetId: null as string | null
   })), []);
 
-  // Pre-allocated static pool for spark particles
   const particles = useMemo(() => Array.from({ length: MAX_PARTICLES }, () => ({
-    active: false,
-    position: new THREE.Vector3(),
-    velocity: new THREE.Vector3(),
-    color: new THREE.Color(),
-    life: 0.0,
-    scale: 0.0
+    active: false, position: new THREE.Vector3(), velocity: new THREE.Vector3(),
+    color: new THREE.Color(), life: 0.0, scale: 0.0
   })), []);
 
   const particlePtr = useRef(0);
-
-  // Pre-allocated temp variables to satisfy the Zero Allocation Rule
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
   const _vMove = useMemo(() => new THREE.Vector3(), []);
@@ -257,7 +177,6 @@ const ProjectilePool = forwardRef<ProjectilePoolHandle, ProjectilePoolProps>((pr
   const _ppColor = useMemo(() => new THREE.Color(), []);
   const _ppTrPos = useMemo(() => new THREE.Vector3(), []);
 
-  // Spawn a spark helper (O(1) with zero GC allocation)
   const spawnSpark = (pos: THREE.Vector3, dir: THREE.Vector3, colorStr: string) => {
     const p = particles[particlePtr.current];
     p.active = true;
@@ -302,12 +221,10 @@ const ProjectilePool = forwardRef<ProjectilePoolHandle, ProjectilePoolProps>((pr
     }
   }));
 
-  useFrame((state, delta) => {
-    if (!coreMeshRef.current || !trailMeshRef.current || !particleMeshRef.current) return;
+  useFrame((_state, delta) => {
+    // Tahan kalkulasi physics & render jika material belum siap dimuat
+    if (!materials || !coreMeshRef.current || !trailMeshRef.current || !particleMeshRef.current) return;
 
-    const time = state.clock.elapsedTime;
-
-    // ─── 1. Update Projectiles ───
     for (let i = 0; i < MAX_BULLETS; i++) {
       const b = pool[i];
       if (!b.active) {
@@ -318,7 +235,6 @@ const ProjectilePool = forwardRef<ProjectilePoolHandle, ProjectilePoolProps>((pr
         continue;
       }
 
-      // Homing target behavior
       if (b.targetId && props.unitRegistry?.current) {
         const target = props.unitRegistry.current.find(u => u.id === b.targetId);
         if (target && target.isActive && !target.isDying) {
@@ -327,14 +243,12 @@ const ProjectilePool = forwardRef<ProjectilePoolHandle, ProjectilePoolProps>((pr
         }
       }
 
-      // Frame rate independent speed scaling
       const stepDist = b.speed * (delta * 60);
       _vMove.copy(b.direction).multiplyScalar(stepDist);
-      
-      // Raycast Hit Detection
+
       raycaster.set(b.position, b.direction);
       raycaster.far = _vMove.length() * 1.5;
-      
+
       const intersects = raycaster.intersectObjects(scene.children, true);
       let hitDetected = false;
       let hitPoint = b.position;
@@ -361,19 +275,16 @@ const ProjectilePool = forwardRef<ProjectilePoolHandle, ProjectilePoolProps>((pr
       if (hitDetected && targetId) {
         const config = PROJECTILE_CONFIGS[b.type];
         spawnVFX([hitPoint.x, hitPoint.y, hitPoint.z], 'spark', config.color);
-        
+
         const damage = 1200 + Math.random() * 2500;
         const isCrit = Math.random() > 0.8;
-        
+
         if (props.dealPlayerDamage) {
           props.dealPlayerDamage(targetId, damage, isCrit);
         } else if (props.damageQueue?.current) {
           props.damageQueue.current.push({
-            value: damage,
-            position: [hitPoint.x, hitPoint.y, hitPoint.z],
-            isCrit,
-            isMagic: b.type !== 'arrow',
-            color: isCrit ? '#ff4400' : '#ffaa00'
+            value: damage, position: [hitPoint.x, hitPoint.y, hitPoint.z],
+            isCrit, isMagic: b.type !== 'arrow', color: isCrit ? '#ff4400' : '#ffaa00'
           });
         }
         b.active = false;
@@ -383,26 +294,22 @@ const ProjectilePool = forwardRef<ProjectilePoolHandle, ProjectilePoolProps>((pr
         if (b.life <= 0) b.active = false;
       }
 
-      // Render Visuals if still active
       if (b.active) {
         const config = PROJECTILE_CONFIGS[b.type];
-        
-        // Spawn sparks trailing behind
+
         for (let s = 0; s < config.sparkCount; s++) {
           spawnSpark(b.position, b.direction, config.sparkColor);
         }
 
         dummy.matrixAutoUpdate = true;
-
-        // Core Billboard
         dummy.position.copy(b.position);
+        dummy.lookAt(_state.camera.position);
         dummy.scale.set(config.coreSize[0], config.coreSize[1], 1.0);
         dummy.updateMatrix();
         coreMeshRef.current.setMatrixAt(i, dummy.matrix);
         _ppColor.set(b.color).multiplyScalar(3.0);
         coreMeshRef.current.setColorAt(i, _ppColor);
 
-        // Trail Stretched Plane
         const trailLen = config.trailSize[0];
         const trailW = config.trailSize[1];
         _ppTrPos.copy(b.position).addScaledVector(b.direction, -trailLen * 0.5);
@@ -419,14 +326,9 @@ const ProjectilePool = forwardRef<ProjectilePoolHandle, ProjectilePoolProps>((pr
 
     coreMeshRef.current.instanceMatrix.needsUpdate = true;
     if (coreMeshRef.current.instanceColor) coreMeshRef.current.instanceColor.needsUpdate = true;
-
     trailMeshRef.current.instanceMatrix.needsUpdate = true;
     if (trailMeshRef.current.instanceColor) trailMeshRef.current.instanceColor.needsUpdate = true;
 
-    (coreMeshRef.current.material as THREE.ShaderMaterial).uniforms.uTime.value = time;
-    (trailMeshRef.current.material as THREE.ShaderMaterial).uniforms.uTime.value = time;
-
-    // ─── 2. Update Spark Particles ───
     dummy.matrixAutoUpdate = true;
     for (let i = 0; i < MAX_PARTICLES; i++) {
       const p = particles[i];
@@ -438,8 +340,8 @@ const ProjectilePool = forwardRef<ProjectilePoolHandle, ProjectilePoolProps>((pr
       }
 
       p.position.addScaledVector(p.velocity, delta);
-      p.velocity.y -= 1.5 * delta; // soft gravity
-      p.life -= delta * 3.0; // spark decay lifetime (~330ms)
+      p.velocity.y -= 1.5 * delta;
+      p.life -= delta * 3.0;
 
       if (p.life <= 0) {
         p.active = false;
@@ -450,11 +352,12 @@ const ProjectilePool = forwardRef<ProjectilePoolHandle, ProjectilePoolProps>((pr
       }
 
       dummy.position.copy(p.position);
+      dummy.lookAt(_state.camera.position);
       const sc = p.scale * p.life;
       dummy.scale.set(sc, sc, sc);
       dummy.updateMatrix();
       particleMeshRef.current.setMatrixAt(i, dummy.matrix);
-      
+
       _ppColor.copy(p.color).multiplyScalar(p.life * 2.5);
       particleMeshRef.current.setColorAt(i, _ppColor);
     }
@@ -464,15 +367,15 @@ const ProjectilePool = forwardRef<ProjectilePoolHandle, ProjectilePoolProps>((pr
   });
 
   const geom = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
-  const coreMat = useMemo(() => CoreShaderMat(VFX_TEXTURES.flare), []);
-  const trailMat = useMemo(() => TrailShaderMat(VFX_TEXTURES.bullet), []);
-  const sparkMat = useMemo(() => ParticleShaderMat(VFX_TEXTURES.star), []);
+
+  // Tahan render jika material belum siap (Mencegah WebGPURenderer backend error)
+  if (!materials) return null;
 
   return (
     <group>
-      <instancedMesh ref={coreMeshRef} args={[geom, coreMat, MAX_BULLETS]} frustumCulled={false} />
-      <instancedMesh ref={trailMeshRef} args={[geom, trailMat, MAX_BULLETS]} frustumCulled={false} />
-      <instancedMesh ref={particleMeshRef} args={[geom, sparkMat, MAX_PARTICLES]} frustumCulled={false} />
+      <instancedMesh ref={coreMeshRef} args={[geom, materials.coreMat, MAX_BULLETS]} frustumCulled={false} />
+      <instancedMesh ref={trailMeshRef} args={[geom, materials.trailMat, MAX_BULLETS]} frustumCulled={false} />
+      <instancedMesh ref={particleMeshRef} args={[geom, materials.sparkMat, MAX_PARTICLES]} frustumCulled={false} />
     </group>
   );
 });

@@ -17,13 +17,13 @@ const nextConfig: NextConfig = {
         // Using relative string paths (./node_modules/...) avoids Turbopack's
         // "server relative imports" error that occurs with absolute paths (path.resolve).
         resolveAlias: {
-            "three": ["./node_modules/three"],
+            three: ["./node_modules/three"],
             "three-stdlib": ["./node_modules/three-stdlib"],
             "three-mesh-bvh": ["./node_modules/three-mesh-bvh"],
             "@react-three/fiber": ["./node_modules/@react-three/fiber"],
             "@react-three/drei": ["./node_modules/@react-three/drei"],
             "r3f-perf": ["./node_modules/r3f-perf"],
-        }
+        },
     },
     // Ensure that heavy three.js imports are optimized
     transpilePackages: [

@@ -1,5 +1,6 @@
 import { useMemo, useRef, useEffect, memo } from 'react';
 import { useGLTF } from '@react-three/drei';
+import { useThree, useFrame } from '@react-three/fiber';
 
 /** isGrassAssetPath — mirrors wind.ts isGrassOrFlower logic. */
 export function isGrassAssetPath(path: string): boolean {
@@ -14,7 +15,6 @@ export function isGrassAssetPath(path: string): boolean {
         lower.includes('bush')
     );
 }
-import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { MapItem } from '@jagres/shared';
 import { applyWindSway } from '@jagres/shared';
@@ -166,15 +166,20 @@ interface GrassInstancedGroupProps {
 
 const GrassInstancedGroup = memo(({ path, items }: GrassInstancedGroupProps) => {
     const { scene } = useGLTF(path);
+    const { gl } = useThree();
 
     const meshes = useMemo(() => {
         const extracted: { geometry: THREE.BufferGeometry; material: THREE.Material; localMatrix: THREE.Matrix4 }[] = [];
         scene.updateMatrixWorld(true);
+        const skipWind = !!(gl as any).isWebGPUBackend;
 
         scene.traverse((child: any) => {
             if (!child.isMesh) return;
             const mat = child.material.clone();
-            applyWindSway(mat, path);
+            // ponytail: applyWindSway uses onBeforeCompile — doesn't work with WebGPURenderer.
+            if (!skipWind) {
+                applyWindSway(mat, path);
+            }
             extracted.push({
                 geometry: child.geometry,
                 material: mat,
@@ -182,7 +187,7 @@ const GrassInstancedGroup = memo(({ path, items }: GrassInstancedGroupProps) => 
             });
         });
         return extracted;
-    }, [scene, path]);
+    }, [scene, path, gl]);
 
     // Split items into sectors (50×50m grid)
     const sectorMap = useMemo(() => {

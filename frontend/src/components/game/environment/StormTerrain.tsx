@@ -16,6 +16,7 @@
 
 import { useMemo, useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { editorPointerRefs } from '@/src/features/world-editor/core/editorPointerRefs';
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 import { StaticCollider } from '@jagres/bvhecctrl';
 import * as THREE from 'three';
@@ -26,7 +27,7 @@ import { getTerrainElevation } from '@jagres/shared';
 
 import { TerrainMaterial } from '@/src/features/terrain/material/TerrainMaterial';
 import { useTerrainBrush, globalDirtyPaint, globalDirtySculpt, setGlobalDirtyPaint, setGlobalDirtySculpt } from '@/src/features/terrain/hooks/useTerrainBrush';
-import { TERRAIN_SIZE, GROUND_Y, SCULPT_RES, BRUSH_WORLD_RADIUS_FACTOR } from '@/src/features/terrain/constants/terrain.constants';
+import { TERRAIN_SIZE, GROUND_Y, SCULPT_RES } from '@/src/features/terrain/constants/terrain.constants';
 
 // BVH support — hanya didaftarkan sekali (idempotent)
 (THREE.BufferGeometry.prototype as any).computeBoundsTree = computeBoundsTree;
@@ -50,12 +51,12 @@ export const StormTerrain = ({
   onReady,
   onSculptLoaded,
 }: StormTerrainProps) => {
-  const { terrainConfig, brushSize, paintMode, brushHoverPos, isEditorOpen, terrainWireframe } = useEditorStore();
+  const { terrainConfig, paintMode, isEditorOpen, terrainWireframe } = useEditorStore();
 
   const {
     paintTexture, sculptHeightsRef, sculptTrigger, isSculptLoaded,
     isDrawingRef, mousePressedRef, isShiftPressedRef, isOverURef,
-    meshRef, handlePaint, ringColor,
+    meshRef, handlePaint,
   } = useTerrainBrush(baseDistance, onSculptLoaded);
 
   const physicsMeshRef = useRef<THREE.Mesh>(null!);
@@ -168,7 +169,7 @@ export const StormTerrain = ({
   useFrame((state) => {
     // Brush aktif saat tombol kiri ditekan dan kursor tidak di atas UI
     if (paintMode && mousePressedRef.current && !isOverURef.current) {
-      state.raycaster.setFromCamera(state.mouse, state.camera);
+      state.raycaster.setFromCamera(state.pointer, state.camera);
       const hits = state.raycaster.intersectObject(meshRef.current);
       if (hits.length > 0 && hits[0].uv) {
         isDrawingRef.current = true;
@@ -227,41 +228,41 @@ export const StormTerrain = ({
         position={[0, GROUND_Y, 0]}
         receiveShadow={!potatoMode || isEditorOpen}
         onPointerDown={(e: any) => {
-          if (paintMode && e.button === 0) e.stopPropagation();
+          if (paintMode && e.button === 0) { e.stopPropagation(); return; }
+          // Delegate to WorldEditor via module-level refs (WebGPU-safe)
+          if (e.intersections?.[0]?.point) {
+            editorPointerRefs.onTerrainPointerDown?.(e.intersections[0].point, e.button, e);
+          }
+        }}
+        onPointerUp={(e: any) => {
+          if (e.intersections?.[0]?.point) {
+            editorPointerRefs.onTerrainPointerUp?.(e.intersections[0].point, e.button, e);
+          }
+        }}
+        onPointerMove={(e: any) => {
+          if (e.intersections?.[0]?.point) {
+            editorPointerRefs.onTerrainPointerMove?.(e.intersections[0].point, e);
+          }
         }}
       >
         <primitive object={TerrainMaterial} attach="material" wireframe={debug || terrainWireframe} />
       </mesh>
 
-      {/* ── Ring brush: lingkaran penanda radius kuas ── */}
-      {paintMode && brushHoverPos && (() => {
-        const R = brushSize * BRUSH_WORLD_RADIUS_FACTOR;
-        const SEGS = 64;
-        const cx = brushHoverPos[0];
-        const cz = brushHoverPos[2];
-        const pts = new Float32Array((SEGS + 1) * 3);
-
-        for (let i = 0; i <= SEGS; i++) {
-          const a = (i / SEGS) * Math.PI * 2;
-          const wx = cx + Math.cos(a) * R;
-          const wz = cz + Math.sin(a) * R;
-          let wy = getTerrainElevation(wx, wz, 'STORM' as any, baseDistance, terrainConfig);
-          if (typeof window !== 'undefined' && (window as any).getGroundHeight) {
-            const h = (window as any).getGroundHeight(wx, wz, -9999);
-            if (h !== -9999) wy = h;
+      <mesh
+        name="editor-catchall"
+        geometry={terrainGeo}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, GROUND_Y, 0]}
+        visible={false}
+        onPointerDown={(e: any) => {
+          // Catch clicks that miss all EditorItem children fall through to terrain
+          if (e.intersections?.[0]?.point && (e as any).eventObject?.name !== 'terrain') {
+            editorPointerRefs.onTerrainPointerDown?.(e.intersections[0].point, e.button, e);
           }
-          pts[i * 3] = wx; pts[i * 3 + 1] = wy + 0.35; pts[i * 3 + 2] = wz;
-        }
-
-        return (
-          <lineLoop>
-            <bufferGeometry>
-              <float32BufferAttribute attach="attributes-position" args={[pts, 3]} />
-            </bufferGeometry>
-            <lineBasicMaterial color={ringColor} linewidth={2} transparent opacity={0.9} depthWrite={false} />
-          </lineLoop>
-        );
-      })()}
+        }}
+      >
+        <meshBasicMaterial visible={false} depthWrite={false} />
+      </mesh>
     </>
   );
 };

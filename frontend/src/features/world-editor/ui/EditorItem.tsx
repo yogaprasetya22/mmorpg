@@ -16,7 +16,10 @@ interface EditorItemProps {
     isSelected: boolean;
     isHovered: boolean;
     isDragging: boolean;
-    onClick: (e: any) => void;
+    onPointerDown?: (e: any) => void;
+    onPointerUp?: (e: any) => void;
+    onPointerOver?: (e: any) => void;
+    onPointerOut?: (e: any) => void;
 }
 
 // ── Shared module-level scratch ──
@@ -35,7 +38,7 @@ function getSharedFrustum(state: any): THREE.Frustum {
     return _frustum;
 }
 
-export const EditorItem = memo(({ item, isSelected, isHovered, isDragging, onClick }: EditorItemProps) => {
+export const EditorItem = memo(({ item, isSelected, isHovered, isDragging, onPointerDown, onPointerUp, onPointerOver, onPointerOut }: EditorItemProps) => {
     const { scene: gltfScene } = useGLTF(item.path);
     const groupRef = useRef<THREE.Group>(null!);
     const frameCounterRef = useRef(Math.floor(Math.random() * 3));
@@ -112,10 +115,13 @@ export const EditorItem = memo(({ item, isSelected, isHovered, isDragging, onCli
             position={item.pos}
             rotation={item.rot as any}
             scale={item.sca as any}
+            onPointerDown={(e) => { e.stopPropagation(); onPointerDown?.(e); }}
+            onPointerUp={(e) => { e.stopPropagation(); onPointerUp?.(e); }}
+            onPointerOver={(e) => { e.stopPropagation(); onPointerOver?.(e); }}
+            onPointerOut={(e) => { e.stopPropagation(); onPointerOut?.(e); }}
         >
             <primitive
                 object={cloned}
-                onClick={(e: any) => { e.stopPropagation(); onClick(e); }}
             />
             {isSelected && <SleekSelectionRing radius={radius} isDragging={isDragging} />}
             {isHovered && !isSelected && <SleekHoverRing radius={radius} />}

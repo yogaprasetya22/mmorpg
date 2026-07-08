@@ -36,7 +36,7 @@ const FILL_MATERIALS: Record<string, THREE.MeshBasicMaterial> = {
  * Pre-warm: force Three.js to compile these materials/shaders at startup
  * rather than on first entity render (avoids frame hitch).
  */
-export function prewarmHpBarMaterials(renderer: THREE.WebGLRenderer) {
+export function prewarmHpBarMaterials(renderer: any) {
   const dummyScene = new THREE.Scene();
   const dummyCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const bg = new THREE.Mesh(SHARED_BG_GEOMETRY, SHARED_BG_MATERIAL);

@@ -4,16 +4,17 @@
 
 'use client';
 
-import { Component, ReactNode, useState, useMemo, useRef } from "react";
+import { Component, ReactNode, useState, useMemo, useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Environment, Sky } from "@react-three/drei";
+import { Environment } from "@react-three/drei";
 import { characterStatus } from "@jagres/bvhecctrl";
 import * as THREE from "three";
 
 import { useStore } from "@/src/state/useStore";
 import { useEditorStore } from "@/src/features/world-editor/store/useEditorStore";
 import { useVFX } from "../systems/VFXManager";
-import { PainterlyWaterMaterial, API_BASE_URL } from '@jagres/shared';
+import { createPainterlyWaterMaterial } from './painterly-client';
+import { API_BASE_URL } from '@jagres/shared';
 import { StormTerrain } from './StormTerrain';
 
 // Simple error boundary to prevent crash on HDR skybox loading errors
@@ -31,6 +32,10 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
   onReady?: () => void;
 }) => {
   const [skyLoadFailed, setSkyLoadFailed] = useState(false);
+  const [waterMat, setWaterMat] = useState<any>(null);
+  useEffect(() => {
+    createPainterlyWaterMaterial().then(setWaterMat);
+  }, []);
   const weather = useStore(s => s.weather);
   const gameState = useStore(s => s.gameState);
   const isSetup = gameState === "SETUP";
@@ -69,8 +74,8 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
     scene.backgroundIntensity = resolvedBgIntensity;
     scene.environmentIntensity = resolvedBgIntensity;
 
-    if (PainterlyWaterMaterial.uniforms?.time) {
-      PainterlyWaterMaterial.uniforms.time.value = state.clock.elapsedTime;
+    if (waterMat && waterMat.uniforms && waterMat.uniforms.time) {
+      waterMat.uniforms.time.value = state.clock.elapsedTime;
     }
 
     if (lightRef.current) {
@@ -142,8 +147,7 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
         </EnvironmentErrorBoundary>
       ) : (
         <>
-          <color attach="background" args={["#a0c4ff"]} />
-          <Sky sunPosition={sunPosition} />
+          <color attach="background" args={[sky === 'night' ? '#0b0f19' : '#a0c4ff']} />
         </>
       )}
       <ambientLight intensity={ambientIntensity ?? (sky === 'night' ? 0.15 : 0.45)} />
@@ -178,10 +182,12 @@ export const StormEnvironment = ({ baseDistance = 24, potatoMode = false, debug 
       />
 
       {/* WATER PLANE (NO COLLIDER) */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.85, 0]}>
-        <planeGeometry args={[1500, 1500]} />
-        <primitive object={PainterlyWaterMaterial} attach="material" transparent={true} />
-      </mesh>
+      {waterMat && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.85, 0]}>
+          <planeGeometry args={[1500, 1500]} />
+          <primitive object={waterMat} attach="material" transparent={true} />
+        </mesh>
+      )}
 
       {/* Exponential Fog for depth */}
       <fogExp2 attach="fog" args={[fogColor, fogDensity]} />

@@ -2,27 +2,30 @@ import * as THREE from "three";
 
 /**
  * Shared GLSL snippets for painterly effects
+ * @deprecated ShaderMaterial utilities — use NodeMaterial+TSL equivalents for WebGPU.
  */
 export const PainterlyShaderUtils = {
     snoise: `
-        vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
-        float snoise(vec2 v){
+        vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
+        float snoise(vec2 v) {
             const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
-            vec2 i  = floor(v + dot(v, C.yy) );
-            vec2 x0 = v -   i + dot(i, C.xx);
-            vec2 i1;
-            i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+            vec2 i  = floor(v + dot(v, C.yy));
+            vec2 x0 = v - i + dot(i, C.xx);
+            vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
             vec4 x12 = x0.xyxy + C.xxzz;
             x12.xy -= i1;
-            i = mod(i, 289.0);
-            vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 )) + i.x + vec3(0.0, i1.x, 1.0 ));
-            vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
-            m = m*m ; m = m*m ;
+            i = mod289(i);
+            vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
+            vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);
+            m = m*m;
+            m = m*m;
             vec3 x = 2.0 * fract(p * C.www) - 1.0;
             vec3 h = abs(x) - 0.5;
             vec3 ox = floor(x + 0.5);
             vec3 a0 = x - ox;
-            m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );
+            m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
             vec3 g;
             g.x  = a0.x  * x0.x  + h.x  * x0.y;
             g.yz = a0.yz * x12.xz + h.yz * x12.yw;
@@ -35,20 +38,16 @@ export const PainterlyShaderUtils = {
             p += dot(p, p + 45.32);
             return fract(p.x * p.y);
         }
-
         float painterlyNoise(vec2 p) {
             vec2 i = floor(p);
             vec2 f = fract(p);
             f = f * f * (3.0 - 2.0 * f);
-
             float a = hash(i);
             float b = hash(i + vec2(1.0, 0.0));
             float c = hash(i + vec2(0.0, 1.0));
             float d = hash(i + vec2(1.0, 1.0));
-
             return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
         }
-
         float brushstrokes(vec2 p, float scale) {
             float n = 0.0;
             n += painterlyNoise(p * scale);
@@ -65,157 +64,30 @@ export const PainterlyShaderUtils = {
     `,
 };
 
-export const PainterlyWaterMaterial = new THREE.ShaderMaterial({
-    uniforms: {
-        time: { value: 0 },
-        color1: { value: new THREE.Color("#00f5d4") },
-        color2: { value: new THREE.Color("#00bbaf") },
-    },
-    vertexShader: `
-        varying vec2 vUv;
-        varying vec3 vWorldPos;
-        uniform float time;
+/** @deprecated Use createPainterlyWaterMaterial() (from painterly-client.ts) in useMemo instead. */
+export const PainterlyWaterMaterial: any = null;
 
-        void main() {
-            vUv = uv;
-            vec4 worldPos = modelMatrix * vec4(position, 1.0);
+/**
+ * @deprecated Dead code — PainterlyTerrainMaterial not used anywhere.
+ * Will be removed in future cleanup.
+ */
+export const PainterlyTerrainMaterial: any = null;
 
-            float wave = sin(worldPos.x * 0.2 + time * 1.5) * 0.1;
-            wave += cos(worldPos.z * 0.15 + time * 1.2) * 0.08;
-            worldPos.y += wave;
-
-            vWorldPos = worldPos.xyz;
-            gl_Position = projectionMatrix * viewMatrix * worldPos;
-        }
-    `,
-    fragmentShader: `
-        varying vec2 vUv;
-        varying vec3 vWorldPos;
-        uniform float time;
-        uniform vec3 color1;
-        uniform vec3 color2;
-
-        ${PainterlyShaderUtils.brushstrokeNoise}
-        ${PainterlyShaderUtils.toonMix}
-
-        void main() {
-            float strokes = brushstrokes(vWorldPos.xz + time * 0.1, 0.5);
-            float highlights = brushstrokes(vWorldPos.xz - time * 0.2, 2.0);
-
-            vec3 color = toonMix(color2, color1, strokes);
-            color += highlights * 0.15;
-
-            float edge = smoothstep(200.0, 100.0, length(vWorldPos.xz));
-
-            gl_FragColor = vec4(color, edge * 0.9);
-        }
-    `,
-    transparent: true,
-});
-
-export const PainterlyTerrainMaterial = new THREE.ShaderMaterial({
-    uniforms: {
-        time: { value: 0 },
-        sandColor: { value: new THREE.Color("#fca311") },
-        rockColor: { value: new THREE.Color("#d00000") },
-        mountainColor: { value: new THREE.Color("#432818") },
-        baseDist: { value: 24.0 },
-    },
-    vertexShader: `
-        varying vec2 vUv;
-        varying vec3 vWorldPos;
-        varying float vElevation;
-        uniform float baseDist;
-
-        ${PainterlyShaderUtils.snoise}
-
-        void main() {
-            vUv = uv;
-            vec3 pos = position;
-
-            float dist = length(pos.xy);
-            float mask = smoothstep(baseDist + 15.0, baseDist + 50.0, dist);
-
-            float elevation = snoise(pos.xy * 0.015) * 35.0;
-            vElevation = pos.z;
-
-            vec4 worldPos = modelMatrix * vec4(pos, 1.0);
-            vWorldPos = worldPos.xyz;
-            gl_Position = projectionMatrix * viewMatrix * worldPos;
-        }
-    `,
-    fragmentShader: `
-        varying vec2 vUv;
-        varying vec3 vWorldPos;
-        varying float vElevation;
-        uniform vec3 sandColor;
-        uniform vec3 rockColor;
-        uniform vec3 mountainColor;
-
-        ${PainterlyShaderUtils.brushstrokeNoise}
-        ${PainterlyShaderUtils.toonMix}
-
-        void main() {
-            float strokes = brushstrokes(vWorldPos.xz * 1.5 + vElevation * 0.5, 0.8);
-
-            float mixFactor = clamp(vElevation * 0.1 + strokes * 0.25, 0.0, 1.0);
-            vec3 baseColor = mix(sandColor, rockColor, clamp(vElevation * 0.2, 0.0, 1.0));
-
-            vec3 color = toonMix(baseColor, mountainColor, mixFactor);
-
-            color *= (0.8 + 0.2 * floor(strokes * 3.0) / 3.0);
-
-            gl_FragColor = vec4(color, 1.0);
-        }
-    `,
-});
-
-export const PainterlyGrassMaterial = new THREE.ShaderMaterial({
-    uniforms: {
-        time: { value: 0 },
-        color1: { value: new THREE.Color("#4a7c44") },
-        color2: { value: new THREE.Color("#9ef01a") },
-    },
-    vertexShader: `
-    uniform float time;
-    varying vec2 vUv;
-    varying float vY;
-
-    void main() {
-      vUv = uv;
-      vY = position.y;
-      vec4 worldPos = instanceMatrix * vec4(position, 1.0);
-
-      float wind = sin(time * 2.0 + worldPos.x * 0.1 + worldPos.z * 0.05) * 0.4;
-      if (position.y > 0.0) {
-        worldPos.x += wind * position.y;
-        worldPos.z += wind * position.y;
-      }
-
-      gl_Position = projectionMatrix * viewMatrix * worldPos;
-    }
-  `,
-    fragmentShader: `
-    varying vec2 vUv;
-    varying float vY;
-    uniform vec3 color1;
-    uniform vec3 color2;
-    uniform float time;
-
-    ${PainterlyShaderUtils.brushstrokeNoise}
-    ${PainterlyShaderUtils.toonMix}
-
-    void main() {
-      vec3 color = mix(color1, color2, vY + 0.5);
-      color *= (0.9 + 0.1 * sin(vUv.x * 10.0 + time));
-      gl_FragColor = vec4(color, 1.0);
-    }
-  `,
-    side: THREE.DoubleSide,
-});
-
+/**
+ * applyPainterlyStyle — onBeforeCompile hook (WebGL-only).
+ *
+ * For WebGPU: onBeforeCompile does not work. The painterly effect requires
+ * manual NodeMaterial construction instead. For now, skip painterly style
+ * on WebGPU renderers.
+ *
+ * @param material - MeshStandardMaterial to patch (WebGL) or skip (WebGPU).
+ * ponytail: when WebGPU terrain assets need painterly style, build PainterlyNodeMaterial factory.
+ * add when: WebGPU-specific terrain rendering enabled.
+ */
 export const applyPainterlyStyle = (material: THREE.Material) => {
-    material.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
+    material.onBeforeCompile = (
+        shader: THREE.WebGLProgramParametersWithUniforms,
+    ) => {
         shader.uniforms.time = { value: 0 };
 
         shader.vertexShader = `

@@ -16,7 +16,9 @@ export const TransformsModule = () => {
     gridSize,
     setGridSize,
     gridEnabled,
-    setGridEnabled
+    setGridEnabled,
+    mode,
+    setMode
   } = useEditorStore();
 
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -107,6 +109,29 @@ export const TransformsModule = () => {
               </span>
             </div>
           </div>
+
+          {/* Transform Mode Switcher */}
+          <div className="grid grid-cols-3 gap-1 bg-zinc-950 border border-zinc-900 p-1 rounded-xl">
+            <button
+              onClick={() => setMode('translate')}
+              className={`py-1.5 text-[8.5px] font-extrabold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${mode === 'translate' ? 'bg-blue-600 text-white font-black' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900'}`}
+            >
+              Translate
+            </button>
+            <button
+              onClick={() => setMode('rotate')}
+              className={`py-1.5 text-[8.5px] font-extrabold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${mode === 'rotate' ? 'bg-blue-600 text-white font-black' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900'}`}
+            >
+              Rotate
+            </button>
+            <button
+              onClick={() => setMode('scale')}
+              className={`py-1.5 text-[8.5px] font-extrabold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${mode === 'scale' ? 'bg-blue-600 text-white font-black' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900'}`}
+            >
+              Scale
+            </button>
+          </div>
+
 
           {/* Primary Actions for node management */}
           <div className="grid grid-cols-2 gap-2 mt-1">

@@ -2,9 +2,6 @@ export { API_BASE_URL, WS_BASE_URL } from "./config";
 export { windUniforms, applyWindSway } from "./wind";
 export {
     PainterlyShaderUtils,
-    PainterlyWaterMaterial,
-    PainterlyTerrainMaterial,
-    PainterlyGrassMaterial,
     applyPainterlyStyle,
 } from "./painterly-materials";
 export {

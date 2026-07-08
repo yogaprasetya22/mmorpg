@@ -1,6 +1,6 @@
 'use client';
 import * as THREE from 'three';
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { VFX_TEXTURES } from './VFXAssets';
 
@@ -9,117 +9,95 @@ const MAX_RINGS = 50;
 /**
  * INNOVATION: Blue Hex Shield Dome
  */
-const GroundCrackMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
-    uniforms: { tDiffuse: { value: tex }, uTime: { value: 0 } },
-    vertexShader: `
-        varying vec2 vUv;
-        varying vec3 vColor;
-        #ifndef USE_INSTANCING_COLOR
-            attribute vec3 instanceColor;
-        #endif
-        void main() {
-            vUv = uv;
-            vColor = instanceColor;
-            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-        }
-    `,
-    fragmentShader: `
-        uniform sampler2D tDiffuse;
-        uniform float uTime;
-        varying vec2 vUv;
-        varying vec3 vColor;
-        void main() {
-            vec4 tex = texture2D(tDiffuse, vUv);
-            float dist = length(vUv - 0.5);
-            // Golden pulsing intensity
-            float pulse = 0.8 + 0.5 * sin(uTime * 8.0 - dist * 10.0);
-            vec3 goldenGlow = vColor * pulse * 1.2;
-            gl_FragColor = vec4(goldenGlow * tex.rgb, tex.a * smoothstep(0.5, 0.2, dist));
-            // OPTIMIZATION: Discard aggressively to save fill-rate on low-end GPUs
-            if (gl_FragColor.a < 0.15) discard;
-        }
-    `,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide
-});
+const GroundCrackMat = (NodeMaterial: any, tsl: any, tex: THREE.Texture) => {
+    const { time, vec4, uv, texture, vertexColor, float, sin, length, smoothstep } = tsl;
+    const m = new NodeMaterial();
+    m.transparent = true; m.depthWrite = false;
+    m.blending = THREE.AdditiveBlending; m.side = THREE.DoubleSide;
+    m.vertexColors = true; m.alphaTest = 0.15;
+    const t = texture(tex, uv());
+    const dist = length(uv().sub(0.5));
+    const pulse = float(0.8).add(float(0.5).mul(sin(time.mul(8.0).sub(dist.mul(10.0)))));
+    const vc = vertexColor();
+    m.colorNode = vec4(vc.rgb.mul(pulse).mul(1.2).mul(t.rgb), t.a.mul(smoothstep(float(0.5), float(0.2), dist)));
+    return m;
+};
 
-const ForceFieldMat = () => new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 } },
-    vertexShader: `
-        varying vec3 vNormal;
-        varying vec3 vPosition;
-        void main() {
-            vNormal = normalize(normalMatrix * normal);
-            vPosition = position;
-            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-        }
-    `,
-    fragmentShader: `
-        uniform float uTime;
-        varying vec3 vNormal;
-        varying vec3 vPosition;
-        void main() {
-            float viewDot = max(0.0, dot(vNormal, vec3(0.0, 0.0, 1.0)));
-            float intensity = pow(1.0 - viewDot, 2.5);
-            
-            float grid = sin(vPosition.x * 12.0) * sin(vPosition.y * 12.0) * sin(vPosition.z * 12.0);
-            grid = step(0.85, grid);
-            
-            float pulse = 0.5 + 0.5 * sin(uTime * 5.0);
-            vec3 goldenColor = vec3(0.98, 0.72, 0.12);
-            
-            vec3 finalGlow = goldenColor * (intensity * 1.5 + grid * 0.8) * (0.8 + 0.2 * pulse);
-            gl_FragColor = vec4(finalGlow, intensity * 0.7 + grid * 0.4);
-            if (gl_FragColor.a < 0.05) discard;
-        }
-    `,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide
-});
+const ForceFieldMat = (NodeMaterial: any, tsl: any) => {
+    const { time, vec3, vec4, sin, pow, abs, dot, normalize, normalView } = tsl;
+    const m = new NodeMaterial();
+    m.transparent = true; m.depthWrite = false;
+    m.blending = THREE.AdditiveBlending; m.side = THREE.DoubleSide;
+    m.alphaTest = 0.05;
+    const intensity = pow(float(1.0).sub(abs(dot(normalize(normalView), vec3(0.0, 0.0, 1.0)))), float(2.5));
+    const pulse = float(0.5).add(float(0.5).mul(sin(time.mul(5.0))));
+    const golden = vec3(0.98, 0.72, 0.12);
+    m.colorNode = vec4(golden.mul(intensity.mul(1.5)).mul(float(0.8).add(float(0.2).mul(pulse))), intensity.mul(0.7));
+    return m;
+};
 
 const _obj = new THREE.Object3D();
 const _col = new THREE.Color();
 const MAX_SHIELDS = 30;
 
 import { UnitRuntimeData } from '@/src/core/domain/unit.types';
+import { float } from 'three/tsl';
 
-interface TankVFX { 
-    x:number; y:number; z:number; startTime:number; color:string; active:boolean; 
-    type: 'crack' | 'dust'; 
-    scale:number; 
+interface TankVFX {
+    x: number; y: number; z: number; startTime: number; color: string; active: boolean;
+    type: 'crack' | 'dust';
+    scale: number;
 }
 
-export function TankSpellEffect({ 
-    tankSpellsRef, 
-    simTimeRef, 
-    unitRegistry 
-}: { 
-    tankSpellsRef: React.RefObject<any[]>, 
-    simTimeRef: React.RefObject<number>, 
-    unitRegistry?: React.RefObject<UnitRuntimeData[]> 
+export function TankSpellEffect({
+    tankSpellsRef,
+    simTimeRef,
+    unitRegistry
+}: {
+    tankSpellsRef: React.RefObject<any[]>,
+    simTimeRef: React.RefObject<number>,
+    unitRegistry?: React.RefObject<UnitRuntimeData[]>
 }) {
     const crackRef = useRef<THREE.InstancedMesh>(null!);
     const dustRef = useRef<THREE.InstancedMesh>(null!);
     const shieldRef = useRef<THREE.InstancedMesh>(null!);
-    
+
     const vfxOrder = useRef(0);
-    const pool = useRef<TankVFX[]>(Array.from({ length: 450 }, () => ({ 
-        x:0, y:0, z:0, startTime:0, color:'#fff', active:false, type:'crack', scale:1
+    const pool = useRef<TankVFX[]>(Array.from({ length: 450 }, () => ({
+        x: 0, y: 0, z: 0, startTime: 0, color: '#fff', active: false, type: 'crack', scale: 1
     })));
     const activeIndices = useRef<number[]>([]);
-    
+
     const quadGeo = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
     const sphereGeo = useMemo(() => new THREE.SphereGeometry(1, 24, 24, 0, Math.PI * 2, 0, Math.PI / 2), []);
-    const cMat = useMemo(() => GroundCrackMat(VFX_TEXTURES.scorch_mewah), []);
-    const dMat = useMemo(() => GroundCrackMat(VFX_TEXTURES.dirt), []);
-    const sMat = useMemo(() => ForceFieldMat(), []);
+    const [materials, setMaterials] = useState<any>(null);
+
+    useEffect(() => {
+        let isMounted = true;
+        async function loadWebGPU() {
+            try {
+                const tsl = await import('three/tsl');
+                const { NodeMaterial } = await import('three/webgpu');
+
+                if (!isMounted) return;
+
+                const loaded = {
+                    cMat: GroundCrackMat(NodeMaterial, tsl, VFX_TEXTURES.scorch_mewah),
+                    dMat: GroundCrackMat(NodeMaterial, tsl, VFX_TEXTURES.dirt),
+                    sMat: ForceFieldMat(NodeMaterial, tsl),
+                };
+
+                setMaterials(loaded);
+            } catch (err) {
+                console.error("Gagal memuat WebGPU materials:", err);
+            }
+        }
+        loadWebGPU();
+        return () => { isMounted = false; };
+    }, []);
 
     useFrame((state) => {
-        if (!crackRef.current || !tankSpellsRef.current || !shieldRef.current) return;
+        if (!materials || !crackRef.current || !tankSpellsRef.current || !shieldRef.current) return;
         const spells = tankSpellsRef.current;
         const simTime = performance.now();
         const time = state.clock.elapsedTime;
@@ -177,7 +155,7 @@ export function TankSpellEffect({
                     if (!p.active) activeIndices.current.push(vfxOrder.current);
                     vfxOrder.current = (vfxOrder.current + 1) % pool.current.length;
                     p.x = s.x; p.y = 0.05; p.z = s.z; p.startTime = simTime; p.color = '#FFD700'; p.active = true; p.type = 'crack'; p.scale = 2.8 * rScale;
-                    
+
                     const p2 = pool.current[vfxOrder.current];
                     if (!p2.active) activeIndices.current.push(vfxOrder.current);
                     vfxOrder.current = (vfxOrder.current + 1) % pool.current.length;
@@ -196,13 +174,13 @@ export function TankSpellEffect({
             const v = pool.current[idx];
             if (!v.active) continue;
             const age = simTime - v.startTime;
-            
+
             if (v.type === 'crack') {
                 const rt = age / 1500; if (rt >= 1) { v.active = false; continue; }
                 if (cn < MAX_RINGS) {
                     const ease = 1.0 - Math.pow(rt, 3.0);
                     _obj.position.set(v.x, v.y, v.z);
-                    _obj.rotation.set(-Math.PI/2, 0, (idx * 0.77) % 6.28);
+                    _obj.rotation.set(-Math.PI / 2, 0, (idx * 0.77) % 6.28);
                     _obj.scale.setScalar(v.scale * (0.8 + rt * 0.5));
                     _obj.updateMatrix();
                     crackRef.current.setMatrixAt(cn, _obj.matrix);
@@ -215,7 +193,7 @@ export function TankSpellEffect({
                 if (dn < MAX_RINGS) {
                     const ease = 1.0 - rt;
                     _obj.position.set(v.x, v.y, v.z);
-                    _obj.rotation.set(-Math.PI/2, 0, (idx * 1.5) % 6.28);
+                    _obj.rotation.set(-Math.PI / 2, 0, (idx * 1.5) % 6.28);
                     _obj.scale.setScalar(v.scale * (1.0 + rt * 1.5));
                     _obj.updateMatrix();
                     dustRef.current.setMatrixAt(dn, _obj.matrix);
@@ -239,16 +217,16 @@ export function TankSpellEffect({
         shieldRef.current.count = sn;
         shieldRef.current.instanceMatrix.needsUpdate = true;
 
-        cMat.uniforms.uTime.value = time;
-        dMat.uniforms.uTime.value = time;
-        sMat.uniforms.uTime.value = time;
+        // ponytail: time uniforms removed — NodeMaterial reads `time` from TSL.
     });
+
+    if (!materials) return null;
 
     return (
         <group>
-            <instancedMesh ref={crackRef} args={[quadGeo, cMat, MAX_RINGS]} frustumCulled={false} />
-            <instancedMesh ref={dustRef} args={[quadGeo, dMat, MAX_RINGS]} frustumCulled={false} />
-            <instancedMesh ref={shieldRef} args={[sphereGeo, sMat, MAX_SHIELDS]} frustumCulled={false} />
+            <instancedMesh ref={crackRef} args={[quadGeo, materials.cMat, MAX_RINGS]} frustumCulled={false} />
+            <instancedMesh ref={dustRef} args={[quadGeo, materials.dMat, MAX_RINGS]} frustumCulled={false} />
+            <instancedMesh ref={shieldRef} args={[sphereGeo, materials.sMat, MAX_SHIELDS]} frustumCulled={false} />
         </group>
     );
 }

@@ -3,6 +3,7 @@
 import { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { useThree } from '@react-three/fiber';
 import { applyPainterlyStyle, getTerrainElevation } from '@jagres/shared';
 import { registerCollider, unregisterCollider } from '@/src/core/utils/globalRaycaster';
 import { InstancedStaticCollider } from '@jagres/bvhecctrl';
@@ -11,6 +12,7 @@ const TREE_COUNT = 120;
 
 export const InstancedTrees = ({ mode, baseDistance = 24 }: { mode: 'DIORAMA' | 'STORM', baseDistance?: number }) => {
     const meshRef = useRef<THREE.InstancedMesh>(null!);
+    const { gl } = useThree();
 
     // Create a high-quality low-poly tree geometry
     const treeGeometry = useMemo(() => {
@@ -34,9 +36,13 @@ export const InstancedTrees = ({ mode, baseDistance = 24 }: { mode: 'DIORAMA' | 
             metalness: 0.1,
             flatShading: true,
         });
-        applyPainterlyStyle(mat);
+        // ponytail: applyPainterlyStyle uses onBeforeCompile — skip for WebGPU.
+        // NodeMaterial equivalent lives in PainterlyStyleEffect or shader patch.
+        if (!(gl as any).isWebGPUBackend) {
+            applyPainterlyStyle(mat);
+        }
         return mat;
-    }, [mode]);
+    }, [mode, gl]);
 
     useEffect(() => {
         const dummy = new THREE.Object3D();

@@ -79,13 +79,13 @@ function applyOcclusionShaderPatch(
       '#include <project_vertex>',
       `#include <project_vertex>
 
-       vec4 tempWorldPos = vec4( transformed, 1.0 );
-       #ifdef USE_INSTANCING
-          tempWorldPos = instanceMatrix * tempWorldPos;
-       #endif
-       tempWorldPos = modelMatrix * tempWorldPos;
-       vHoloWorldPos = tempWorldPos.xyz;
-      `
+        vec4 tempWorldPos = vec4( transformed, 1.0 );
+        #ifdef USE_INSTANCING
+           tempWorldPos = instanceMatrix * tempWorldPos;
+        #endif
+        tempWorldPos = modelMatrix * tempWorldPos;
+        vHoloWorldPos = tempWorldPos.xyz;
+       `
     );
 
     const stippleHelper =
@@ -102,20 +102,16 @@ function applyOcclusionShaderPatch(
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <common>',
       `#include <common>
-       uniform vec3 uPlayerPos;
-       uniform vec3 uCamPos;
-       uniform float uMaskRadiusSq;
-       uniform float uNearConeRadius;
-       uniform float uNearClipDistance;
-       uniform float uConeFalloff;
-       varying vec3 vHoloWorldPos;
-       ${stippleHelper}`
+        uniform vec3 uPlayerPos;
+        uniform vec3 uCamPos;
+        uniform float uMaskRadiusSq;
+        uniform float uNearConeRadius;
+        uniform float uNearClipDistance;
+        uniform float uConeFalloff;
+        varying vec3 vHoloWorldPos;
+        ${stippleHelper}`
     );
 
-    // 'solid' discards every pixel inside the cutout radius — the object is
-    // genuinely gone there, no dissolve/dither look.
-    // 'stipple' only discards half the pixels (checkerboard), which reads
-    // as a translucent dissolve rather than a clean hole.
     const discardCondition =
       cutoutStyle === 'stipple' ? 'occlusionStipple(gl_FragCoord.xy) == 0.0' : 'true';
 
@@ -123,24 +119,24 @@ function applyOcclusionShaderPatch(
       '#include <dithering_fragment>',
       `#include <dithering_fragment>
 
-       vec3 pa = vHoloWorldPos - uCamPos;
-       vec3 ba = uPlayerPos - uCamPos;
-       float baSq = max(dot(ba, ba), 1e-5);
+        vec3 pa = vHoloWorldPos - uCamPos;
+        vec3 ba = uPlayerPos - uCamPos;
+        float baSq = max(dot(ba, ba), 1e-5);
 
-       float hRaw = dot(pa, ba) / baSq;
-       float h = clamp(hRaw, 0.0, 1.0);
-       float distToCam = length(pa);
+        float hRaw = dot(pa, ba) / baSq;
+        float h = clamp(hRaw, 0.0, 1.0);
+        float distToCam = length(pa);
 
-       if (hRaw < uConeFalloff) {
-         float targetRadius = mix(uNearConeRadius, sqrt(uMaskRadiusSq), h);
-         vec3 perp = pa - (ba * h);
-         float distSq = dot(perp, perp);
+        if (hRaw < uConeFalloff) {
+          float targetRadius = mix(uNearConeRadius, sqrt(uMaskRadiusSq), h);
+          vec3 perp = pa - (ba * h);
+          float distSq = dot(perp, perp);
 
-         if (distSq < targetRadius * targetRadius || distToCam < uNearClipDistance) {
-           if (${discardCondition}) discard;
-         }
-       }
-      `
+          if (distSq < targetRadius * targetRadius || distToCam < uNearClipDistance) {
+            if (${discardCondition}) discard;
+          }
+        }
+       `
     );
   };
 
@@ -185,9 +181,6 @@ export const CameraOcclusionManager = (props: CameraOcclusionConfig = {}) => {
     []
   );
 
-  // `claimedMaterials` marks a material as "already discovered" the moment
-  // scanAndPatchScene finds it, so a repeat scan while it's still waiting
-  // in the queue doesn't enqueue it a second time.
   const claimedMaterials = useRef<WeakSet<THREE.Material>>(new WeakSet());
   const pendingPatchQueue = useRef<THREE.Material[]>([]);
   const playerPosScratch = useRef(new THREE.Vector3());
@@ -222,12 +215,6 @@ export const CameraOcclusionManager = (props: CameraOcclusionConfig = {}) => {
       uniforms.uCamPos.value.copy(camera.position);
     }
 
-    // Drain the patch queue at a fixed budget per frame. This is the fix
-    // for the "everything recompiles at once" hitch: even if 200 materials
-    // get discovered in a single scan (e.g. a new area just streamed in),
-    // only `materialPatchBudgetPerFrame` of them actually get patched (and
-    // therefore trigger a shader recompile) on any given frame — the rest
-    // wait their turn over the following frames.
     let patchedThisFrame = 0;
     while (
       pendingPatchQueue.current.length > 0 &&

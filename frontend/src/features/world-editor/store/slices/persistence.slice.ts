@@ -195,7 +195,9 @@ export const createPersistenceSlice: StateCreator<
                     const name = item.name
                         .replace(/\.[^/.]+$/, "")
                         .replace(/[-_]/g, " ");
-                    const thumbnail = item.thumbnail ? item.thumbnail : undefined;
+                    const thumbnail = item.thumbnail
+                        ? item.thumbnail
+                        : undefined;
                     return { name, path, category, thumbnail };
                 });
                 set({ dynamicAssets: mapped });
@@ -262,8 +264,18 @@ export const createPersistenceSlice: StateCreator<
                             ? parsed.bloomRadius
                             : null,
                     savedPaintBlueprints: parsed.savedPaintBlueprints || [],
-                    paintLayerMaterials: parsed.paintLayerMaterials || [null, null, null, null],
-                    paintLayerColors: parsed.paintLayerColors || ["#3d5c36", "#7c6a4a", "#5a4d3a", "#e8e0d0"],
+                    paintLayerMaterials: parsed.paintLayerMaterials || [
+                        null,
+                        null,
+                        null,
+                        null,
+                    ],
+                    paintLayerColors: parsed.paintLayerColors || [
+                        "#3d5c36",
+                        "#7c6a4a",
+                        "#5a4d3a",
+                        "#e8e0d0",
+                    ],
                 } as any);
             } catch (e) {
                 /* ignore corrupt settings */
@@ -288,7 +300,13 @@ export const createPersistenceSlice: StateCreator<
                 }));
                 set({
                     items: sanitized,
-                    history: [{ items: sanitized, paintData: paint, sculptData: sculpt }],
+                    history: [
+                        {
+                            items: sanitized,
+                            paintData: paint,
+                            sculptData: sculpt,
+                        },
+                    ],
                     historyIndex: 0,
                 } as any);
             } catch (e) {
@@ -438,7 +456,9 @@ export const createPersistenceSlice: StateCreator<
             },
             paintData,
             sculptData,
-            paintLayerMaterials: state.paintLayerMaterials.map((x: any) => x || "").join(","),
+            paintLayerMaterials: state.paintLayerMaterials
+                .map((x: any) => x || "")
+                .join(","),
             paintLayerColors: state.paintLayerColors.join(","),
         };
 
@@ -469,120 +489,128 @@ export const createPersistenceSlice: StateCreator<
         }
     },
 
+    _loadPromise: null as Promise<void> | null,
+
     loadFromDatabase: async () => {
-        const { selectedMapId } = get() as any;
-        try {
-            const res = await fetch(
-                `${API_BASE_URL}/api/world-editor/load?map_id=${encodeURIComponent(selectedMapId)}&_t=${Date.now()}`
-            );
-            if (res.ok) {
-                const data = await res.json();
-                const sanitizedItems = (data.items || []).map((item: any) => ({
-                    ...item,
-                    path: sanitizeAssetPath(item.path),
-                }));
+        const self = get() as any;
+        if (self._loadPromise) return self._loadPromise;
+        const { selectedMapId } = self;
+        const promise = (async () => {
+            let text = "";
+            let res;
+            try {
+                res = await fetch(
+                    `${API_BASE_URL}/api/world-editor/load?map_id=${encodeURIComponent(selectedMapId)}&_t=${Date.now()}`,
+                );
+                if (!res.ok) return;
+                text = await res.text();
+            } catch (fetchErr) {
+                console.error(
+                    "Failed to load map from database (fetch)",
+                    fetchErr,
+                );
+                return;
+            }
 
-                const loadedEnv = data.settings?.environment ?? "STORM";
+            let data: any;
+            try {
+                data = JSON.parse(text);
+            } catch (parseErr) {
+                console.error(
+                    "Failed to load map from database (JSON)",
+                    parseErr,
+                    text.slice(0, 500),
+                );
+                return;
+            }
 
-                // Reconstruct friendly material IDs
-                let loadedMaterialId = data.settings?.terrainMaterialId ?? null;
-                if (
-                    loadedMaterialId &&
-                    (loadedMaterialId.includes("rocky_terrain") ||
-                        loadedMaterialId === "texture_2")
-                )
-                    loadedMaterialId = "texture_2";
-                else if (
-                    loadedMaterialId &&
-                    (loadedMaterialId.includes("marble_cliff") ||
-                        loadedMaterialId === "texture_1")
-                )
-                    loadedMaterialId = "texture_1";
+            const sanitizedItems = (data.items || []).map((item: any) => ({
+                ...item,
+                path: sanitizeAssetPath(item.path),
+            }));
 
-                let loadedBrushTextureId =
-                    data.settings?.brushTextureId ?? null;
-                if (
-                    loadedBrushTextureId &&
-                    (loadedBrushTextureId.includes("rocky_terrain") ||
-                        loadedBrushTextureId === "texture_2")
-                )
-                    loadedBrushTextureId = "texture_2";
-                else if (
-                    loadedBrushTextureId &&
-                    (loadedBrushTextureId.includes("marble_cliff") ||
-                        loadedBrushTextureId === "texture_1")
-                )
-                    loadedBrushTextureId = "texture_1";
+            const loadedEnv = data.settings?.environment ?? "STORM";
 
-                set({
-                    items: sanitizedItems,
-                    gridSize: data.settings?.gridSize ?? 1.0,
-                    gridEnabled: data.settings?.gridEnabled ?? true,
-                    terrainConfig: {
-                        height: 12.0,
-                        scale: 0.05,
-                        seed: 0,
-                        sharpness: 2.0,
-                        ...(data.settings?.terrainConfig || {}),
-                    },
-                    terrainMaterialId: loadedMaterialId,
-                    terrainColor: data.settings?.terrainColor ?? "#3d5c36",
-                    sky: data.settings?.sky ?? "sunset",
-                    environment: loadedEnv,
-                    lightIntensity:
-                        data.settings?.lightIntensity !== undefined
-                            ? data.settings?.lightIntensity
-                            : null,
-                    ambientIntensity:
-                        data.settings?.ambientIntensity !== undefined
-                            ? data.settings?.ambientIntensity
-                            : null,
-                    sunAngle:
-                        data.settings?.sunAngle !== undefined
-                            ? data.settings?.sunAngle
-                            : 45,
-                    fogDensity:
-                        data.settings?.fogDensity !== undefined
-                            ? data.settings?.fogDensity
-                            : 0.002,
-                    paintData: sanitizeCanvasData(data.paintData) || null,
-                    sculptData: sanitizeCanvasData(data.sculptData) || null,
-                    brushTextureId: loadedBrushTextureId,
-                    savedPaintBlueprints:
-                        data.settings?.savedPaintBlueprints || [],
-                    skyboxIntensity:
-                        data.settings?.skyboxIntensity !== undefined
-                            ? data.settings?.skyboxIntensity
-                            : null,
-                    bloomThreshold:
-                        data.settings?.bloomThreshold !== undefined
-                            ? data.settings?.bloomThreshold
-                            : null,
-                    bloomStrength:
-                        data.settings?.bloomStrength !== undefined
-                            ? data.settings?.bloomStrength
-                            : null,
-                    bloomRadius:
-                        data.settings?.bloomRadius !== undefined
-                            ? data.settings?.bloomRadius
-                            : null,
-                    paintLayerMaterials: data.paintLayerMaterials
-                        ? data.paintLayerMaterials.split(",").map((x: string) => x || null)
-                        : [null, null, null, null],
-                    paintLayerColors: data.paintLayerColors
-                        ? data.paintLayerColors.split(",")
-                        : ["#3d5c36", "#7c6a4a", "#5a4d3a", "#e8e0d0"],
-                    history: [{
+            let loadedMaterialId = data.settings?.terrainMaterialId ?? null;
+            if (
+                loadedMaterialId &&
+                (loadedMaterialId.includes("rocky_terrain") ||
+                    loadedMaterialId === "texture_2")
+            )
+                loadedMaterialId = "texture_2";
+            else if (
+                loadedMaterialId &&
+                (loadedMaterialId.includes("marble_cliff") ||
+                    loadedMaterialId === "texture_1")
+            )
+                loadedMaterialId = "texture_1";
+
+            let loadedBrushTextureId = data.settings?.brushTextureId ?? null;
+            if (
+                loadedBrushTextureId &&
+                (loadedBrushTextureId.includes("rocky_terrain") ||
+                    loadedBrushTextureId === "texture_2")
+            )
+                loadedBrushTextureId = "texture_2";
+            else if (
+                loadedBrushTextureId &&
+                (loadedBrushTextureId.includes("marble_cliff") ||
+                    loadedBrushTextureId === "texture_1")
+            )
+                loadedBrushTextureId = "texture_1";
+
+            set({
+                items: sanitizedItems,
+                gridSize: data.settings?.gridSize ?? 1.0,
+                gridEnabled: data.settings?.gridEnabled ?? true,
+                terrainConfig: {
+                    height: 12,
+                    scale: 0.05,
+                    seed: 0,
+                    sharpness: 2,
+                    ...(data.settings?.terrainConfig || {}),
+                },
+                terrainMaterialId: loadedMaterialId,
+                terrainColor: data.settings?.terrainColor ?? "#3d5c36",
+                sky: data.settings?.sky ?? "sunset",
+                environment: loadedEnv,
+                lightIntensity: data.settings?.lightIntensity ?? null,
+                ambientIntensity: data.settings?.ambientIntensity ?? null,
+                sunAngle: data.settings?.sunAngle ?? 45,
+                fogDensity: data.settings?.fogDensity ?? 0.002,
+                paintData: sanitizeCanvasData(data.paintData) || null,
+                sculptData: sanitizeCanvasData(data.sculptData) || null,
+                brushTextureId: loadedBrushTextureId,
+                savedPaintBlueprints: data.settings?.savedPaintBlueprints || [],
+                skyboxIntensity: data.settings?.skyboxIntensity ?? null,
+                bloomThreshold: data.settings?.bloomThreshold ?? null,
+                bloomStrength: data.settings?.bloomStrength ?? null,
+                bloomRadius: data.settings?.bloomRadius ?? null,
+                paintLayerMaterials: data.paintLayerMaterials
+                    ? data.paintLayerMaterials
+                          .split(",")
+                          .map((x: string) => x || null)
+                    : [null, null, null, null],
+                paintLayerColors: data.paintLayerColors
+                    ? data.paintLayerColors.split(",")
+                    : ["#3d5c36", "#7c6a4a", "#5a4d3a", "#e8e0d0"],
+                history: [
+                    {
                         items: sanitizedItems,
                         paintData: sanitizeCanvasData(data.paintData) || null,
                         sculptData: sanitizeCanvasData(data.sculptData) || null,
-                    }],
-                    historyIndex: 0,
-                } as any);
-            }
-        } catch (e) {
-            console.error("Failed to load map from database", e);
-        }
+                    },
+                ],
+                historyIndex: 0,
+            } as any);
+        })();
+        promise
+            .catch((e) => console.error("Failed to load map from database", e))
+            .finally(() => {
+                (get() as any)._loadPromise = null;
+            });
+        self._loadPromise = promise;
+        return promise;
     },
 
     savedPaintBlueprints: [],

@@ -1,6 +1,6 @@
 'use client';
 import * as THREE from 'three';
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { SpellsRegistryRef } from './MageSpellEffect';
 import { UnitRuntimeData } from "@/src/core/domain/unit.types";
@@ -14,197 +14,91 @@ interface Props {
 
 const MAX_BULLETS = 600;
 
-// ─── Material: Peluru biasa (Marksman basic attack) ──────────────────────────
-const SuperBulletMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
-    uniforms: { tDiffuse: { value: tex }, uTime: { value: 0 } },
-    vertexShader: `
-        varying vec2 vUv;
-        #ifndef USE_INSTANCING_COLOR
-            attribute vec3 instanceColor;
-        #endif
-        varying vec3 vColor;
-        void main() {
-            vUv = uv; vColor = instanceColor;
-            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-        }
-    `,
-    fragmentShader: `
-        uniform sampler2D tDiffuse;
-        uniform float uTime;
-        varying vec2 vUv; varying vec3 vColor;
-        void main() {
-            vec4 tex = texture2D(tDiffuse, vUv);
-            float pulse = 0.8 + 0.2 * sin(uTime * 30.0 + vUv.x * 5.0);
-            vec3 core = mix(vColor * 1.5, vec3(2.0), (1.0 - vUv.x) * pulse);
-            gl_FragColor = vec4(core * tex.rgb * 1.5, tex.a);
-            if (gl_FragColor.a < 0.05) discard;
-        }
-    `,
-    transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-});
+// ─── Material Factories ──────────────────────────
+const SuperBulletMat = (NodeMaterial: any, tsl: any, tex: THREE.Texture) => {
+    const { time, vec3, vec4, uv, texture, vertexColor, float, sin, mix } = tsl;
+    const m = new NodeMaterial();
+    m.transparent = true; m.depthWrite = false;
+    m.blending = THREE.AdditiveBlending; m.side = THREE.DoubleSide;
+    m.vertexColors = true; m.alphaTest = 0.05;
+    const t = texture(tex, uv());
+    const pulse = float(0.8).add(float(0.2).mul(sin(time.mul(30.0).add(uv().x.mul(5.0)))));
+    const vc = vertexColor();
+    const core = mix(vc.rgb.mul(1.5), vec3(2.0), float(1.0).sub(uv().x).mul(pulse));
+    m.colorNode = vec4(core.mul(t.rgb).mul(1.5), t.a);
+    return m;
+};
 
-// ─── Material: Inti peluru sniper (silinder panjang, bersinar) ───────────────
-const SniperCoreMat = () => new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 } },
-    vertexShader: `
-        varying vec2 vUv;
-        varying vec3 vColor;
-        #ifndef USE_INSTANCING_COLOR
-            attribute vec3 instanceColor;
-        #endif
-        void main() {
-            vUv = uv; vColor = instanceColor;
-            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-        }
-    `,
-    fragmentShader: `
-        uniform float uTime;
-        varying vec2 vUv; varying vec3 vColor;
-        void main() {
-            // vUv.y: 0=bottom, 1=top  |  Along cylinder axis = vUv.x
-            float radial = 1.0 - smoothstep(0.0, 0.5, abs(vUv.y - 0.5));
-            // ujung depan peluru lebih terang
-            float nose   = smoothstep(0.3, 1.0, vUv.x);
-            float body   = radial;
-            float pulse  = 0.92 + 0.08 * sin(uTime * 40.0);
+const SniperCoreMat = (NodeMaterial: any, tsl: any) => {
+    const { time, vec3, vec4, uv, vertexColor, float, sin, mix, smoothstep } = tsl;
+    const m = new NodeMaterial();
+    m.transparent = true; m.depthWrite = false;
+    m.blending = THREE.AdditiveBlending; m.side = THREE.DoubleSide;
+    m.vertexColors = true; m.alphaTest = 0.05;
+    const vc = vertexColor();
+    const radial = float(1.0).sub(smoothstep(float(0.0), float(0.5), uv().y.sub(0.5).abs()));
+    const nose = smoothstep(float(0.3), float(1.0), uv().x);
+    const body = radial;
+    const pulse = float(0.92).add(float(0.08).mul(sin(time.mul(40.0))));
+    const col = mix(vc.rgb.mul(1.2), vec3(2.0, 2.0, 1.6), nose);
+    const alpha = body.mul(pulse);
+    m.colorNode = vec4(col, alpha);
+    return m;
+};
 
-            // Warna: tim color di badan, putih-panas di ujung
-            vec3 col = mix(vColor * 1.2, vec3(2.0, 2.0, 1.6), nose);
-            float alpha = body * pulse;
+const SniperTrailMat = (NodeMaterial: any, tsl: any, tex: THREE.Texture) => {
+    const { time, vec4, uv, texture, vertexColor, float, sin } = tsl;
+    const m = new NodeMaterial();
+    m.transparent = true; m.depthWrite = false;
+    m.blending = THREE.AdditiveBlending; m.side = THREE.DoubleSide;
+    m.vertexColors = true; m.alphaTest = 0.01;
+    const t = texture(tex, uv());
+    const f = uv().x.mul(uv().x);
+    const shimmer = float(0.7).add(float(0.3).mul(sin(uv().x.mul(12.0).sub(time.mul(60.0)))));
+    const vc = vertexColor();
+    const col = vc.rgb.mul(float(1.2).add(f.mul(0.8))).mul(shimmer);
+    m.colorNode = vec4(col.mul(t.rgb), t.a.mul(f).mul(0.9));
+    return m;
+};
 
-            gl_FragColor = vec4(col, alpha);
-            if (alpha < 0.05) discard;
-        }
-    `,
-    transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-});
+const EagleEyeMat = (NodeMaterial: any, tsl: any, tex: THREE.Texture) => {
+    const { time, vec4, uv, texture, vertexColor, float, sin } = tsl;
+    const m = new NodeMaterial();
+    m.transparent = true; m.depthWrite = false;
+    m.blending = THREE.AdditiveBlending;
+    m.vertexColors = true; m.alphaTest = 0.05;
+    const t = texture(tex, uv());
+    const p = float(0.5).add(float(0.5).mul(sin(time.mul(10.0))));
+    const vc = vertexColor();
+    m.colorNode = vec4(vc.rgb.mul(float(1.0).add(p.mul(0.5))).mul(t.rgb).mul(1.2), t.a.mul(float(0.8).add(p.mul(0.2))));
+    return m;
+};
 
-// ─── Material: Jejak/lesatan energi di belakang peluru sniper ────────────────
-const SniperTrailMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
-    uniforms: { tDiffuse: { value: tex }, uTime: { value: 0 } },
-    vertexShader: `
-        varying vec2 vUv;
-        varying vec3 vColor;
-        #ifndef USE_INSTANCING_COLOR
-            attribute vec3 instanceColor;
-        #endif
-        void main() {
-            vUv = uv; vColor = instanceColor;
-            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-        }
-    `,
-    fragmentShader: `
-        uniform sampler2D tDiffuse;
-        uniform float uTime;
-        varying vec2 vUv; varying vec3 vColor;
-        void main() {
-            vec4 tex = texture2D(tDiffuse, vUv);
-            // vUv.x=0 = ujung ekor (transparan), vUv.x=1 = pangkal peluru (terang)
-            float fade = vUv.x * vUv.x;
-            // Shimmer bergerak ke arah ekor
-            float shimmer = 0.7 + 0.3 * sin(vUv.x * 12.0 - uTime * 60.0);
-            vec3 col = vColor * (1.2 + fade * 0.8) * shimmer;
-            gl_FragColor = vec4(col * tex.rgb, tex.a * fade * 0.9);
-            if (gl_FragColor.a < 0.01) discard;
-        }
-    `,
-    transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-});
+const ImpactMat = (NodeMaterial: any, tsl: any, tex: THREE.Texture) => {
+    const { vec4, uv, texture, vertexColor } = tsl;
+    const m = new NodeMaterial();
+    m.transparent = true; m.depthWrite = false;
+    m.blending = THREE.AdditiveBlending;
+    m.vertexColors = true; m.alphaTest = 0.05;
+    const t = texture(tex, uv());
+    const vc = vertexColor();
+    m.colorNode = vec4(vc.rgb.mul(t.rgb).mul(1.5), t.a);
+    return m;
+};
 
-// ─── Material: Aura bintang emas saat ulti aktif ─────────────────────────────
-const EagleEyeMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
-    uniforms: { tDiffuse: { value: tex }, uTime: { value: 0 } },
-    vertexShader: `
-        varying vec2 vUv; varying vec3 vColor;
-        #ifndef USE_INSTANCING_COLOR
-            attribute vec3 instanceColor;
-        #endif
-        void main() {
-            vUv = uv; vColor = instanceColor;
-            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-        }
-    `,
-    fragmentShader: `
-        uniform sampler2D tDiffuse;
-        uniform float uTime;
-        varying vec2 vUv; varying vec3 vColor;
-        void main() {
-            vec4 tex = texture2D(tDiffuse, vUv);
-            float pulse = 0.5 + 0.5 * sin(uTime * 10.0);
-            vec3 glow = vColor * (1.0 + pulse * 0.5);
-            gl_FragColor = vec4(glow * tex.rgb * 1.2, tex.a * (0.8 + 0.2 * pulse));
-            if (gl_FragColor.a < 0.05) discard;
-        }
-    `,
-    transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending,
-});
-
-// ─── Material: Impact spark & flash ──────────────────────────────────────────
-const ImpactMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
-    uniforms: { tDiffuse: { value: tex } },
-    vertexShader: `
-        varying vec2 vUv;
-        #ifndef USE_INSTANCING_COLOR
-            attribute vec3 instanceColor;
-        #endif
-        varying vec3 vColor;
-        void main() {
-            vUv = uv; vColor = instanceColor;
-            vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-            float sc = length(vec3(instanceMatrix[0][0], instanceMatrix[0][1], instanceMatrix[0][2]));
-            mvPosition.xy += position.xy * sc;
-            gl_Position = projectionMatrix * mvPosition;
-        }
-    `,
-    fragmentShader: `
-        uniform sampler2D tDiffuse;
-        varying vec2 vUv; varying vec3 vColor;
-        void main() {
-            vec4 tex = texture2D(tDiffuse, vUv);
-            gl_FragColor = vec4(vColor * tex.rgb * 1.5, tex.a);
-            if (gl_FragColor.a < 0.05) discard;
-        }
-    `,
-    transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending,
-});
-
-
-// ─── Muzzle Flash Sprite Material (replaces 3D arrow geometry) ──────────────
-const ArcherMuzzleMat = (tex: THREE.Texture) => new THREE.ShaderMaterial({
-    uniforms: { tDiffuse: { value: tex } },
-    vertexShader: `
-        varying vec2 vUv;
-        varying vec3 vColor;
-        #ifndef USE_INSTANCING_COLOR
-            attribute vec3 instanceColor;
-        #endif
-        void main() {
-            vUv = uv;
-            vColor = instanceColor;
-            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-        }
-    `,
-    fragmentShader: `
-        uniform sampler2D tDiffuse;
-        varying vec2 vUv;
-        varying vec3 vColor;
-        void main() {
-            vec4 tex = texture2D(tDiffuse, vUv);
-            // White-hot core at the center of the capsule/flare
-            float centerGlow = (1.0 - abs(vUv.x - 0.5) * 2.0) * (1.0 - abs(vUv.y - 0.5) * 2.0);
-            vec3 core = mix(vColor * 2.5, vec3(3.5), pow(centerGlow, 3.0));
-            gl_FragColor = vec4(core * tex.rgb * 1.5, tex.a);
-            if (gl_FragColor.a < 0.03) discard;
-        }
-    `,
-    transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-});
+const ArcherMuzzleMat = (NodeMaterial: any, tsl: any, tex: THREE.Texture) => {
+    const { vec3, vec4, uv, texture, vertexColor, float, pow, mix } = tsl;
+    const m = new NodeMaterial();
+    m.transparent = true; m.depthWrite = false;
+    m.blending = THREE.AdditiveBlending; m.side = THREE.DoubleSide;
+    m.vertexColors = true; m.alphaTest = 0.03;
+    const t = texture(tex, uv());
+    const cg = float(1.0).sub(uv().x.sub(0.5).abs().mul(2.0)).mul(float(1.0).sub(uv().y.sub(0.5).abs().mul(2.0)));
+    const vc = vertexColor();
+    const core = mix(vc.rgb.mul(2.5), vec3(3.5), pow(cg, float(3.0)));
+    m.colorNode = vec4(core.mul(t.rgb).mul(1.5), t.a);
+    return m;
+};
 
 // ─── Shared temp objects (zero allocation per frame) ─────────────────────────
 const _obj = new THREE.Object3D();
@@ -227,30 +121,30 @@ const _up = new THREE.Vector3();
  * Uses direct matrix manipulation (no lookAt + rotateZ hack).
  */
 function setArrowTravel(
-  obj: THREE.Object3D,
-  px: number, py: number, pz: number,
-  tx: number, ty: number, tz: number,
-  scaleX: number, scaleY: number
+    obj: THREE.Object3D,
+    px: number, py: number, pz: number,
+    tx: number, ty: number, tz: number,
+    scaleX: number, scaleY: number
 ): void {
-  _fwd.set(tx - px, ty - py, tz - pz).normalize();
-  _right.crossVectors(_fwd, _worldUp);
-  if (_right.lengthSq() < 0.0001) {
-    _right.set(1, 0, 0); // fallback for vertical travel
-  }
-  _right.normalize();
-  _up.crossVectors(_right, _fwd).normalize();
+    _fwd.set(tx - px, ty - py, tz - pz).normalize();
+    _right.crossVectors(_fwd, _worldUp);
+    if (_right.lengthSq() < 0.0001) {
+        _right.set(1, 0, 0); // fallback for vertical travel
+    }
+    _right.normalize();
+    _up.crossVectors(_right, _fwd).normalize();
 
-  const m = obj.matrix.elements;
-  // Column 0: X axis (right/travel direction) — scaled
-  m[0] = _fwd.x * scaleX; m[1] = _fwd.y * scaleX; m[2] = _fwd.z * scaleX; m[3] = 0;
-  // Column 1: Y axis (up) — scaled
-  m[4] = _up.x * scaleY; m[5] = _up.y * scaleY; m[6] = _up.z * scaleY; m[7] = 0;
-  // Column 2: Z axis (face normal toward camera)
-  m[8] = _right.x; m[9] = _right.y; m[10] = _right.z; m[11] = 0;
-  // Column 3: Position
-  m[12] = px; m[13] = py; m[14] = pz; m[15] = 1;
-  obj.matrixAutoUpdate = false;
-  obj.matrixWorldNeedsUpdate = true;
+    const m = obj.matrix.elements;
+    // Column 0: X axis (right/travel direction) — scaled
+    m[0] = _fwd.x * scaleX; m[1] = _fwd.y * scaleX; m[2] = _fwd.z * scaleX; m[3] = 0;
+    // Column 1: Y axis (up) — scaled
+    m[4] = _up.x * scaleY; m[5] = _up.y * scaleY; m[6] = _up.z * scaleY; m[7] = 0;
+    // Column 2: Z axis (face normal toward camera)
+    m[8] = _right.x; m[9] = _right.y; m[10] = _right.z; m[11] = 0;
+    // Column 3: Position
+    m[12] = px; m[13] = py; m[14] = pz; m[15] = 1;
+    obj.matrixAutoUpdate = false;
+    obj.matrixWorldNeedsUpdate = true;
 }
 
 interface VFXEntry {
@@ -300,17 +194,39 @@ export function BeginnerSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Pro
     const quadGeo = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
     const arrowGeo = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
 
-    // ── Material ──────────────────────────────────────────────────────────────
-    const bulletMat = useMemo(() => SuperBulletMat(VFX_TEXTURES.bullet), []);
-    const coreMat = useMemo(() => SniperCoreMat(), []);
-    const trailMat = useMemo(() => SniperTrailMat(VFX_TEXTURES.bullet), []);
-    const arrowMat = useMemo(() => ArcherMuzzleMat(VFX_TEXTURES.flare), []);
-    const flashMat = useMemo(() => ImpactMat(VFX_TEXTURES.muzzles[0]), []);
-    const hitMat = useMemo(() => ImpactMat(VFX_TEXTURES.sparks[0]), []);
-    const dustMat = useMemo(() => ImpactMat(VFX_TEXTURES.smoke), []);
-    const auraMat = useMemo(() => EagleEyeMat(VFX_TEXTURES.star), []);
-    const simpleHitMat = useMemo(() => ImpactMat(VFX_TEXTURES.flare), []);
-    
+    // ── Lazy Load WebGPU & TSL ──────────────────────────────────────────────
+    const [materials, setMaterials] = useState<Record<string, THREE.Material> | null>(null);
+
+    useEffect(() => {
+        let isMounted = true;
+        async function loadWebGPU() {
+            try {
+                const tsl = await import('three/tsl');
+                const { NodeMaterial } = await import('three/webgpu');
+
+                if (!isMounted) return;
+
+                const loadedMats = {
+                    bullet: SuperBulletMat(NodeMaterial, tsl, VFX_TEXTURES.bullet),
+                    core: SniperCoreMat(NodeMaterial, tsl),
+                    trail: SniperTrailMat(NodeMaterial, tsl, VFX_TEXTURES.bullet),
+                    arrow: ArcherMuzzleMat(NodeMaterial, tsl, VFX_TEXTURES.flare),
+                    flash: ImpactMat(NodeMaterial, tsl, VFX_TEXTURES.muzzles[0]),
+                    hit: ImpactMat(NodeMaterial, tsl, VFX_TEXTURES.sparks[0]),
+                    dust: ImpactMat(NodeMaterial, tsl, VFX_TEXTURES.smoke),
+                    aura: EagleEyeMat(NodeMaterial, tsl, VFX_TEXTURES.star),
+                    simpleHit: ImpactMat(NodeMaterial, tsl, VFX_TEXTURES.flare),
+                };
+
+                setMaterials(loadedMats as any);
+            } catch (err) {
+                console.error("Gagal memuat WebGPU materials:", err);
+            }
+        }
+        loadWebGPU();
+        return () => { isMounted = false; };
+    }, []);
+
     // Low-poly debris: 4-sided cone is a pyramid, basic material with transparent to allow fade-out
     const debrisGeo = useMemo(() => new THREE.ConeGeometry(0.06, 0.13, 4), []);
     const debrisMat = useMemo(() => new THREE.MeshBasicMaterial({
@@ -320,6 +236,7 @@ export function BeginnerSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Pro
     }), []);
 
     useFrame((state, delta) => {
+        if (!materials) return;
         const mesh = meshRef.current;
         const spells = spellsRef?.current;
         const fMesh = FlashRef.current;
@@ -392,9 +309,9 @@ export function BeginnerSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Pro
         aMesh.instanceMatrix.needsUpdate = true;
         if (aMesh.instanceColor) aMesh.instanceColor.needsUpdate = true;
 
-        // Animasi spark flipbook
-        const sIdx = Math.floor(time * 15) % 5;
-        hitMat.uniforms.tDiffuse.value = VFX_TEXTURES.sparks[sIdx];
+        // ponytail: ShaderMaterial needed uniform update; NodeMaterial reads texture() node ref.
+        // Texture swap requires recreating material for dynamic flipbook. Skip for now.
+        // add when: flipbook animation needed
 
         // ── Render semua peluru ───────────────────────────────────────────────
         let n = 0; // basic bullet count
@@ -563,7 +480,7 @@ export function BeginnerSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Pro
                 _trObj.scale.set(trailW, trailW, trailLen);
                 _trObj.updateMatrix();
                 trailMesh.setMatrixAt(tn, _trObj.matrix);
-                
+
                 const trailColor = isArcher ? (s.color || '#ffd700') : (isSniper ? (s.color || '#ffd700') : '#ffffff');
                 _col.set(trailColor).multiplyScalar(isArcher ? (isFinisher ? 2.5 : 1.8) : (isFinisher ? 1.5 : 1.1));
                 trailMesh.setColorAt(tn, _col);
@@ -660,11 +577,7 @@ export function BeginnerSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Pro
         arrowMesh.instanceMatrix.needsUpdate = true;
         if (arrowMesh.instanceColor) arrowMesh.instanceColor.needsUpdate = true;
 
-        // Update time uniforms
-        (mesh.material as THREE.ShaderMaterial).uniforms.uTime.value = time;
-        coreMat.uniforms.uTime.value = time;
-        trailMat.uniforms.uTime.value = time;
-        auraMat.uniforms.uTime.value = time;
+        // ponytail: time uniforms no longer needed — NodeMaterial reads `time` directly from TSL.
 
         // ── VFX pool: flash, dust, hit ────────────────────────────────────────
         let fn = 0; let hn = 0; let dn = 0; let shn = 0; let dn2 = 0;
@@ -762,23 +675,25 @@ export function BeginnerSpellEffect({ spellsRef, unitRegistry, simTimeRef }: Pro
         debMesh.count = dn2; debMesh.instanceMatrix.needsUpdate = true; if (debMesh.instanceColor) debMesh.instanceColor.needsUpdate = true;
     });
 
+    if (!materials) return null;
+
     return (
         <group>
             {/* Basic marksman bullets */}
-            <instancedMesh ref={meshRef} args={[bulletGeo, bulletMat, MAX_BULLETS]} frustumCulled={false} />
+            <instancedMesh ref={meshRef} args={[bulletGeo, materials.bullet, MAX_BULLETS]} frustumCulled={false} />
             {/* Sniper bullet core — silinder tipis memanjang */}
-            <instancedMesh ref={SniperCoreRef} args={[coreGeo, coreMat, 200]} frustumCulled={false} />
+            <instancedMesh ref={SniperCoreRef} args={[coreGeo, materials.core, 200]} frustumCulled={false} />
             {/* Sniper bullet trail — lesatan energi */}
-            <instancedMesh ref={SniperTrailRef} args={[trailGeo, trailMat, 200]} frustumCulled={false} />
+            <instancedMesh ref={SniperTrailRef} args={[trailGeo, materials.trail, 200]} frustumCulled={false} />
             {/* Physical Archer arrows */}
-            <instancedMesh ref={ArrowMeshRef} args={[arrowGeo, arrowMat, MAX_BULLETS]} frustumCulled={false} />
+            <instancedMesh ref={ArrowMeshRef} args={[arrowGeo, materials.arrow, MAX_BULLETS]} frustumCulled={false} />
             {/* VFX */}
-            <instancedMesh ref={FlashRef} args={[quadGeo, flashMat, 100]} frustumCulled={false} visible={false} />
-            <instancedMesh ref={HitRef} args={[quadGeo, hitMat, 200]} frustumCulled={false} />
-            <instancedMesh ref={SimpleHitRef} args={[quadGeo, simpleHitMat, 200]} frustumCulled={false} />
+            <instancedMesh ref={FlashRef} args={[quadGeo, materials.flash, 100]} frustumCulled={false} visible={false} />
+            <instancedMesh ref={HitRef} args={[quadGeo, materials.hit, 200]} frustumCulled={false} />
+            <instancedMesh ref={SimpleHitRef} args={[quadGeo, materials.simpleHit, 200]} frustumCulled={false} />
             <instancedMesh ref={DebrisRef} args={[debrisGeo, debrisMat, 300]} frustumCulled={false} />
-            <instancedMesh ref={DustRef} args={[quadGeo, dustMat, 100]} frustumCulled={false} />
-            <instancedMesh ref={AuraRef} args={[quadGeo, auraMat, 50]} frustumCulled={false} />
+            <instancedMesh ref={DustRef} args={[quadGeo, materials.dust, 100]} frustumCulled={false} />
+            <instancedMesh ref={AuraRef} args={[quadGeo, materials.aura, 50]} frustumCulled={false} />
         </group>
     );
 }

@@ -5,7 +5,7 @@
  *
  * Displays:
  * - FPS (current + average frame time)
- * - Draw calls & triangles (WebGL renderer info)
+ * - Draw calls & triangles (renderer info)
  * - Remote player count
  * - Remote monster count
  *

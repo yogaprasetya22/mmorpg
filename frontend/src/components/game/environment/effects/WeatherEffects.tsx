@@ -3,37 +3,49 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
 const RAIN_COUNT = 500;
-const RainMaterial = new THREE.ShaderMaterial({
-    uniforms: { time: { value: 0 } },
-    vertexShader: `
-    uniform float time;
-    void main() {
-      vec4 worldPos = instanceMatrix * vec4(position, 1.0);
-      float speed = 80.0;
-      worldPos.y -= mod(time * speed + worldPos.y, 60.0);
-      gl_Position = projectionMatrix * viewMatrix * worldPos;
-    }
-  `,
-    fragmentShader: `void main() { gl_FragColor = vec4(0.48, 0.54, 0.66, 0.6); }`,
-    transparent: true,
-});
+// Rain data stored on CPU for matrix update per frame (avoids custom vertex shader)
+interface RainDrop { x: number; y: number; z: number; speed: number; }
 
 export const Rain = () => {
     const meshRef = useRef<THREE.InstancedMesh>(null!);
     const dummy = useMemo(() => new THREE.Object3D(), []);
-    useEffect(() => {
+    const drops = useMemo(() => {
+        const arr: RainDrop[] = [];
         for (let i = 0; i < RAIN_COUNT; i++) {
-            dummy.position.set((Math.random() - 0.5) * 200, Math.random() * 60, (Math.random() - 0.5) * 200);
-            dummy.updateMatrix();
-            meshRef.current.setMatrixAt(i, dummy.matrix);
+            arr.push({
+                x: (Math.random() - 0.5) * 200,
+                y: Math.random() * 60,
+                z: (Math.random() - 0.5) * 200,
+                speed: 40 + Math.random() * 60,
+            });
         }
-        meshRef.current.instanceMatrix.needsUpdate = true;
-    }, [dummy]);
-    useFrame((state) => { RainMaterial.uniforms.time.value = state.clock.elapsedTime; });
+        return arr;
+    }, []);
+
+    // Standard material — no custom shader needed
+    const mat = useMemo(() => new THREE.MeshBasicMaterial({
+        color: 0x7a8aa8,
+        transparent: true,
+        opacity: 0.6,
+    }), []);
+
+    useFrame((_state, delta) => {
+        const mesh = meshRef.current;
+        if (!mesh) return;
+        for (let i = 0; i < RAIN_COUNT; i++) {
+            const d = drops[i];
+            d.y -= d.speed * delta;
+            if (d.y < -2) d.y += 62;
+            dummy.position.set(d.x, d.y, d.z);
+            dummy.updateMatrix();
+            mesh.setMatrixAt(i, dummy.matrix);
+        }
+        mesh.instanceMatrix.needsUpdate = true;
+    });
+
     return (
-        <instancedMesh ref={meshRef} args={[undefined, undefined, RAIN_COUNT]}>
+        <instancedMesh ref={meshRef} args={[undefined, mat, RAIN_COUNT]}>
             <cylinderGeometry args={[0.015, 0.015, 1.2, 3]} />
-            <primitive object={RainMaterial} attach="material" />
         </instancedMesh>
     );
 };
@@ -46,8 +58,8 @@ export const Lightning = () => {
             if (!isMounted) return;
             if (lightRef.current) {
                 lightRef.current.intensity = 200 + Math.random() * 300;
-                setTimeout(() => { 
-                    if (isMounted && lightRef.current) lightRef.current.intensity = 0; 
+                setTimeout(() => {
+                    if (isMounted && lightRef.current) lightRef.current.intensity = 0;
                 }, 50);
             }
             setTimeout(trigger, 3000 + Math.random() * 6000);

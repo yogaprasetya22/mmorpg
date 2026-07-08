@@ -1,8 +1,9 @@
-import { useRef, useMemo, useEffect } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useRef, useMemo, useEffect, useState } from 'react';
 import * as THREE from 'three';
+import { useFrame } from '@react-three/fiber';
 import { useStore } from "@/src/state/useStore";
-import { PainterlyGrassMaterial, getTerrainElevation } from '@jagres/shared';
+import { createPainterlyGrassMaterial } from '../painterly-client';
+import { getTerrainElevation } from '@jagres/shared';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const GRASS_COUNT = 1500; // Total instances (each instance will be a cluster)
@@ -15,6 +16,10 @@ interface PainterlyGrassProps {
 export const PainterlyGrass = ({ baseDistance = 24, mode }: PainterlyGrassProps) => {
     const meshRef = useRef<THREE.InstancedMesh>(null!);
     const dummy = useMemo(() => new THREE.Object3D(), []);
+    const [grassMat, setGrassMat] = useState<any>(null);
+    useEffect(() => {
+        createPainterlyGrassMaterial().then(setGrassMat);
+    }, []);
     const gameState = useStore(s => s.gameState);
 
     // Create a "Grass Cluster" geometry (3 blades in one instance)
@@ -82,12 +87,14 @@ export const PainterlyGrass = ({ baseDistance = 24, mode }: PainterlyGrassProps)
     }, [baseDistance, dummy, gameState, mode]);
 
     useFrame((state) => {
-        PainterlyGrassMaterial.uniforms.time.value = state.clock.elapsedTime;
+        if (grassMat && grassMat.uniforms && grassMat.uniforms.time) {
+            grassMat.uniforms.time.value = state.clock.elapsedTime;
+        }
     });
 
+    if (!grassMat) return null;
+
     return (
-        <instancedMesh ref={meshRef} args={[clusterGeometry, undefined, GRASS_COUNT]} frustumCulled>
-            <primitive object={PainterlyGrassMaterial} attach="material" />
-        </instancedMesh>
+        <instancedMesh ref={meshRef} args={[clusterGeometry, grassMat, GRASS_COUNT]} frustumCulled />
     );
 };

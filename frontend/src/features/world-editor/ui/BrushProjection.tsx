@@ -6,7 +6,7 @@
 
 import { memo, useMemo } from 'react';
 import * as THREE from 'three';
-import { buildProjectedCirclePoints, buildProjectedPolygonPoints, buildProjectedStarPoints } from '../editorUtils';
+import { buildProjectedCirclePoints, buildProjectedPolygonPoints, buildProjectedStarPoints, loopToSegments } from '../editorUtils';
 
 // ─── HOLOGRAPHIC BRUSH PROJECTION ───
 
@@ -62,12 +62,12 @@ export const HolographicBrushProjection = memo((props: HolographicProps) => {
     const dimLineMat = <lineBasicMaterial color="#3b82f6" linewidth={1.5} transparent opacity={0.55} depthWrite={false} />;
 
     const ptsToJSX = (pts: Float32Array | null, mat = lineMat) => pts && (
-        <lineLoop>
+        <lineSegments>
             <bufferGeometry>
-                <float32BufferAttribute attach="attributes-position" args={[pts, 3]} />
+                <float32BufferAttribute attach="attributes-position" args={[loopToSegments(pts), 3]} />
             </bufferGeometry>
             {mat}
-        </lineLoop>
+        </lineSegments>
     );
 
     return (
@@ -144,10 +144,10 @@ export const PlacedMaskProjection = memo(({ item, isSelected, isHovered, onPoint
 
             {maskId === 'star' && (
                 <group>
-                    <lineLoop>
-                        <bufferGeometry><float32BufferAttribute attach="attributes-position" args={[starPoints, 3]} /></bufferGeometry>
+                    <lineSegments>
+                        <bufferGeometry><float32BufferAttribute attach="attributes-position" args={[loopToSegments(starPoints), 3]} /></bufferGeometry>
                         <lineBasicMaterial color={outlineColor} linewidth={2.5} transparent opacity={0.9} depthWrite={false} />
-                    </lineLoop>
+                    </lineSegments>
                     <mesh>
                         <ringGeometry args={[0, radius * 0.4, 32]} />
                         <meshBasicMaterial color={filledColor} transparent opacity={0.2} side={THREE.DoubleSide} depthWrite={false} />

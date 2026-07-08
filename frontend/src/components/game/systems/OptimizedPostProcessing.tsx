@@ -3,21 +3,9 @@
 import { useEffect, useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { EffectComposer as ThreeEffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 
 /**
- * OptimizedPostProcessing — conditional bloom + tone mapping.
- *
- * Key difference from old SafePostProcessing:
- * - When `enabled=false` (potato mode), uses direct `gl.render()` — zero overhead.
- * - When `enabled=true`, uses EffectComposer as before.
- * - EffectComposer is lazily created on first enable, disposed on disable.
- *
- * Benefit: Potato mode skips ~2ms of post-processing per frame AND avoids
- * allocating render targets until they're actually needed.
+ * OptimizedPostProcessing — WebGPU post-processing via RenderPipeline + TSL.
  */
 interface OptimizedPostProcessingProps {
     enabled: boolean;
@@ -40,81 +28,51 @@ export const OptimizedPostProcessing = ({
     exposure = 1.0,
 }: OptimizedPostProcessingProps) => {
     const { gl, scene, camera, size } = useThree();
-    const composerRef = useRef<ThreeEffectComposer | null>(null);
-    const bloomPassRef = useRef<UnrealBloomPass | null>(null);
-    const prevEnabledRef = useRef(false);
+    const pipelineRef = useRef<any>(null);
 
-    // Build / dispose composer based on `enabled`
+    // Build / dispose pipeline based on `enabled`
     useEffect(() => {
-        if (enabled && !composerRef.current) {
-            // Build composer
-            gl.autoClear = false;
+        const renderer = gl as any;
 
-            const composer = new ThreeEffectComposer(gl);
-            composer.setSize(size.width, size.height);
-            composer.setPixelRatio(Math.min(gl.getPixelRatio(), 2));
+        if (enabled && !pipelineRef.current) {
+            renderer.autoClear = false;
 
-            const renderPass = new RenderPass(scene, camera);
-            composer.addPass(renderPass);
+            const { RenderPipeline } = require('three/webgpu');
+            const { pass, blur } = require('three/tsl');
 
             const w = Math.max(1, Math.floor(size.width * bloomResolution));
             const h = Math.max(1, Math.floor(size.height * bloomResolution));
-            const bloomPass = new UnrealBloomPass(
-                new THREE.Vector2(w, h),
-                bloomStrength,
-                bloomRadius,
-                bloomThreshold,
-            );
-            composer.addPass(bloomPass);
-            bloomPassRef.current = bloomPass;
 
-            const outputPass = new OutputPass();
-            composer.addPass(outputPass);
+            const scenePass = pass(scene, camera);
 
-            gl.toneMapping = toneMapping;
-            gl.toneMappingExposure = exposure;
-
-            composerRef.current = composer;
+            if (bloomStrength > 0) {
+                const blurred = blur(scenePass, { width: w, height: h });
+                const bloomed = scenePass.add(blurred.mul(bloomStrength));
+                const pipeline = new RenderPipeline(renderer, bloomed);
+                pipelineRef.current = pipeline;
+            } else {
+                const pipeline = new RenderPipeline(renderer, scenePass);
+                pipelineRef.current = pipeline;
+            }
         }
 
-        if (!enabled && composerRef.current) {
-            // Dispose composer
-            composerRef.current.passes.forEach((pass) => {
-                if ('dispose' in pass && typeof pass.dispose === 'function') {
-                    (pass as any).dispose();
-                }
-            });
-            composerRef.current.dispose();
-            composerRef.current = null;
-            bloomPassRef.current = null;
-            gl.autoClear = true;
+        // Cleanup
+        if (!enabled) {
+            if (pipelineRef.current) {
+                pipelineRef.current.dispose();
+                pipelineRef.current = null;
+            }
+            renderer.autoClear = true;
         }
-
-        prevEnabledRef.current = enabled;
 
         return () => {
-            if (composerRef.current) {
-                composerRef.current.passes.forEach((pass) => {
-                    if ('dispose' in pass && typeof pass.dispose === 'function') {
-                        (pass as any).dispose();
-                    }
-                });
-                composerRef.current.dispose();
-                composerRef.current = null;
-                bloomPassRef.current = null;
-                gl.autoClear = true;
+            if (pipelineRef.current) {
+                pipelineRef.current.dispose();
+                pipelineRef.current = null;
             }
+            renderer.autoClear = true;
         };
     }, [enabled, gl, scene, camera, size.width, size.height, bloomThreshold, bloomStrength, bloomRadius, toneMapping, exposure]);
-
-    // Update bloom params reactively
-    useEffect(() => {
-        if (bloomPassRef.current) {
-            bloomPassRef.current.threshold = bloomThreshold;
-            bloomPassRef.current.strength = bloomStrength;
-            bloomPassRef.current.radius = bloomRadius;
-        }
-    }, [bloomThreshold, bloomStrength, bloomRadius]);
 
     // Update tone mapping
     useEffect(() => {
@@ -122,20 +80,9 @@ export const OptimizedPostProcessing = ({
         gl.toneMappingExposure = exposure;
     }, [gl, toneMapping, exposure]);
 
-    // Handle resize
-    useEffect(() => {
-        if (composerRef.current) {
-            composerRef.current.setSize(size.width, size.height);
-        }
-    }, [size.width, size.height]);
-
-    // Render pass — only when composer active (bloom enabled)
-    // When disabled, R3F's default loop handles rendering.
+    // Render pass — priority 1 (after default loop)
     useFrame(() => {
-        if (composerRef.current) {
-            composerRef.current.render();
-        }
-        // else: let R3F default loop handle it (priority 1 runs after default 0)
+        // WebGPU RenderPipeline renders automatically via outputNode
     }, 1);
 
     return null;
